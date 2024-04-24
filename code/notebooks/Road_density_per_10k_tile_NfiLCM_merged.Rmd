@@ -1,0 +1,502 @@
+---
+title: "Road_density_per_10k_tile"
+author: "Amy Gresham"
+date: "2024-02-01"
+output: html_document
+
+#Produce road density rasters for different buffer sizes around all points/pixels in woodlands across the UK (NFI woodland map)
+#Should produce one raster for each buffer size, per road type = 9 in total
+---
+
+```{r}
+library(sf)
+library(dplyr)
+library(here)
+library(raster)
+library(sp)
+library(tidyr)
+library(progress)
+
+#Set project directory
+project_dir <- here()
+
+# Set the output directory
+output_dir <- here(project_dir, "outputs")
+
+bng <- 27700
+```
+
+```{r}
+#Import required spatial layers ####
+
+# England and Wales 10k squares
+ew10k <- sf::st_read(here("10k_tiles_EW.shp"))
+
+#road maps
+roads = sf::st_read("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/oproad_gb.gpkg", layer = "road_link") %>%
+  st_transform(.,bng)
+
+#Filter for motorways, A roads and B roads
+roads_subset <- roads %>%
+  mutate(unique_ID = id,
+         class = road_classification) %>%
+  dplyr::select(unique_ID, class) %>%
+  filter(class %in% c("Motorway","A Road", "B Road"))
+
+#nfi/ceh lcm overlaid raster - woodlands only
+nfi.lcm.2015 <- raster(here(project_dir,"nfi_lcm_2015_overlaid_woods_only.tif"))
+
+#original lcm2015 to be used as template raster
+# CEH land cover map 2015 raster layer
+lcm2015.rast <- raster::raster(here("lcm-2015-tif", "lcm2015gb25m.tif"))
+lcm2015.rast <- setMinMax(lcm2015.rast)
+
+#make template raster
+#template_raster <- raster(ext = extent(lcm2015.rast), res = res(lcm2015.rast), crs = crs(lcm2015.rast))
+
+```
+
+```{r}
+#LOOP TO CALCULATE ROAD LENGTH PER MOVING WINDOW ####
+
+start_time = Sys.time()#Start clock 
+
+tiles <- ew10k
+
+#Create 9 empty raster lists for road types and buffer sizes
+
+motorway_250_list <- list()
+motorway_500_list <- list()
+motorway_1000_list <- list()
+Ard_250_list <- list()
+Ard_500_list <- list()
+Ard_1000_list <- list()
+Brd_250_list <- list()
+Brd_500_list <- list()
+Brd_1000_list <- list()
+
+buffer_size <- c(250, 500, 1000)
+
+classes <- c("Motorway","A Road", "B Road")
+
+#progress bar
+pb <- progress_bar$new(total = nrow(tiles), format = "[:bar] :percent :elapsed")
+
+suppressWarnings(
+for (i in 1:length(tiles$tile_name)) {
+  tile <- tiles[i,]
+  tile.buff <- st_buffer(tile, (1200))
+  chunked.wood <- crop(nfi.lcm.2015, tile)
+  chunked.wood[chunked.wood == 0] <- NA #remove zeros
+  chunked.wood.points <- rasterToPoints(chunked.wood, spatial = TRUE)
+  chunked.wood.points <- st_as_sf(chunked.wood.points, crs = bng)
+  chunked.wood.points <- sf::st_transform(chunked.wood.points, crs = bng)
+  
+  if (nrow(chunked.wood.points) > 0) {
+    chunked.wood.points$uniqueforID <- paste("point", chunked.wood.points$geometry, sep = "_")
+    chunked.wood.points$TILENAME <- tile$tile_name
+    
+    # Road metrics - density and distance to roads
+    sections_rd <- chunked.wood.points
+    sections_rd_all <- list()
+    
+    for (c in 1:length(classes)) {
+      for (j in 1:length(buffer_size)) {
+        xroads <- roads_subset %>% filter(class == classes[c])
+        RDclip <- st_intersection(xroads, st_buffer(st_centroid(sections_rd), buffer_size[j]))
+        RDclip <- RDclip %>% mutate(rd_len = st_length(geometry))
+          sections_r <- RDclip %>% st_drop_geometry() %>%
+            group_by(uniqueforID) %>%
+            dplyr::summarise(RDLEN = sum(units::drop_units(rd_len)))
+          sections_r <- merge(sections_r, sections_rd, by = "uniqueforID", all = TRUE)
+          sections_r <- sections_r %>% dplyr::mutate(RDLEN = tidyr::replace_na(RDLEN, 0))
+          sections_r$buffer_size <- buffer_size[j]
+          sections_r$rdclass <- classes[c]
+          sections_r$buffer_rdclass_combo <- as.character(paste(sections_r$buffer_size, sections_r$rdclass, sep = "_"))  # New column buffer_rdclass_combo buffers & roads
+          sections_rd_all[[length(sections_rd_all) + 1]] <- data.frame(sections_r)
+        }
+      }
+      
+    chunked.wood.points <- do.call(rbind, sections_rd_all)
+    
+    #Making rasters for each road type and buffer size ####
+    #Should be 9 in total 
+    
+    for (a in unique(chunked.wood.points$buffer_rdclass_combo)) {
+      #filter dataset by buffer_rdclass_combo
+      chunked.wood.points.group <- chunked.wood.points %>% filter(chunked.wood.points$buffer_rdclass_combo == a)
+      chunked.wood.points.group <- st_as_sf(chunked.wood.points.group)
+      
+      #make template raster using tile buffer and CEH 2015 land cover map
+      template_raster <- crop(lcm2015.rast, tile.buff)
+      
+      #subset chunked.wood.points.group to a two column matrix with points and RDLEN
+      chunked.wood.points.group.2col <- chunked.wood.points.group %>% dplyr::select(geometry, RDLEN)
+      
+      #Rasterize 2 col matrix to get a raster of road length of each type within each buffer size for each pixel 
+      raster_layer <- rasterize(chunked.wood.points.group.2col, template_raster, field = "RDLEN")
+      
+      #Crop to tile boundary
+      raster_layer <- crop(raster_layer, tile)
+      
+      #Get buffer_rdclass_combo (road class + buffer size)
+      buffer_rdclass_combo <- unique(chunked.wood.points.group$buffer_rdclass_combo)
+      
+      # Save raster_layer to the corresponding list based on road class and buffer size
+      if (grepl("Motorway", buffer_rdclass_combo)) {
+        if (grepl("250",buffer_rdclass_combo)) {
+          motorway_250_list[[i]] <- raster_layer
+        } else if (grepl("500",buffer_rdclass_combo)) {
+          motorway_500_list[[i]] <- raster_layer
+        } else if (grepl("1000",buffer_rdclass_combo)) {
+          motorway_1000_list[[i]] <- raster_layer
+        }
+      } else if (grepl("A Road", buffer_rdclass_combo)) {
+        if (grepl("250",buffer_rdclass_combo)) {
+          Ard_250_list[[i]] <- raster_layer
+        } else if (grepl("500",buffer_rdclass_combo)) {
+          Ard_500_list[[i]] <- raster_layer
+        } else if (grepl("1000",buffer_rdclass_combo)) {
+          Ard_1000_list[[i]] <- raster_layer
+        }
+      } else if (grepl("B Road", buffer_rdclass_combo)) {
+        if (grepl("250",buffer_rdclass_combo)) {
+          Brd_250_list[[i]] <- raster_layer
+        } else if (grepl("500",buffer_rdclass_combo)) {
+          Brd_500_list[[i]] <- raster_layer
+        } else if (grepl("1000",buffer_rdclass_combo)) {
+          Brd_1000_list[[i]] <- raster_layer
+        }
+      }
+    }
+  
+    } else {
+    motorway_250_list[[i]] <- NA
+    motorway_500_list[[i]] <- NA
+    motorway_1000_list[[i]] <- NA
+    Ard_250_list[[i]] <- NA
+    Ard_500_list[[i]] <- NA
+    Ard_1000_list[[i]] <- NA
+    Brd_250_list[[i]] <- NA
+    Brd_500_list[[i]] <- NA
+    Brd_1000_list[[i]] <- NA
+  }
+  # Update progress bar
+  pb$tick()
+}
+)
+# Close the progress bar when the loop is finished
+pb$close()
+
+# Display total time taken
+end_time = Sys.time()
+cat("Total time taken:", end_time - start_time, "\n")
+```
+
+```{r}
+# Save the lists
+saveRDS(motorway_250_list, file = here(output_dir, "motorway_250_list.rds"))
+saveRDS(motorway_500_list, file = here(output_dir, "motorway_500_list.rds"))
+saveRDS(motorway_1000_list, file = here(output_dir, "motorway_1000_list.rds"))
+saveRDS(Ard_250_list, file = here(output_dir, "Ard_250_list.rds"))
+saveRDS(Ard_500_list, file = here(output_dir, "Ard_500_list.rds"))
+saveRDS(Ard_1000_list, file = here(output_dir, "Ard_1000_list.rds"))
+saveRDS(Brd_250_list, file = here(output_dir, "Brd_250_list.rds"))
+saveRDS(Brd_500_list, file = here(output_dir, "Brd_500_list.rds"))
+saveRDS(Brd_1000_list, file = here(output_dir, "Brd_1000_list.rds"))
+
+print("Raster lists saved")
+```
+
+
+```{r}
+#Mosaic the raster lists and save
+
+#Motorways 250 ####
+
+motorway_250_list <- readRDS(here(output_dir, "motorway_250_list.rds"))
+
+# Label elements that are not RasterLayers or are empty
+valid_rasters_mw_250 <- lapply(motorway_250_list, function(raster_layer) {
+  if (inherits(raster_layer, "RasterLayer") && any(!is.na(values(raster_layer)))) {
+    return(raster_layer)
+  } else {
+    return(NULL)
+  }
+})
+
+# Remove NULL elements from the list
+valid_rasters_mw_250 <- Filter(function(x) !is.null(x), valid_rasters_mw_250)
+
+#Mosaic tiles
+#Mosaic will average the overlapping pixel values
+system.time({
+motorway_250_mosaic <- do.call(raster::mosaic, c(valid_rasters_mw_250, fun = mean))
+})
+
+crs(motorway_250_mosaic) <- bng
+
+
+#save mosaic
+
+writeRaster(motorway_250_mosaic, here(output_dir,"motorway_250_mosaic_all_tiles_corrected.tif"), overwrite = TRUE)
+
+#DONE 
+
+```
+
+
+```{r}
+#Motorways 500
+
+motorway_500_list <- readRDS(here(output_dir,"motorway_500_list.rds"))
+
+# Label elements that are not RasterLayers or are empty
+valid_rasters_mw_500 <- lapply(motorway_500_list, function(raster_layer) {
+  if (inherits(raster_layer, "RasterLayer") && any(!is.na(values(raster_layer)))) {
+    return(raster_layer)
+  } else {
+    return(NULL)
+  }
+})
+
+# Remove NULL elements from the list
+valid_rasters_mw_500 <- Filter(function(x) !is.null(x), valid_rasters_mw_500)
+
+#Mosaic tiles
+#Mosaic will average the overlapping pixel values
+system.time({
+motorway_500_mosaic <- do.call(raster::mosaic, c(valid_rasters_mw_500, fun = mean))
+})
+
+crs(motorway_500_mosaic) <- bng
+
+#save raster
+writeRaster(motorway_500_mosaic, here(output_dir, "motorway_500_mosaic_all_tiles_corrected.tif"), overwrite = TRUE)
+
+#DONE 
+
+```
+
+
+```{r}
+#Motorways 1000
+
+motorway_1000_list <- readRDS(here(output_dir, "motorway_1000_list.rds"))
+
+# Label elements that are not RasterLayers or are empty
+valid_rasters_mw_1000 <- lapply(motorway_1000_list, function(raster_layer) {
+  if (inherits(raster_layer, "RasterLayer") && any(!is.na(values(raster_layer)))) {
+    return(raster_layer)
+  } else {
+    return(NULL)
+  }
+})
+
+# Remove NULL elements from the list
+valid_rasters_mw_1000 <- Filter(function(x) !is.null(x), valid_rasters_mw_1000)
+
+
+#Mosaic tiles
+#Mosaic will average overlapping pixel values
+system.time({
+motorway_1000_mosaic <- do.call(raster::mosaic, c(valid_rasters_mw_1000, fun = mean))
+})
+
+crs(motorway_1000_mosaic) <- bng
+
+writeRaster(motorway_1000_mosaic, here(output_dir, "motorway_1000_mosaic_all_tiles_corrected.tif"), overwrite = TRUE)
+
+#DONE
+```
+
+```{r}
+#A roads 250 ####
+
+
+Ard_250_list <- readRDS(here(output_dir, "Ard_250_list.rds"))
+
+# Label elements that are not RasterLayers or are empty
+valid_rasters_Ard_250 <- lapply(Ard_250_list, function(raster_layer) {
+  if (inherits(raster_layer, "RasterLayer") && any(!is.na(values(raster_layer)))) {
+    return(raster_layer)
+  } else {
+    return(NULL)
+  }
+})
+
+# Remove NULL elements from the list
+valid_rasters_Ard_250 <- Filter(function(x) !is.null(x), valid_rasters_Ard_250)
+
+#Mosaic tiles
+#Mosaic will average the overlapping pixel values
+system.time({
+Ard_250_mosaic <- do.call(raster::mosaic, c(valid_rasters_Ard_250, fun = mean))
+})
+
+crs(Ard_250_mosaic) <- bng
+
+#save mosaic
+
+writeRaster(Ard_250_mosaic, here(output_dir, "Ard_250_mosaic_all_tiles_corrected.tif"), overwrite = TRUE)
+```
+
+```{r}
+#A roads 500 ####
+
+Ard_500_list <- readRDS(here(output_dir, "Ard_500_list.rds"))
+
+# Label elements that are not RasterLayers or are empty
+valid_rasters_Ard_500 <- lapply(Ard_500_list, function(raster_layer) {
+  if (inherits(raster_layer, "RasterLayer") && any(!is.na(values(raster_layer)))) {
+    return(raster_layer)
+  } else {
+    return(NULL)
+  }
+})
+
+# Remove NULL elements from the list
+valid_rasters_Ard_500 <- Filter(function(x) !is.null(x), valid_rasters_Ard_500)
+
+#Mosaic tiles
+#Mosaic will average the overlapping pixel values
+system.time({
+Ard_500_mosaic <- do.call(raster::mosaic, c(valid_rasters_Ard_500, fun = mean))
+})
+
+crs(Ard_500_mosaic) <- bng
+
+
+#save mosaic
+
+writeRaster(Ard_500_mosaic, here(output_dir, "Ard_500_mosaic_all_tiles_corrected.tif"), overwrite = TRUE)
+```
+
+```{r}
+#A roads 1000 ####
+
+Ard_1000_list <- readRDS(here(output_dir, "Ard_1000_list.rds"))
+
+# Label elements that are not RasterLayers or are empty
+valid_rasters_Ard_1000 <- lapply(Ard_1000_list, function(raster_layer) {
+  if (inherits(raster_layer, "RasterLayer") && any(!is.na(values(raster_layer)))) {
+    return(raster_layer)
+  } else {
+    return(NULL)
+  }
+})
+
+
+# Remove NULL elements from the list
+valid_rasters_Ard_1000 <- Filter(function(x) !is.null(x), valid_rasters_Ard_1000)
+
+#Mosaic tiles
+#Mosaic will average the overlapping pixel values
+system.time({
+Ard_1000_mosaic <- do.call(raster::mosaic, c(valid_rasters_Ard_1000, fun = mean))
+})
+
+crs(Ard_1000_mosaic) <- bng
+
+
+#save mosaic
+
+writeRaster(Ard_1000_mosaic, here(output_dir, "Ard_1000_mosaic_all_tiles_corrected.tif"), overwrite = TRUE)
+```
+
+```{r}
+#B roads 250 ####
+
+Brd_250_list <- readRDS(here(output_dir, "Brd_250_list.rds"))
+
+
+# Label elements that are not RasterLayers or are empty
+valid_rasters_Brd_250 <- lapply(Brd_250_list, function(raster_layer) {
+  if (inherits(raster_layer, "RasterLayer") && any(!is.na(values(raster_layer)))) {
+    return(raster_layer)
+  } else {
+    return(NULL)
+  }
+})
+
+# Remove NULL elements from the list
+valid_rasters_Brd_250 <- Filter(function(x) !is.null(x), valid_rasters_Brd_250)
+
+
+#Mosaic tiles
+#Mosaic will average the overlapping pixel values
+system.time({
+Brd_250_mosaic <- do.call(raster::mosaic, c(valid_rasters_Brd_250, fun = mean))
+})
+
+crs(Brd_250_mosaic) <- bng
+
+#save mosaic
+
+writeRaster(Brd_250_mosaic, here(output_dir, "Brd_250_mosaic_all_tiles_corrected.tif"), overwrite = TRUE)
+```
+
+```{r}
+#B roads 500 ####
+
+Brd_500_list <- readRDS(here(output_dir, "Brd_500_list.rds"))
+
+
+# Label elements that are not RasterLayers or are empty
+valid_rasters_Brd_500 <- lapply(Brd_500_list, function(raster_layer) {
+  if (inherits(raster_layer, "RasterLayer") && any(!is.na(values(raster_layer)))) {
+    return(raster_layer)
+  } else {
+    return(NULL)
+  }
+})
+
+# Remove NULL elements from the list
+valid_rasters_Brd_500 <- Filter(function(x) !is.null(x), valid_rasters_Brd_500)
+
+#Mosaic tiles
+#Mosaic will average the overlapping pixel values
+system.time({
+Brd_500_mosaic <- do.call(raster::mosaic, c(valid_rasters_Brd_500, fun = mean))
+})
+
+crs(Brd_500_mosaic) <- bng
+
+#save mosaic
+
+writeRaster(Brd_500_mosaic, here(output_dir, "Brd_500_mosaic_all_tiles_corrected.tif"), overwrite = TRUE)
+```
+
+```{r}
+#B roads 1000 ####
+
+Brd_1000_list <- readRDS(here(output_dir, "Brd_1000_list.rds"))
+
+# Label elements that are not RasterLayers or are empty
+valid_rasters_Brd_1000 <- lapply(Brd_1000_list, function(raster_layer) {
+  if (inherits(raster_layer, "RasterLayer") && any(!is.na(values(raster_layer)))) {
+    return(raster_layer)
+  } else {
+    return(NULL)
+  }
+})
+
+# Remove NULL elements from the list
+valid_rasters_Brd_1000 <- Filter(function(x) !is.null(x), valid_rasters_Brd_1000)
+
+
+#Mosaic tiles
+#Mosaic will average the overlapping pixel values
+system.time({
+Brd_1000_mosaic <- do.call(raster::mosaic, c(valid_rasters_Brd_1000, fun = mean))
+})
+
+crs(Brd_1000_mosaic) <- bng
+
+#save mosaic
+
+writeRaster(Brd_1000_mosaic, here(output_dir, "Brd_1000_mosaic_all_tiles_corrected.tif"), overwrite = TRUE)
+```
+
+#END ####
+

@@ -1,0 +1,91 @@
+---
+title: "DAMS_2015_open_habitat_raster_Becks"
+author: "Amy Gresham and Becks"
+date: "2024-01-29"
+output: html_document
+---
+
+This script creates UK-wide DAMS layers, which are generated using focal statistics at 3 buffer sizes
+
+```{r}
+library(raster)
+library(sf)
+library(dplyr)
+library(tidyr)
+library(fasterize)
+library(terra)
+library(here)
+
+project_dir <- here()
+
+bng = 27700 #coordinate system EPSG code (British National Grid = epsg:27700) 
+
+#Read in CEH lcm
+lcm2015.rast <- raster::raster(here("iDeer_spatial_data","inputs","lcm-2015-tif","lcm2015gb25m.tif"))
+lcm2015.rast <- setMinMax(lcm2015.rast)
+crs(lcm2015.rast) <- bng
+
+#Import DAMS raster as exposure metric (layer from Becks) 50m res
+DAMS <- raster::raster(here("iDeer_spatial_data","inputs","DAMS","dams.tif"))
+crs(DAMS) <- bng
+```
+
+```{r}
+#Use land cover map as reference, resample DAMS to 25m resolution
+#DAMS_resam <- raster::disaggregate(DAMS, fact=2, lcm2015.rast, method = "bilinear", "DAMS_resample25.tif")# takes too long!
+
+#DAMS_resam <- raster::resample(DAMS, lcm2015.rast, method = "bilinear", "DAMS_resample25.tif") # error: Error in x$.self$finalize() : attempt to apply non-function
+DAMS_resam <- resample(DAMS, lcm2015.rast)
+#save resampled DAMS
+writeRaster()
+crs(DAMS_resam) <- crs(lcm2015.rast)
+#Replace all NA's in DAMS layer with 0
+#DAMS_resam_no_na <- DAMS_resam
+
+#DAMS_resam_no_na[is.na(DAMS_resam_no_na)] = 0
+
+#Reclass LCM so all habitats we want are 1 and everything else is 0
+
+reclass <- data.frame(is = c(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,
+                             18,19,20,21), becomes = c(0,0,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,1,0,0))
+
+lcm_mask <- reclassify(lcm2015.rast, reclass)
+
+#Multiply DAMs and binary LCM together - any habitats we don't want will be set to 0 DAMS
+
+DAMS_open_raster <- DAMS_resam*lcm_mask
+
+plot(DAMS_open_raster)
+plot(DAMS_resam)
+
+```
+
+#focal statistics, moving window
+```{r}
+#uk10k <- sf::st_read("C:/Users/ij926050/Dropbox/BEAST_R/Inputs/LUES_GIS/10km_grid/10km_grid/gbng/10km_grid_region.shp")
+#uk10k%>%slice_sample() -> uk10k.s
+#DAMS_open_raster.crop <- crop(DAMS_open_raster, uk10k.s)
+#plot(DAMS_open_raster.crop)
+
+
+circle.buff = raster::focalWeight (DAMS_open_raster, d=250, type="circle", fillNA=T)#Create buffer
+circle.buff[circle.buff > 0] <- 1
+Focal250= raster::focal(DAMS_open_raster, w=circle.buff, fun=sum, "focal.dams.250.tif",overwrite=TRUE)#do focal window analysis with weights matrix
+
+plot(DAMS_open_raster.crop)
+plot(Focal250)
+
+
+circle.buff = raster::focalWeight (DAMS_open_raster, d=500, type="circle")#Create buffer
+circle.buff[circle.buff > 0] <- 1
+Focal500= raster::focal(DAMS_open_raster, w=circle.buff, fun=sum, "focal.dams.500_.tif", overwrite=T)#do focal window analysis with weights matrix
+
+circle.buff = raster::focalWeight (DAMS_open_raster, d=1000, type="circle")#Create buffer
+circle.buff[circle.buff > 0] <- 1
+Focal1000= raster::focal(DAMS_open_raster, w=circle.buff, fun=sum, "focal.dams.1000.tif", overwrite=T)#do focal window analysis with weights matrix
+
+plot(Focal250)
+plot(Focal500)
+plot(Focal1000)
+```
+
