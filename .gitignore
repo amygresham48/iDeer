@@ -2,6 +2,7 @@
 .Rhistory
 .Rapp.history
 data/*
+output/intermediate-outputs*
 
 # Session Data files
 .RData
