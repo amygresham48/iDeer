@@ -26,57 +26,41 @@ here()
 
 df <- read.csv(here("./data/raw-data/DIA-data/DIA_wood_AA_data_combined.csv"))
 
+df <- df %>% select(ID,Region,PA,AA,Month,Season,Year,Act_score,Impact_sco,Area,PercentBLW,location)
+
 #Read in spatial dataset containing woodland polygons that received DIA surveys
 
 polys <- st_read(here("./data/raw-data/DIA-data/LCM2015GBwithinDIApolygoninfo.shp"))
 ```
 
 ```{r}
-#Merge the two datasets by ID column
-
-df_polys <- merge(df,polys, by = c("ID"))
-df_polys <- st_as_sf(df_polys)
-
-#Export to inspect in ArcGIS
-
-write_sf(df_polys,here("./output/intermediate-outputs/DIA_data_polys_merged.shp"))
-
-#Filter for woodlands only
-
-df_polys <- subset(df_polys, bhab %in% c("Broadleaf woodland","Coniferous woodland"))
-
-#Filter year for 2015 only - this will match with our 2015 spatial data
-df_polys <- subset(df_polys, Year %in% c("2012","2013","2014","2015","2016","2017","2018"))
 
 #Having inspected the polygons in ArcGIS, all polygons with the same ID belong to the same woodland. Each woodland is split up into different compartments, but each compartment has been allocated the same impact score and other info.
 
 #Therefore, dissolve the polygons with the same ID into the same multipolygon object.
 
 # Group and merge polygons by 'ID'
-df_polys_merged <- df_polys %>%
+polys_merged <- polys %>%
+  filter(ID > 0) %>% # Remove woodlands where ID = 0 as these are not in the DIA dataset
+  subset(bhab %in% c("Broadleaf woodland","Coniferous woodland")) %>% #select woodlands only
   group_by(ID) %>%
   summarize(geometry = st_union(geometry))  # Merge polygons with the same ID
 
-#Select columns 1-32 in original dataset (remove old geometries)
-df_polys <- as.data.frame(df_polys)
-df_polys <- df_polys %>% select(1:32)
+#Merge the two datasets by ID column
 
-#Remove Area.y (area of individual polygons) and FID_1 (polygon IDs)
-df_polys <- df_polys %>%
-  select(-c("Area.y", "FID_1"))
+df_polys <- merge(df,polys_merged, by = c("ID"))
+df_polys <- st_as_sf(df_polys)
 
-#Get unique rows
-df_polys <- df_polys %>% distinct()
+#Export to inspect in ArcGIS
 
-#Merge the new united geometries with the original data
-df_joined <- merge(df_polys, df_polys_merged, by = c("ID"))
+write_sf(df_polys,here("./output/intermediate-outputs/DIA_data_polys_merged.shp"))
 
-#Check for duplicates
-df_joined <- df_joined %>% distinct()
+#Filter year of survey to match with our 2015 spatial data
+df_polys <- subset(df_polys, Year %in% c("2012","2013","2014","2015","2016","2017","2018"))
 
 #Some woodlands have been surveyed multiple times- select the most recent survey for each woodland
 
-df_most_recent <- df_joined %>%
+df_most_recent <- df_polys %>%
   group_by(ID) %>%
   filter(Year == max(Year)) %>%
   ungroup()
@@ -104,15 +88,12 @@ regions <- unique(df_most_recent$Region)
 regions
 
 #Plot regions ####
-
-#London
 #London <- subset(df_most_recent, Region %in% "London")
 #ggplot(data=London) +
 #  geom_sf(aes(geometry = geometry, fill = Impact_sco)) +  # Color by impact score
 #  coord_sf() +  # Keep default sf coordinate system
 #  labs(title = "London") +
 #  theme_minimal()
-
 
 #PA (Priority Area)
 
@@ -125,6 +106,7 @@ Suffolk <- subset(df_most_recent, PA %in% "Suffolk")
 EM <- subset(df_most_recent, PA %in% "East Midlands")
 WM <- subset(df_most_recent, PA %in% "West Midlands")
 Oxford <- subset(df_most_recent, PA %in% "Oxford")
+no_pa <- subset(df_most_recent, is.na(PA))
 
 #Cumbria
 ggplot(data=Cumbria) +
@@ -159,6 +141,14 @@ ggplot(data=Oxford) +
   geom_sf(aes(geometry = geometry, fill = Impact_sco)) +  # Color by impact score
   coord_sf() +  # Keep default sf coordinate system
   labs(title = "Oxford") +
+  theme_minimal()
+
+#No PA
+
+ggplot(data=no_pa) +
+  geom_sf(aes(geometry = geometry, fill = Impact_sco)) +  # Color by impact score
+  coord_sf() +  # Keep default sf coordinate system
+  labs(title = "Outside PAs") +
   theme_minimal()
 ```
 
@@ -247,5 +237,12 @@ ggplot() +
   geom_sf(data = df_impacts_high_density, aes(geometry = geometry, fill = Impact_sco))
 
 hist(df_impacts_high_density$Impact_sco)
+
+```
+
+```{r}
+#Export cleaned polygons
+
+write_sf(df_impacts_high_density ,here("./data/clean-data/DIA_high_density_2012-2018.shp"))
 
 ```
