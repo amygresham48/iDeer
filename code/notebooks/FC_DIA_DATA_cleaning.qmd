@@ -35,7 +35,7 @@ polys <- st_read(here("./data/raw-data/DIA-data/LCM2015GBwithinDIApolygoninfo.sh
 
 ```{r}
 
-#Having inspected the polygons in ArcGIS, all polygons with the same ID belong to the same woodland. Each woodland is split up into different compartments, but each compartment has been allocated the same impact score and other info.
+#Having inspected the polygons in ArcGIS, all polygons with the same ID belong to the same woodland. Each woodland is split up into different compartments (FID_1), but each compartment has been allocated the same impact score and other info. The DIA surveys were done by walking a zig-zag transect through a whole site, source: Alastair Ward.
 
 #Therefore, dissolve the polygons with the same ID into the same multipolygon object.
 
@@ -46,16 +46,29 @@ polys_merged <- polys %>%
   group_by(ID) %>%
   summarize(geometry = st_union(geometry))  # Merge polygons with the same ID
 
-#Merge the two datasets by ID column
+#Merge the DIA dataset with the polygons by site ID column
 
 df_polys <- merge(df,polys_merged, by = c("ID"))
 df_polys <- st_as_sf(df_polys)
 
 #Export to inspect in ArcGIS
 
-write_sf(df_polys,here("./output/intermediate-outputs/DIA_data_polys_merged.shp"))
+#write_sf(df_polys,here("./output/intermediate-outputs/DIA_data_polys_merged.shp"))
+
+#How does damage vary with year?
+
+ggplot(df_polys, aes(x = Impact_sco)) +
+  geom_histogram(binwidth = 1, fill = "steelblue", color = "black") +
+  facet_wrap(~Year) +
+  labs(x = "Impact Score", y = "Frequency", title = "Distribution of Impact Score by Survey Year") +
+  theme_minimal()
+
+#Is this a function of survey effort? 
+
+hist(df_polys$Year) #Yes! 2015 is the most surveyed year.
 
 #Filter year of survey to match with our 2015 spatial data
+#Go for +/- 3 years either side
 df_polys <- subset(df_polys, Year %in% c("2012","2013","2014","2015","2016","2017","2018"))
 
 #Some woodlands have been surveyed multiple times- select the most recent survey for each woodland
@@ -66,8 +79,7 @@ df_most_recent <- df_polys %>%
   ungroup()
 
 #Export to inspect in ArcGIS
-
-write_sf(df_most_recent,here("./output/intermediate-outputs/DIA_data_st_union_polys.shp"))
+#write_sf(df_most_recent,here("./output/intermediate-outputs/DIA_data_st_union_polys.shp"))
 
 
 
@@ -177,8 +189,7 @@ df_impact3$Impact_sco[df_impact3$Impact_sco == 5] <- 3
 hist(df_impact3$Impact_sco)
 
 #Export for inspection in ArcGIS
-
-write_sf(df_impact3,here("./output/intermediate-outputs/DIA_data_impact3.shp"))
+#write_sf(df_impact3,here("./output/intermediate-outputs/DIA_data_impact3.shp"))
 
 ```
 
