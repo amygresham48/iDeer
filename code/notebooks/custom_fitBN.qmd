@@ -1,0 +1,167 @@
+---
+title: "Expert_BN"
+format: 
+  html:
+    code-fold: true
+    code-summary: "Show the code"
+editor: visual
+---
+
+```{r libraries}
+#| echo: true
+#| warning: false
+#| message: false
+
+library(bnlearn)
+library(tidyverse, quietly = TRUE)
+library(sf)
+```
+
+### Create Conditional Probability Tables (CPT)
+
+```{r CPTs}
+#| echo: true
+#| warning: false
+#| message: false
+
+urban_prox_cpt<-matrix(c(0.3333333, 0.3333333,0.3333333), ncol=3, dimnames = list(NULL, c("LOW", "MED","HIGH")))
+road_density_cpt<-matrix(c(0.3333333, 0.3333333,0.3333333), ncol=3, dimnames = list(NULL, c("LOW", "MED","HIGH")))
+
+disturb_index_cpt<-c(rep(0.3333333,27))#3^3
+
+dim(disturb_index_cpt) = c(3, 3, 3)
+
+dimnames(disturb_index_cpt) = list("disturb_index" = c("LOW", "MED", "HIGH"), "urban_prox" =  c("LOW","MED", "HIGH"),"road_density" = c("LOW", "MED", "HIGH"))
+
+patch_size_cpt<-matrix(c(0.3333333, 0.3333333,0.3333333), ncol=3, dimnames = list(NULL, c("LOW", "MED","HIGH")))
+
+total_edge_cpt<-matrix(c(0.3333333, 0.3333333,0.3333333), ncol=3, dimnames = list(NULL, c("LOW", "MED","HIGH")))
+
+woodland_cpt<-matrix(c(0.25,0.25,0.25,0.25), ncol=4, dimnames = list(NULL, c( "BROADLEAVED","CONIFER", "MIXED_PREDOM_BROADLEAF","MIXED_PREDOM_CONIFER")))
+
+
+nutritional_index_cpt<-c(rep(0.333333,108)) 
+
+dim(nutritional_index_cpt) = c(3, 3, 3,4)
+
+dimnames(nutritional_index_cpt) = list("nutritional" = c("LOW", "MED", "HIGH"), "patch_size" =  c("LOW","MED", "HIGH"),"total_edge" = c("LOW", "MED", "HIGH"),
+                                       "woodland" = c("BROADLEAVED","CONIFER", "MIXED_PREDOM_BROADLEAF","MIXED_PREDOM_CONIFER"))
+
+
+linear_feature_cpt<-matrix(c(0.3333333, 0.3333333,0.3333333), ncol=3, dimnames = list(NULL, c("LOW", "MED","HIGH")))
+shelter_cpt<-matrix(c(0.3333333, 0.3333333,0.3333333), ncol=3, dimnames = list(NULL, c("LOW", "MED","HIGH")))
+
+
+deer_damage_cpt<-c(rep(0.333333,243))#3^5
+
+dim(deer_damage_cpt) = c(3, 3, 3,3,3)
+
+dimnames(deer_damage_cpt) = list("deer_damage" = c("LOW", "MED", "HIGH"), "disturb_index" =  c("LOW","MED", "HIGH"),"linear_feature" = c("LOW", "MED", "HIGH"), "nutritional"=c("LOW","MED","HIGH"), "shelter"=c("LOW","MED", "HIGH"))
+
+```
+
+### Create BN Structure
+
+```{r BN structure}
+#| echo: true
+#| warning: false
+#| message: false
+
+net<-model2network("[urban_prox][road_density][linear_feature][woodland][patch_size][total_edge][shelter][disturb_index|urban_prox:road_density][nutritional|woodland:patch_size:total_edge][deer_damage|disturb_index:linear_feature:shelter:nutritional]") # You dont need to repeat the names of the nodes with parents (child nodes) 
+
+# Custom fitting network (matching up the nodes to their CPTs)
+dfit = custom.fit(net, dist = list(urban_prox = urban_prox_cpt, road_density = road_density_cpt,linear_feature = linear_feature_cpt, woodland=woodland_cpt,
+                                   patch_size=patch_size_cpt, total_edge=total_edge_cpt, shelter=shelter_cpt, disturb_index=disturb_index_cpt,nutritional= nutritional_index_cpt,deer_damage= deer_damage_cpt))
+
+
+```
+
+### Look at the BN
+
+#### Ugly plot
+
+```{r plot the network}
+#| echo: true
+#| warning: false
+#| message: false
+
+graphviz.plot(net)
+
+```
+
+#### Parameters
+
+```{r look at the dfit}
+#| echo: true
+#| warning: false
+#| message: false
+dfit
+
+```
+
+### Set evidence
+
+```{r set evidence}
+#| echo: true
+#| warning: false
+#| message: false
+cpquery(dfit, c(total_edge == "LOW"|shelter == "LOW"|woodland=="BROADLEAVED"), (deer_damage=="HIGH"))
+
+```
+
+#### Test with the dummy data
+
+```{r spatial data}
+#| echo: true
+#| warning: false
+#| message: false
+
+# need to do some cleaning of dummy data
+dummy_BBN_spatial_data <- readRDS("C:/Users/ik929086/Documents/iDeer_Local/BBN_structure/inputs/dummy_BBN_spatial_data.RDS")
+#convert to upper
+dummy_BBN_spatial_data<-dummy_BBN_spatial_data |> 
+ mutate(across(where(is.character), toupper))
+
+dummy_BBN_spatial_data<-dummy_BBN_spatial_data |> 
+  mutate(across(patch_size:damage, ~gsub("MEDIUM","MED",.)))
+test_data<-dummy_BBN_spatial_data |> st_drop_geometry() |>
+  dplyr::select(patch_size:woodland)
+
+test_data<-test_data |> 
+  mutate_if(is.character, as.factor)
+
+levels(test_data$patch_size)<-c("LOW", "MED", "HIGH")
+levels(test_data$road_density)<-c("LOW", "MED", "HIGH")
+levels(test_data$nutritional)<-c("LOW", "MED", "HIGH")
+levels(test_data$urban_prox)<-c("LOW", "MED", "HIGH")
+levels(test_data$total_edge)<-c("LOW", "MED", "HIGH")
+levels(test_data$linear_feature)<-c("LOW", "MED", "HIGH")
+levels(test_data$shelter)<-c("LOW", "MED", "HIGH")
+
+
+```
+
+#### Predict from the BN using the dummy data
+
+```{r}
+#| echo: true
+#| warning: false
+#| message: false
+
+test_data<-test_data
+pred = predict(dfit, node = "disturb_index", data = test_data,method = "bayes-lw")
+
+dummy_BBN_spatial_data$pred<-pred
+
+```
+
+#### Draw a nice map
+
+```{r}
+#| echo: true
+#| warning: false
+#| message: false
+
+plot(dummy_BBN_spatial_data["pred"])
+
+```
