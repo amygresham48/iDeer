@@ -1,0 +1,33 @@
+---
+title: "extraction_DIA"
+format: html
+editor: visual
+
+Purpose: to extract spatial information from our 2015 spatial layers for the DIA woodland polygons
+
+THE DIA DATA ARE GDPR SENSITIVE AND ARE UNDER A DATA SHARING AGREEMENT. THEY MUST NOT BE SHARED WITH THIRD PARTIES WITHOUT APPROVAL FROM DJ.
+---
+
+```{r}
+#Load packages
+
+library(sf)
+library(dplyr)
+library(ggplot2)
+library(here)
+
+here()
+```
+
+```{r}
+
+#Read in cleaned DIA data
+
+dia <- st_read(here("./data/clean-data/DIA_high_density_2012-2018.shp"))
+
+
+```
+
+```{r}
+
+```
