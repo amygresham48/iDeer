@@ -53,7 +53,7 @@ df_polys <- st_as_sf(df_polys)
 
 #Export to inspect in ArcGIS
 
-#write_sf(df_polys,here("./output/intermediate-outputs/DIA_data_polys_merged.shp"))
+write_sf(df_polys,here("./output/intermediate-outputs/DIA_data_polys_merged.shp"))
 
 #How does damage vary with year?
 
@@ -79,7 +79,7 @@ df_most_recent <- df_polys %>%
   ungroup()
 
 #Export to inspect in ArcGIS
-#write_sf(df_most_recent,here("./output/intermediate-outputs/DIA_data_st_union_polys.shp"))
+write_sf(df_most_recent,here("./output/intermediate-outputs/DIA_data_st_union_polys.shp"))
 
 
 
@@ -189,7 +189,7 @@ df_impact3$Impact_sco[df_impact3$Impact_sco == 5] <- 3
 hist(df_impact3$Impact_sco)
 
 #Export for inspection in ArcGIS
-#write_sf(df_impact3,here("./output/intermediate-outputs/DIA_data_impact3.shp"))
+write_sf(df_impact3,here("./output/intermediate-outputs/DIA_data_impact3.shp"))
 
 ```
 
@@ -198,6 +198,8 @@ hist(df_impact3$Impact_sco)
 #Keep in mind the DIA dataset is biased because surveys were deliberately carried out in areas which had a deer problem.
 
 #Read in JNCC deer density data ####
+
+#Game bag census data from GWCT
 
 deer_density <- read.csv(here("./data/raw-data/DEER_JNCC/deer_density_sections_AMY.csv"))
 
