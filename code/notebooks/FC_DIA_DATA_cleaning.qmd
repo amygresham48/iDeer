@@ -217,7 +217,7 @@ ggplot() +
   geom_sf(data = deer_density, aes(fill = MAXDEER)) 
 hist(deer_density$MAXDEER)
 
-#Filter for high density squares
+#Filter for high density squares >100 per 10km2
 high_density_tiles <- deer_density %>% filter(MAXDEER > 100)
 
 ggplot() +
