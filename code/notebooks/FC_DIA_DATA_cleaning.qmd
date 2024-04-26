@@ -31,6 +31,10 @@ df <- df %>% select(ID,Region,PA,AA,Month,Season,Year,Act_score,Impact_sco,Area,
 #Read in spatial dataset containing woodland polygons that received DIA surveys
 
 polys <- st_read(here("./data/raw-data/DIA-data/LCM2015GBwithinDIApolygoninfo.shp"))
+
+#Try point data
+
+points <- st_read(here("./data/raw-data/DIA-data/DIAdataall.shp"))
 ```
 
 ```{r}
@@ -50,6 +54,10 @@ polys_merged <- polys %>%
 
 df_polys <- merge(df,polys_merged, by = c("ID"))
 df_polys <- st_as_sf(df_polys)
+
+#Try merging the point data
+
+df_points <-merge(df, points, by = c("ID"))
 
 #Export to inspect in ArcGIS
 
