@@ -1,0 +1,20 @@
+---
+#title: "Connectivity_woodlands_nfi_lcm_2015"
+#Purpose: create woodland connectivity map for whole of UK using nfi/lcm 2015 master map
+---
+
+```{r}
+#Load packages
+
+library(sf)
+library(dplyr)
+library(ggplot2)
+library(here)
+
+here()
+```
+
+```{#Import polygon dataset ####}
+
+
+```
