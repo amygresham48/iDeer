@@ -144,11 +144,11 @@ ggplot(data=Oxford) +
 
 #No PA
 
-ggplot(data=no_pa) +
-  geom_sf(aes(geometry = geometry, fill = Impact_sco)) +  # Color by impact score
-  coord_sf() +  # Keep default sf coordinate system
-  labs(title = "Outside PAs") +
-  theme_minimal()
+#ggplot(data=no_pa) +
+  #geom_sf(aes(geometry = geometry, fill = Impact_sco)) +  # Color by impact score
+  #coord_sf() +  # Keep default sf coordinate system
+  #labs(title = "Outside PAs") +
+  #theme_minimal()
 ```
 
 ```         
@@ -166,23 +166,23 @@ hist(df_most_recent$Impact_sco)
 #4-5 = high = 3
 
 # Replace all instances of 3 with 2 in the Impact_sco column
-df_impact3 <- df_most_recent
-df_impact3$Impact_sco[df_impact3$Impact_sco == 3] <- 2
+#df_impact3 <- df_most_recent
+#df_impact3$Impact_sco[df_impact3$Impact_sco == 3] <- 2
 
 # Replace all instances of 4 and 5 with 3 in the Impact_sco column
-df_impact3$Impact_sco[df_impact3$Impact_sco == 4] <- 3
-df_impact3$Impact_sco[df_impact3$Impact_sco == 5] <- 3
+#df_impact3$Impact_sco[df_impact3$Impact_sco == 4] <- 3
+#df_impact3$Impact_sco[df_impact3$Impact_sco == 5] <- 3
 
-hist(df_impact3$Impact_sco)
+#hist(df_impact3$Impact_sco)
 
 #Export for inspection in ArcGIS
-write_sf(df_impact3,here("./output/intermediate-outputs/DIA_data_impact3.shp"))
+#write_sf(df_impact3,here("./output/intermediate-outputs/DIA_data_impact3.shp"))
 
 ```
 
 ```{r}
 #Export cleaned points
 
-write_sf(df_impacts_high_density ,here("./data/clean-data/DIA_points_.shp"))
+write_sf(df_most_recent ,here("./data/clean-data/DIA_points_2013_2019.shp"))
 
 ```
