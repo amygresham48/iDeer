@@ -32,9 +32,6 @@ df <- df %>% select(ID,Region,PA,AA,Month,Season,Year,Act_score,Impact_sco,Area,
 
 polys <- st_read(here("./data/raw-data/DIA-data/LCM2015GBwithinDIApolygoninfo.shp"))
 
-#Try point data
-
-points <- st_read(here("./data/raw-data/DIA-data/DIAdataall.shp"))
 ```
 
 ```{r}
@@ -55,10 +52,6 @@ polys_merged <- polys %>%
 df_polys <- merge(df,polys_merged, by = c("ID"))
 df_polys <- st_as_sf(df_polys)
 
-#Try merging the point data
-
-df_points <-merge(df, points, by = c("ID"))
-
 #Export to inspect in ArcGIS
 
 write_sf(df_polys,here("./output/intermediate-outputs/DIA_data_polys_merged.shp"))
@@ -76,8 +69,7 @@ ggplot(df_polys, aes(x = Impact_sco)) +
 hist(df_polys$Year) #Yes! 2015 is the most surveyed year.
 
 #Filter year of survey to match with our 2015 spatial data
-#Go for +/- 3 years either side
-df_polys <- subset(df_polys, Year %in% c("2012","2013","2014","2015","2016","2017","2018"))
+df_polys <- subset(df_polys, Year %in% c("2013","2014","2015","2016","2017","2018","2019"))
 
 #Some woodlands have been surveyed multiple times- select the most recent survey for each woodland
 
@@ -187,83 +179,23 @@ hist(df_most_recent$Impact_sco)
 #4-5 = high = 3
 
 # Replace all instances of 3 with 2 in the Impact_sco column
-df_impact3 <- df_most_recent
-df_impact3$Impact_sco[df_impact3$Impact_sco == 3] <- 2
+#df_impact3 <- df_most_recent
+#df_impact3$Impact_sco[df_impact3$Impact_sco == 3] <- 2
 
 # Replace all instances of 4 and 5 with 3 in the Impact_sco column
-df_impact3$Impact_sco[df_impact3$Impact_sco == 4] <- 3
-df_impact3$Impact_sco[df_impact3$Impact_sco == 5] <- 3
+#df_impact3$Impact_sco[df_impact3$Impact_sco == 4] <- 3
+#df_impact3$Impact_sco[df_impact3$Impact_sco == 5] <- 3
 
-hist(df_impact3$Impact_sco)
+#hist(df_impact3$Impact_sco)
 
 #Export for inspection in ArcGIS
-write_sf(df_impact3,here("./output/intermediate-outputs/DIA_data_impact3.shp"))
-
-```
-
-```{r}
-#Exclude woodlands where deer densities are not high according to the JNCC dataset?
-#Keep in mind the DIA dataset is biased because surveys were deliberately carried out in areas which had a deer problem.
-
-#Read in JNCC deer density data ####
-
-#Game bag census data from GWCT
-
-deer_density <- read.csv(here("./data/raw-data/DEER_JNCC/deer_density_sections_AMY.csv"))
-
-deer_density <- deer_density %>% select(maxroe, maxred, maxsika, fallowmax, muntmax, MAXDEER, TILE_NAME)
-
-#Read in uk10k map
-
-uk10<- st_read(dsn = here("./data/raw-data/os_bng_grids.gpkg"), layer = "10km_grid")
-
-#cbind tile geometry to deer density
-
-uk10 <- uk10 %>% rename(TILE_NAME = tile_name)
-deer_density <- merge(uk10, deer_density, by = "TILE_NAME")
-deer_density <- deer_density %>% select(TILE_NAME, MAXDEER)
-
-ggplot() +
-  geom_sf(data = deer_density, aes(fill = MAXDEER)) 
-hist(deer_density$MAXDEER)
-
-#Filter for high density squares >100 per 10km2
-high_density_tiles <- deer_density %>% filter(MAXDEER > 100)
-
-ggplot() +
-  geom_sf(data = high_density_tiles, aes(fill = NULL)) +
-  geom_sf(data = df_impact3, aes(geometry = geometry, fill = Impact_sco))
-
-hist(high_density_tiles$MAXDEER)
-
-#Most of the woodlands fall within high-density deer areas as indicated by the JNCC data
-
-#Filter out woodlands which do not fall within the high density tiles ####
-#Ensure crs match
-df_impact3 <- st_as_sf(df_impact3)
-df_impact3 <- st_transform(df_impact3, crs=27700)
-high_density_tiles <- st_transform(high_density_tiles, crs=27700)
-
-#Find intersection between high density tiles and deer impact data
-intersec <- st_intersects(df_impact3,high_density_tiles)
-
-#Filter deer impact data to only include woodlands that occur in high density tiles
-df_impacts_high_density <- df_impact3[apply(intersec, 1, any), ]
-
-#How many woodlands left?
-nrow(df_impacts_high_density)
-
-ggplot() +
-  geom_sf(data = high_density_tiles, aes(fill = NULL)) +
-  geom_sf(data = df_impacts_high_density, aes(geometry = geometry, fill = Impact_sco))
-
-hist(df_impacts_high_density$Impact_sco)
+#write_sf(df_impact3,here("./output/intermediate-outputs/DIA_data_impact3.shp"))
 
 ```
 
 ```{r}
 #Export cleaned polygons
 
-write_sf(df_impacts_high_density ,here("./data/clean-data/DIA_high_density_2012-2018.shp"))
+write_sf(df_impacts_high_density ,here("./data/clean-data/DIA_high_density_2013-2019.shp"))
 
 ```
