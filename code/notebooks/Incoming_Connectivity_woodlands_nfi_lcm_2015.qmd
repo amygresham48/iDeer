@@ -125,7 +125,7 @@ plot(st_geometry(hab_patches))
 #### SET CONNECTIVITY PARAMETERS ####
 # connectivity parametetrs - % of dispersers reaching a set distance #
 percentage_dispersers <- 0.05 ### 5%
-dispersal_distance <- 414 #area of a 1km radius circle
+dispersal_distance <- 435 #Gets curve up to 1000m on x axis
 dispersal_contribution <-
   -((log(1 / percentage_dispersers)) / dispersal_distance)
 
@@ -146,16 +146,9 @@ ggplot(data = test, aes(x = distance, y = contribution, group = 1)) +
   geom_vline(xintercept = buffer_cutoff, color = "red")
 
 #See how buffer size looks
-#We probably want a 1km buffer
-#A 1km radius circle has an area of 3.14×10^6 m2 or 3.14 square kilometres
-focal_patch_buffer <- st_buffer(hab_patches[92,], buffer_cutoff)
-# Calculate the area
-st_area(focal_patch_buffer$geometry) # square metres
-#3147177 [m^2]
-as.numeric(st_area(focal_patch_buffer$geometry)) / 1e6 # square kilometres
-# 3.147177
+focal_patch_buffer <- st_buffer(hab_patches[1,], buffer_cutoff)
 plot(st_geometry(focal_patch_buffer))
-plot(st_geometry(hab_patches[92,]),add=TRUE)
+plot(st_geometry(hab_patches[1,]),add=TRUE)
 
 
 ```
@@ -166,13 +159,13 @@ plot(st_geometry(hab_patches[92,]),add=TRUE)
 
 #work out which patches have not been done yet
 
-hab_patches_to_do <- anti_join(
-  hab_patches,
-  connectivity_all,
-  by = c("patch_ID" = "focal_patch")  # Matching based on `patch_ID` in `hab_patches` and `focal_patch` in `connectivity_all`
-)
+#hab_patches_to_do <- anti_join(
+#  hab_patches,
+#  connectivity_all,
+#  by = c("patch_ID" = "focal_patch")  # Matching based on `patch_ID` in `hab_patches` and `focal_patch` in `connectivity_all`
+#)
 
-num_patches <- nrow(hab_patches_to_do)
+num_patches <- nrow(hab_patches)
 
 # Initialize progress bar
 pb <- progress_bar$new(
@@ -183,7 +176,7 @@ pb <- progress_bar$new(
 )
 
 # loop through list #
-for (i in 1:nrow(hab_patches_to_do)) {
+for (i in 1:nrow(hab_patches)) {
   
    # Update progress bar
   pb$tick()  # This moves the progress bar
