@@ -17,86 +17,6 @@ here()
 ```
 
 ```{r}
-#TEST #### create test SHAPEFILES - you can read in shapefiles/rasters and use/covert as necessary ####
-b1 <- st_buffer(st_point(c(1,1)), 1)
-b2 <- st_buffer(st_point(c(7,5)), 0.5)
-b3 <- st_buffer(st_point(c(9,1)), 0.35)
-b4 <- st_buffer(st_point(c(3,3)), 0.4)
-patches <- st_sfc(b1, b2, b3, b4) %>%  
-  st_as_sf()
-
-# load shapefile and wrangle to get area and unique id
-hab_patches <- patches %>%
-  st_simplify() %>%
-  mutate(patch_ID = seq.int(nrow(.)), patch_area = st_area(.))
-
-# plot patches
-ggplot(data = hab_patches) +
-  geom_sf(aes(fill = patch_area)) +
-  geom_sf_label(aes(label = patch_ID)) +
-  coord_sf()
-
-#### SET CONNECTIVITY PARAMETERS ####
-# connectivity parametetrs - % of dispersers reaching a set distance #
-percentage_dispersers <- 0.05 ### 5%
-dispersal_distance <- 3 ### 400m
-dispersal_contribution <-
-  -((log(1 / percentage_dispersers)) / dispersal_distance)
-
-# Buffer distance represents the cut off - this stops the script measuring every pairwise combination
-dispersal_cutoff <- 0.999 ### 99.9% cut off
-buffer_cutoff <-
-  round(log(1 / (1 - dispersal_cutoff)) / (log(1 / percentage_dispersers) /
-                                             dispersal_distance), digits = 2)
-
-# test & plot of dispersal contribution for sequence of distance up to buffer_cutoff
-test <-
-  data.frame(distance = (seq(0, buffer_cutoff, by = 0.5))) %>%
-  mutate(contribution = (exp(dispersal_contribution * distance) * 100))
-
-ggplot(data = test, aes(x = distance, y = contribution, group = 1)) +
-  geom_line() +
-  geom_point() +
-  geom_vline(xintercept = buffer_cutoff, color = "red")
-
-#### CALCULATE CONNECTIVITY ####
-
-# loop through list #
-for (i in 1:nrow(hab_patches)) {
-  
-  # id single patch to measure from
-  focal_patch <- hab_patches[i,]
-  
-  # id patches to measure to
-  # buffer from slected focal patch by bufferDistnace
-  focal_patch_buffer <- st_buffer(focal_patch, buffer_cutoff)
-  # select source patches within buffer distance of focal patch
-  source_patch <- st_filter(hab_patches, focal_patch_buffer, .predicate = st_intersects)
-  # calculate the distances from all the source patches to the focal patch
-  patch_dist <- st_distance(focal_patch, source_patch)
-  patch_dist <- as.vector(patch_dist)
-  # create a data frame with all information in
-  Conn_table_site <- data.frame(focal_patch = focal_patch$patch_ID, 
-                                focal_patch_area = as.numeric(focal_patch$patch_area),
-                                source_patch = source_patch$patch_ID, 
-                                source_patch_area = as.numeric(source_patch$patch_area),
-                                distance = patch_dist) %>% 
-    mutate(incoming_connect = case_when(focal_patch == source_patch ~ NA_real_,
-                                        TRUE ~ source_patch_area * exp(dispersal_contribution*distance)))
-  # add all points together
-  if(i == 1) {
-    Connectivity_table = Conn_table_site
-  } else {
-    Connectivity_table = rbind(Connectivity_table, Conn_table_site)
-  }
-}      
-
-# the 'incoming_connect' variable in the 'connectivity_table' shows the connectivity from the various
-# 'source patches' to each 'focal patch' - yon can sum by 'focal patch'
-
-```
-
-```{r}
 #Import polygon dataset
 
 #This is the NFI and LCM 2015 woodlands joined together
@@ -118,7 +38,7 @@ ew_10k <- st_read(here("data/raw-data/10k_tiles_EW.shp"))
 
 hab_patches <-st_filter(hab_patches_all, ew_10k, .predicate =st_intersects)
 
-plot(st_geometry(hab_patches))
+#plot(st_geometry(hab_patches))
 ```
 
 ```{r}
