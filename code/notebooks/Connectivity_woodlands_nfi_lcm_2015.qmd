@@ -147,7 +147,7 @@ ggplot(data = test, aes(x = distance, y = contribution, group = 1)) +
 
 #See how buffer size looks
 #We probably want a 1km buffer
-#A 1km radius circle has an area of 3.14×106 m2 or 3.14 square kilometres
+#A 1km radius circle has an area of 3.14×10^6 m2 or 3.14 square kilometres
 focal_patch_buffer <- st_buffer(hab_patches[92,], buffer_cutoff)
 # Calculate the area
 st_area(focal_patch_buffer$geometry) # square metres
