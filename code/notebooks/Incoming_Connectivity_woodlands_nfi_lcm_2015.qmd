@@ -125,15 +125,16 @@ plot(st_geometry(hab_patches))
 #### SET CONNECTIVITY PARAMETERS ####
 # connectivity parametetrs - % of dispersers reaching a set distance #
 percentage_dispersers <- 0.05 ### 5%
-dispersal_distance <- 435 #Gets curve up to 1000m on x axis
+dispersal_distance <- 434 #Gets curve up to 1000m on x axis
 dispersal_contribution <-
   -((log(1 / percentage_dispersers)) / dispersal_distance)
 
 # Buffer distance represents the cut off - this stops the script measuring every pairwise combination
 dispersal_cutoff <- 0.999 ### 99.9% cut off
-buffer_cutoff <-
-  round(log(1 / (1 - dispersal_cutoff)) / (log(1 / percentage_dispersers) /
-                                             dispersal_distance), digits = 0)
+#buffer_cutoff <-
+  #round(log(1 / (1 - dispersal_cutoff)) / (log(1 / percentage_dispersers) /
+                                             #dispersal_distance), digits = 2)
+buffer_cutoff = 1000 #1km
 
 # test & plot of dispersal contribution for sequence of distance up to buffer_cutoff
 test <-
