@@ -1,23 +1,6 @@
 ### Dependencies #########
 
-#Import polygons
-
-hab_patches_all <- st_read(here("data/derived-data/nfi_lcm_overlaid_shapefile_woods_export.shp"))
-head(hab_patches_all)
-
-hab_patches_all <- hab_patches_all %>%
-  rename(patch_ID = Id) %>%
-  rename(patch_area = Shape_Area)
-
-#Crop these habitat patches to England and Wales only ####
-
-ew_10k <- st_read(here("data/raw-data/10k_tiles_EW.shp"))
-
-#crop hab_patches to England and Wales without clipping the edges of the woodlands
-
-hab_patches <-st_filter(hab_patches_all, ew_10k, .predicate =st_intersects)
-
-plot(st_geometry(hab_patches))
+rastin <- raster("testRast4.txt")
 
 #Make function ####
 
@@ -31,12 +14,26 @@ connectfunc <- function(rastin, distance, prop_disp){
   library(sp)
   library(rgeos)
   
-  ### Dissolve polygons by id value (merges individual connected polygon cells into single features)
+  #### Import raster
   
-  polys <- hab_patches_all %>%
-    group_by(patch_ID) %>%
+  #### Note:  In its current state the script requires individual patches to have unique id values in the input raster (no region group or clump is performed here)
+  
+  rast1 <- rastin
+  
+  ### Convert test landscape to vector format
+  
+  polys <- rasterToPolygons(rast1) %>%
+    st_as_sf() %>%
+    rename(id = 1) %>%
+  
+  #polys <- hab_patches %>%
+    
+    ### Dissolve polygons by id value (merges individual connected polygon cells into single features)
+    
+    group_by(id) %>%
+    
     ### count here calculates the number of cells corresponding to current focal patch - equivalent of area for this example
-    summarise(fid = first(patch_ID), count = n()) %>%
+    summarise(fid = first(id), count = n()) %>%
     #mutate(fid = seq.int(nrow(.))) %>%
     as("Spatial")
   
@@ -102,7 +99,7 @@ connectfunc <- function(rastin, distance, prop_disp){
 
 #Run the function ####
 
-rastin <- hab_patches_all
+rastin <- rastin
 distance <- 5
 prop_disp <- 0.05
 
