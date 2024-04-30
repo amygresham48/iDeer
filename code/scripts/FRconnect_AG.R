@@ -1,4 +1,9 @@
-### Dependencies #########
+#Load packages ####
+
+library(sf)
+library(dplyr)
+library(here)
+here()
 
 #Import polygons
 
@@ -17,7 +22,7 @@ ew_10k <- st_read(here("data/raw-data/10k_tiles_EW.shp"))
 
 hab_patches <-st_filter(hab_patches_all, ew_10k, .predicate =st_intersects)
 
-plot(st_geometry(hab_patches))
+#plot(st_geometry(hab_patches))
 
 #Make function ####
 
@@ -32,12 +37,12 @@ connectfunc <- function(rastin, distance, prop_disp){
   library(rgeos)
   
   ### Dissolve polygons by id value (merges individual connected polygon cells into single features)
-  
+
   polys <- hab_patches_all %>%
     group_by(patch_ID) %>%
     ### count here calculates the number of cells corresponding to current focal patch - equivalent of area for this example
     summarise(fid = first(patch_ID), count = n()) %>%
-    #mutate(fid = seq.int(nrow(.))) %>%
+    mutate(fid = seq.int(nrow(.))) %>%
     as("Spatial")
   
   condf <- data.frame(id = integer(), coninter = double(), conintra = double(), comp = integer(), compN = integer(), configN = double())
@@ -45,8 +50,7 @@ connectfunc <- function(rastin, distance, prop_disp){
   ## Calculation input parameter values
   
   pdisp <- prop_disp
-  dispdist <- distance ### 5 cells
-  #cellres <- res(rastin)[[1]]
+  dispdist <- distance ### 414 cells = 1km buffer
   cellres <- 25
   
   
@@ -103,7 +107,7 @@ connectfunc <- function(rastin, distance, prop_disp){
 #Run the function ####
 
 rastin <- hab_patches_all
-distance <- 5
+distance <- 414
 prop_disp <- 0.05
 
 connectfunc(rastin, distance, prop_disp)
