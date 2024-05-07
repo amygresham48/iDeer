@@ -12,7 +12,7 @@ here()
 
 #Import dataset
 
-CPT <- read.csv(here("CPT_BBN_deer_impact_tinkering.csv"))
+CPT <- read.csv(here("data/BBN-cpts/CPT_BBN_deer_impact_tinkering.csv"))
 
 #Recode to numbers
 recode_mapping <- c("LOW" = 1, "MED" = 2, "HIGH" = 3)
@@ -46,7 +46,7 @@ ggplot(CPT, aes(x = NPI, y = Damage_Index, col = NLI, group = NLI)) +  # Set aes
 
 #Have a look at disturbance CPT ####
 
-disturb <- read.csv(here("CPT_Disturbance_Index.csv"))
+disturb <- read.csv(here("data/BBN-cpts/CPT_Disturbance_Index.csv"))
 
 #Recode to numbers
 recode_mapping <- c("LOW" = 1, "MED" = 2, "HIGH" = 3)
