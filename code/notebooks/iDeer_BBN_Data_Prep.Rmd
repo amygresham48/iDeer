@@ -1,0 +1,349 @@
+
+Prepare dataset for BBN
+
+```{r, echo=FALSE, results="hide"}
+library(here)
+library(dplyr)
+library(ggplot2)
+library(qgraph)
+library(ROCR)
+library(bnlearn)
+library(BiocManager)
+library(ranger)
+library(h2o)
+library(randomForest)
+#BiocManager::install("Rgraphviz", force = TRUE)
+library(Rgraphviz)
+project_dir <- here()
+input_dir <- here("data/derived-data/NFI-2015-extracted-data-Chloe/")
+#output_dir <- here("BBN_structure","outputs")
+```
+
+
+
+```{r}
+#Read in extracted raster data ####
+
+loc <- read.csv(here("data/derived-data/NFI-2015-extracted-data-Chloe/IDeer_NFI_local_rasterextracts.csv", sep=""))
+loc%>%
+  dplyr::select(SQUID_SECTION, SECTION_AREA.y, TILE_NAME, REGION_CODE.y, ENGLAND, WALES, SCOTLAND, IFT, BROWSING, STRIPPING, Ard_1000_mosaic_all_tiles_co:lf_500_mosaic_all_tiles_co) -> loc2
+
+loc2
+
+#Read in correct DAMS data (maximum DAMS, not summed)
+#If you want summed DAMS, use DAMS_NFI_extractCORRECT.csv
+dams <- read.csv(here("data/derived-data/NFI-2015-extracted-data-Chloe/DAMSMAX_NFI_extract.csv"))
+dams%>%dplyr::select(SQUID_SECTION, focal.dams.1000.max.tif, focal.dams.250.max.tif, focal.dams.500.max.tif)%>%na.omit -> dams
+
+dat <- merge(loc2, dams, "SQUID_SECTION")
+
+dat$damage <- dat$STRIPPING + dat$BROWSING # any damage column
+ dat[dat$damage>1,]$damage<-1
+ 
+#Remove all sections that are classified as "Young_Trees" in the IFT column
+sum(dat$IFT == "Young_Trees")
+#[1] 147
+nrow(dat)
+dat <- dat %>% filter(!grepl("Young_Trees",IFT))
+nrow(dat)
+```
+
+```{r}
+#Read in JNCC deer density data ####
+
+deer_density <- read.csv("C:/Users/ik929086/OneDrive - University of Reading/Amy_Becks_GIS/from_chloe/DEER_JNCC/deer_density_sections_AMY.csv")
+
+deer_density <- deer_density %>% select(maxroe, maxred, maxsika, fallowmax, muntmax, MAXDEER, TILE_NAME, SQUID_SECTION)
+
+#hist(deer_density$maxroe)
+#hist(deer_density$muntmax)
+#hist(deer_density$maxred)
+#hist(deer_density$fallowmax)
+#hist(deer_density$maxsika)
+#hist(deer_density$maxred)
+
+#Add in density column "weighted" by deer species body size
+
+deer_density<- deer_density %>%
+  mutate(weighted_density = (maxred*2)+(maxsika*2)+(fallowmax*2)+muntmax+maxroe)
+
+#uk10<- st_read(dsn = "C:/Users/ik929086/OneDrive - University of Reading/Documents/Spatial datasets/BNG/OS-British-National-Grids-main/os_bng_grids/os_bng_grids.gpkg", layer = "10km_grid")
+
+#cbind tile geometry to deer density
+
+#uk10 <- uk10 %>% rename(TILE_NAME = tile_name)
+
+#deer_density <- merge(uk10, deer_density, by = "TILE_NAME")
+
+#ggplot() +
+#  geom_sf(data = deer_density, aes(fill = weighted_density)) 
+
+#ggplot() +
+#  geom_sf(data = deer_density, aes(fill = MAXDEER)) 
+
+deer_density <- deer_density %>% select(SQUID_SECTION, MAXDEER, weighted_density)
+deer_density <- as.data.frame(deer_density)
+deer_density$geometry <- NULL
+
+#Add columns to dat
+
+dat <- merge(dat, deer_density, by = "SQUID_SECTION")
+
+```
+
+
+
+```{r}
+#Clean and bind landscape metrics and quality rankings ####
+
+#Import landscape metrics data ####
+#lcm250
+lm250 <- read.csv(file.path(input_dir, "landscapemetrics_250.csv"))
+lm250 <- lm250 %>% mutate(buffer_size = "b250") #correct typo
+lm250$X <- NULL
+#lcm500
+lm500 <- read.csv(file.path(input_dir, "landscapemetrics_500.csv"))
+lm500$X <- NULL
+#lcm1000
+lm1000 <- read.csv(file.path(input_dir, "landscapemetrics_1000.csv"))
+lm1000$X <- NULL
+
+#rbind the datasets
+lcm_all_buffers <- rbind(lm250, lm500, lm1000)
+lcm_all_buffers$class <- as.numeric(lcm_all_buffers$class)
+
+#Filter out zeros, water, rock and sediment
+lcm_all_buffers <- lcm_all_buffers %>% filter(!class %in% c(0,12,13,14,15,16,17,18))
+#Filter out edge classes with .7 or .8 as these are saltwater and freshwater edges - not useful for deer
+lcm_all_buffers <- lcm_all_buffers %>% filter(!grepl(".7",class)) %>%
+                                       filter(!grepl(".8",class)) 
+
+#Import scoring tables for land cover classes ####
+#Experts have scored land cover as forage quality for deer on a scale of -10 to +10
+#Option 1: Edge values all 10
+edge.vals.10 <- read.csv(file.path(here("data/raw-data/Expert_derived_quality_ranks_edges_scored_10.csv")))
+edge.vals.10$X <- NULL
+hist(edge.vals.10$Forage_Q)
+#Option 2: Edge forage quality scores sum of woodland score + adjacent land cover score
+edge.val.types <- read.csv(file.path(here("data/raw-data/Expert_derived_quality_ranks_edge_types.csv")))
+edge.val.types$X <- NULL
+hist(edge.val.types$Forage_Q)
+
+#Stitch the quality scores into the lcm dataset
+
+lc.edges.10 <- lcm_all_buffers %>% left_join(edge.vals.10, by = "class") %>%
+                                                   filter(!is.na(Land.cover))
+
+lc.edge.types <- lcm_all_buffers %>% left_join(edge.val.types, by = "class") %>%
+                                          filter(!is.na(Land.cover)) 
+
+```
+
+```{r}
+#Calculate Nutritional Landscape Index (NLI) for separate edges and lc ####
+#Weight edges by their type: https://www.sciencedirect.com/science/article/pii/S0304380009003871#fig1 
+
+# Calculate the weighted score for each pixel type
+lc.edge.types <- lc.edge.types %>%
+  mutate(weighted_score = perc_cov * Forage_Q)
+
+# Sum the weighted scores for each SQUID section
+weighted_sum_by_section_buffer <- lc.edge.types %>%
+  group_by(SQUID_SECTION, buffer_size) %>%
+  summarise(total_weighted_score = sum(weighted_score),
+            total_perc_cov = sum(perc_cov))
+
+# Calculate the weighted average score for each SQUID section and buffer_size
+weighted_average_score_buffer <- weighted_sum_by_section_buffer %>%
+  mutate(weighted_avg_score = total_weighted_score / total_perc_cov)
+
+# Get the weighted average scores for each SQUID_SECTION and buffer size
+weighted_average_score_buffer <- weighted_average_score_buffer %>%
+  group_by(SQUID_SECTION) %>%
+  summarise(
+    nli_edge_types_250 = sum(weighted_avg_score[buffer_size == "b250"], na.rm = TRUE),
+    nli_edge_types_500 = sum(weighted_avg_score[buffer_size == "b500"], na.rm = TRUE),
+    nli_edge_types_1000 = sum(weighted_avg_score[buffer_size == "b1000"], na.rm = TRUE)
+  )
+
+# Join the calculated values back to the original dataset
+lc.edge.types.NLI <- left_join(dat, weighted_average_score_buffer, by = c("SQUID_SECTION"))
+```
+
+```{r}
+#Calculate Nutritional Landscape Index (NLI) with edges all scored as 10 ####
+
+# Calculate the weighted score for each pixel type
+lc.edges.10 <- lc.edges.10 %>%
+  mutate(weighted_score = perc_cov * Forage_Q)
+
+# Sum the weighted scores for each SQUID section
+weighted_sum_by_section_buffer <- lc.edges.10 %>%
+  group_by(SQUID_SECTION, buffer_size) %>%
+  summarise(total_weighted_score = sum(weighted_score),
+            total_perc_cov = sum(perc_cov))
+
+# Calculate the weighted average score for each SQUID section and buffer_size
+weighted_average_score_buffer <- weighted_sum_by_section_buffer %>%
+  mutate(weighted_avg_score = total_weighted_score / total_perc_cov)
+
+# Get the weighted average scores for each SQUID_SECTION and buffer size
+weighted_average_score_buffer <- weighted_average_score_buffer %>%
+  group_by(SQUID_SECTION) %>%
+  summarise(
+    nli_edges10_250 = sum(weighted_avg_score[buffer_size == "b250"], na.rm = TRUE),
+    nli_edges10_500 = sum(weighted_avg_score[buffer_size == "b500"], na.rm = TRUE),
+    nli_edges10_1000 = sum(weighted_avg_score[buffer_size == "b1000"], na.rm = TRUE)
+  )
+
+# Join the calculated values to the extract15 dataset
+lc.edge.types.NLI <- left_join(lc.edge.types.NLI, weighted_average_score_buffer, by = c("SQUID_SECTION"))
+```
+
+```{r}
+#Total amount of edge in landscape buffers ####
+
+lcm_edges <- lcm_all_buffers
+
+lcm_raster_vals <- read.csv(here("data/raw-data/edge_core_raster_values.csv", sep=""))
+lcm_raster_vals <- lcm_raster_vals %>% rename(class = raster_val)
+lcm_raster_vals$X <- NULL
+#left_join Land.cover names to lcm_edges
+lcm_edges <- lcm_edges %>% left_join(lcm_raster_vals, by = "class") %>%
+  filter(grepl("edge", Land.cover))
+#Get total number of edge pixels per buffer size for each squid section
+total_edge <- lcm_edges %>%
+  group_by(buffer_size, SQUID_SECTION) %>%
+  summarize(total_pix_sum = sum(total_pix)) %>%
+  tidyr::pivot_wider(names_from = buffer_size, values_from = total_pix_sum, names_prefix = "total_edge_pix_") %>%
+  mutate(across(everything(), ~replace(., is.na(.), 0)))
+
+#Add total_edge to lc.edge.types.NLI
+lc.edge.types.NLI <- left_join(lc.edge.types.NLI, total_edge, by = c("SQUID_SECTION"))
+```
+
+```{r}
+#Connectivity
+
+#Make a dummy column for now until you have real data
+
+# Add a new column '_incoming_connect' with random values between 0 and 20, rounded to 2 decimal places
+set.seed(123)  # Optional: Ensures reproducibility of random values
+df$incoming_connect <- round(runif(nrow(df), min = 0, max = 20), 2)
+```
+
+
+```{r}
+#Clean up
+
+df <- lc.edge.types.NLI
+
+#Make Country column saying whether section is in England or Wales
+df <- df %>%
+   mutate(
+   COUNTRY = ifelse(ENGLAND == "t", "England", ifelse(ENGLAND == "f", "Wales", NA))
+  ) %>%
+  select(-ENGLAND, -WALES, -SCOTLAND, -BROWSING, -STRIPPING) # remove country columns and browsing and stripping columns
+
+#make "damage" numeric
+df$damage <- as.numeric(df$damage)
+
+#Get rid of long strings in column names
+colnames(df) <- gsub("_mosaic_all_tiles_corrected", "", colnames(df))
+colnames(df) <- gsub("_mosaic_all_tiles_co", "", colnames(df))
+colnames(df) <- gsub("_all_tiles_corrected", "", colnames(df))
+colnames(df) <- gsub("_raster_2015.tif", "", colnames(df))
+colnames(df) <- gsub(".max.tif", "", colnames(df))
+colnames(df) <- gsub(".tif", "", colnames(df))
+
+
+#make columns which contain the sum of all road densities
+df$all_roads_250 <- rowSums(df[,c("motorway_250", "Ard_250", "Brd_250")])
+df$all_roads_500 <- rowSums(df[,c("motorway_500", "Ard_500", "Brd_500")])
+df$all_roads_1000 <- rowSums(df[,c("motorway_1000", "Ard_1000", "Brd_1000")])
+
+#sum A roads + B roads
+
+df$AB_roads_250 <- rowSums(df[,c("Ard_250", "Brd_250")])
+df$AB_roads_500 <- rowSums(df[,c("Ard_500", "Brd_500")])
+df$AB_roads_1000 <- rowSums(df[,c("Ard_1000", "Brd_1000")])
+
+#Get rid of NAs
+
+df_clean <- na.omit(df)
+
+#Make column for nearest urban and suburban using minimum value
+
+df_clean$nearest_urb_suburb <- pmin(df$nearest_suburban, df$nearest_urban)
+
+
+#save df 
+
+write.csv(df_clean, file = file.path(here("data/derived-data/nfi_2015_extracted_data_tidied.csv")))
+```
+
+
+```{r}
+#Choose spatial scales for each variable to go into BBN ####
+
+#road data highly zero inflated at small spatial scales, therefore go for 1km scale- applies to edges too
+#Max DAMs at 250m scale
+
+df <- df_clean
+
+df <- df %>% select(SQUID_SECTION, COUNTRY, SECTION_AREA.y, TILE_NAME, REGION_CODE.y, IFT, all_roads_1000, lf_250,nearest_urb_suburb, focal.dams.250, nli_edge_types_250, total_edge_pix_b250, damage)
+
+df <- df %>% rename(urban_proximity = nearest_urb_suburb)
+
+#Replace values in numerical columns with LOW, MED, HIGH
+
+#Linear features
+quantile(df$lf_250, probs = c(0.25, 0.5,0.75))
+hist(df$lf_250)
+# Replace numeric values with categorical labels
+df$lf_250 <- ifelse(df$lf_250<= 48, "LOW",
+            ifelse(df$lf_250> 48 & df$lf_250 <= 237, "MED",
+            ifelse(df$lf_250> 237, "HIGH", NA)))
+
+#Roads
+quantile(df$all_roads_1000, probs = c(0.25, 0.5, 0.75))
+hist(df$all_roads_1000)
+df$all_roads_1000 <- ifelse(df$all_roads_1000 == 0, "LOW",
+            ifelse(df$all_roads_1000 >0 & df$all_roads_1000 <= 2000, "MED",
+            ifelse(df$all_roads_1000> 2000, "HIGH", NA)))
+
+#nearest urban/suburban
+#Proximity, therefore "HIGH" means closer
+hist(df$urban_proximity)
+df$urban_proximity <- ifelse(df$urban_proximity <= 250, "HIGH",
+                          ifelse(df$urban_proximity >250 & df$urban_proximity <= 500, "MED",
+                           ifelse(df$urban_proximity >500,"LOW",NA)))  
+
+#MAX DAMS
+quantile(df$focal.dams.250, probs=c(0.25,0.5,0.75))
+hist(df$focal.dams.250)
+df$focal.dams.250 <- ifelse(df$focal.dams.250 <=10,"LOW",
+                      ifelse(df$focal.dams.250 >10 & df$focal.dams.250 <= 15, "MED",
+                        ifelse(df$focal.dams.250 >15, "HIGH",NA)))
+
+#nutritional landscape composition score
+quantile(df$nli_edge_types_250)
+hist(df$nli_edge_types_250)
+df$nli_edge_types_250 <- ifelse(df$nli_edge_types_250 <= 0, "LOW",
+                          ifelse(df$nli_edge_types_250 >0 & df$nli_edge_types_250 <=5, "MED",
+                           ifelse(df$nli_edge_types_250 > 5, "HIGH",NA)))
+
+#total landscape edges
+
+quantile(df$total_edge_pix_b250)
+hist(df$total_edge_pix_b250)
+df$total_edge_pix_b250 <- ifelse(df$total_edge_pix_b250 <= 500, "LOW",
+                            ifelse(df$total_edge_pix_b250 > 372 & df$total_edge_pix_b250 <= 750, "MED",
+                              ifelse(df$total_edge_pix_b250 > 750, "HIGH",NA)))
+
+#Export
+
+write.csv(df_clean, file = file.path(here("data/derived-data/nfi_2015_extracted_data_categorical.csv")))
+
+```
+
