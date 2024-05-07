@@ -24,9 +24,19 @@ library(sf)
 #| warning: false
 #| message: false
 
-#urban_prox_cpt<-matrix(c(0,0,0), ncol=3, dimnames = list(NULL, c("LOW", "MED","HIGH")))
-#road_density_cpt<-matrix(c(0,0,0), ncol=3, dimnames = list(NULL, c("LOW", "MED","HIGH")))
-#connectivity_cpt<-matrix(c(0,0,0),ncol = 3,dimnames = list(NULL, c("LOW", "MED","HIGH")))
+urban_prox_cpt<-matrix(c(0.333333,0.333333,0.333333), ncol=3, dimnames = list(NULL, c("LOW", "MED","HIGH")))
+
+road_density_cpt<-matrix(c(0.333333,0.333333,0.333333), ncol=3, dimnames = list(NULL, c("LOW", "MED","HIGH")))
+
+connectivity_cpt<-matrix(c(0.333333,0.333333,0.333333),ncol = 3,dimnames = list(NULL, c("LOW", "MED","HIGH")))
+
+landscape_nutritional_score_cpt<-matrix(c(0.333333,0.333333,0.333333),ncol = 3,dimnames = list(NULL, c("LOW", "MED","HIGH")))
+
+patch_type_cpt <- matrix(c(0.25,0.25,0.25,0.25), ncol=4, dimnames = list(NULL, c( "Broadleaved","Mixed_Predom_Broadleaf","Mixed_Predom_Conifer","Conifer")))
+
+dams_cpt <- landscape_nutritional_score_cpt<-matrix(c(0.333333,0.333333,0.333333),ncol = 3,dimnames = list(NULL, c("LOW", "MED","HIGH")))
+
+lf_density_cpt <-matrix(c(0.333333,0.333333,0.333333),ncol = 3,dimnames = list(NULL, c("LOW", "MED","HIGH")))
 
 #disturb_index_cpt<-c(rep(0,81))#3^4
 
@@ -89,12 +99,24 @@ disturb_index_cpt
 ```{r}
 
 #Woodland nutritional quality CPT ####
-#Patch type
-patch_quality_cpt<-matrix(c(0.25,0.25,0.25,0.25), ncol=4, dimnames = list(NULL, c( "BROADLEAVED","CONIFER", "MIXED_PREDOM_BROADLEAF","MIXED_PREDOM_CONIFER")))
 
-#patch_size_cpt<-matrix(c(0.3333333, 0.3333333,0.3333333), ncol=3, dimnames = list(NULL, c("LOW", "MED","HIGH")))
+patch_quality_cpt <- array(
+  0,  # Default probability for each cell
+  dim = c(3, 4),  # Shape of the array (3x3x3)
+  dimnames = list(
+    patch_quality = c("LOW", "MED", "HIGH"),
+    woodland_type = c("Broadleaved","Mixed_Predom_Broadleaf",
+                      "Mixed_Predom_Conifer","Conifer")
+  )
+)
 
-#total_edge_cpt<-matrix(c(0.3333333, 0.3333333,0.3333333), ncol=3, dimnames = list(NULL, c("LOW", "MED","HIGH")))
+patch_quality_cpt["HIGH","Broadleaved"] <- 1
+patch_quality_cpt["HIGH","Mixed_Predom_Broadleaf"] <- 1
+patch_quality_cpt["MED","Mixed_Predom_Conifer"] <- 1
+patch_quality_cpt["LOW","Conifer"] <- 1
+
+patch_quality_cpt
+
 
 ```
 
@@ -106,8 +128,8 @@ landscape_nutrition_cpt <- array(
   0,  # Default probability for each cell
   dim = c(3, 3, 3),  # Shape of the array (3x3)
   dimnames = list(
-    landscape_quality_index = c("LOW", "MED", "HIGH"),
-    nutritional_comp = c("LOW", "MED", "HIGH"),
+    landscape_nutrition = c("LOW", "MED", "HIGH"),
+    landscape_nutritional_score = c("LOW", "MED", "HIGH"),
     lf_density = c("LOW","MED","HIGH")
   )
 )
@@ -149,81 +171,129 @@ thermoreg_cpt
 ```{r}
 #Final CPT: deer damage risk
 
-deer_damage_cpt <- array(
+damage_risk_cpt <- array(
   0,  # Default probability for each cell
   dim = c(5, 3, 3, 3, 3),  # Shape of the array
   dimnames = list(
     damage_risk = c("LOW","LOW-MED","MED","MED-HIGH","HIGH"),
     patch_quality = c("LOW", "MED", "HIGH"),
-    landscape_quality = c("LOW", "MED", "HIGH"),
+    landscape_nutrition = c("LOW", "MED", "HIGH"),
     thermoreg_index = c("LOW", "MED", "HIGH"),
-    disturbance_index = c("LOW", "MED", "HIGH")
+    disturb_index = c("LOW", "MED", "HIGH")
     
   )
 )
-#order = damage_risk, patch_quality,landscape_quality,thermoreg_index,disturbance
-#table1 landscape_quality = LOW, thermoreg_index = LOW, disturbance_index = LOW
-deer_damage_cpt["LOW-MED","LOW","LOW","LOW","LOW"] <- 1
-deer_damage_cpt["LOW-MED","MED","LOW","LOW","LOW"] <- 1
-deer_damage_cpt["MED","HIGH","LOW","LOW","LOW"] <- 1
-#table2 landscape_quality = MED, thermoreg_index = LOW, disturbance_index = LOW
-deer_damage_cpt["LOW-MED","LOW","MED","LOW","LOW"] <- 1
-deer_damage_cpt["LOW-MED","MED","MED","LOW","LOW"] <- 1
-deer_damage_cpt["MED","HIGH","MED","LOW","LOW"] <- 1
-#table3 landscape_quality = HIGH, thermoreg_index = LOW, disturbance_index = LOW
-deer_damage_cpt["LOW-MED","LOW","HIGH","LOW","LOW"] <- 1
-deer_damage_cpt["MED","MED","HIGH","LOW","LOW"] <- 1
-deer_damage_cpt["MED","HIGH","HIGH","LOW","LOW"] <- 1
-#table4 landscape_quality = LOW, thermoreg_index = MED, disturbance_index = LOW
-deer_damage_cpt["MED","LOW","LOW","MED","LOW"] <- 1
-deer_damage_cpt["MED","MED","LOW","MED","LOW"] <- 1
-deer_damage_cpt["MED-HIGH","HIGH","LOW","MED","LOW"] <- 1
-#table5 landscape_quality = MED, thermoreg_index = MED, disturbance_index = LOW
-deer_damage_cpt["MED","LOW","MED","MED","LOW"] <- 1
-deer_damage_cpt["MED","MED","MED","MED","LOW"] <- 1
-deer_damage_cpt["MED-HIGH","HIGH","MED","MED","LOW"] <- 1
-#table6 landscape_quality = HIGH, thermoreg_index = MED, disturbance_index = LOW
-deer_damage_cpt["MED","LOW","HIGH","MED","LOW"] <- 1
-deer_damage_cpt["MED-HIGH","MED","HIGH","MED","LOW"] <- 1
-deer_damage_cpt["MED-HIGH","HIGH","HIGH","MED","LOW"] <- 1
-#table7  landscape_quality = LOW, thermoreg_index = HIGH, disturbance_index = LOW
-deer_damage_cpt["MED-HIGH","LOW","LOW","HIGH","LOW"] <- 1
-deer_damage_cpt["MED-HIGH","MED","LOW","HIGH","LOW"] <- 1
-deer_damage_cpt["HIGH","HIGH","LOW","HIGH","LOW"] <- 1
-#table8 landscape_quality = MED, thermoreg_index = HIGH, disturbance_index = LOW
-deer_damage_cpt["MED-HIGH","LOW","MED","HIGH","LOW"] <- 1
-deer_damage_cpt["MED-HIGH","MED","MED","HIGH","LOW"] <- 1
-deer_damage_cpt["HIGH","HIGH","MED","HIGH","LOW"] <- 1
-#table9 landscape_quality = HIGH, thermoreg_index = HIGH, disturbance_index = LOW
-deer_damage_cpt["MED-HIGH","LOW","HIGH","HIGH","LOW"] <- 1
-deer_damage_cpt["HIGH","MED","HIGH","HIGH","LOW"] <- 1
-deer_damage_cpt["HIGH","HIGH","HIGH","HIGH","LOW"] <- 1
-#table10 landscape_quality = LOW, thermoreg_index = LOW, disturbance_index = MED
-deer_damage_cpt["LOW","LOW","LOW","LOW","MED"] <- 1
-deer_damage_cpt["LOW","MED","LOW","LOW","MED"] <- 1
-deer_damage_cpt["LOW-MED","HIGH","LOW","LOW","MED"] <- 1
-#table11 landscape_quality = MED, thermoreg_index = LOW, disturbance_index = MED
-deer_damage_cpt["LOW-MED","LOW","MED","LOW","MED"] <- 1
-deer_damage_cpt["LOW-MED","MED","MED","LOW","MED"] <- 1
-deer_damage_cpt["MED","HIGH","MED","LOW","MED"] <- 1
-#table12 landscape_quality = HIGH, thermoreg_index = LOW, disturbance_index = MED
-deer_damage_cpt["LOW-MED","LOW","HIGH","LOW","MED"] <- 1
-deer_damage_cpt["MED","MED","HIGH","LOW","MED"] <- 1
-deer_damage_cpt["MED","HIGH","HIGH","LOW","MED"] <- 1
-#table13 landscape_quality = LOW, thermoreg_index = MED, disturbance_index = MED
-deer_damage_cpt["LOW-MED","LOW","LOW","MED","MED"] <- 1
-deer_damage_cpt["LOW-MED","MED","LOW","MED","MED"] <- 1
-deer_damage_cpt["MED","HIGH","LOW","MED","MED"] <- 1
-#table14 landscape_quality = MED, thermoreg_index = MED, disturbance_index = MED
-deer_damage_cpt["MED","LOW","MED","MED","MED"] <- 1
-deer_damage_cpt["MED","MED","MED","MED","MED"] <- 1
-deer_damage_cpt["MED-HIGH","HIGH","MED","MED","MED"] <- 1
-#table15  landscape_quality = HIGH, thermoreg_index = MED, disturbance_index = MED
-deer_damage_cpt["MED","LOW","HIGH","MED","MED"] <- 1
-deer_damage_cpt["MED-HIGH","MED","HIGH","MED","MED"] <- 1
-deer_damage_cpt["MED-HIGH","HIGH","HIGH","MED","MED"] <- 1
-#table16
-deer_damage_cpt
+#order = damage_risk, patch_quality,landscape_nutrition,thermoreg_index,disturbance
+#table1 landscape_nutrition = LOW, thermoreg_index = LOW, disturbance_index = LOW
+damage_risk_cpt["LOW-MED","LOW","LOW","LOW","LOW"] <- 1
+damage_risk_cpt["LOW-MED","MED","LOW","LOW","LOW"] <- 1
+damage_risk_cpt["MED","HIGH","LOW","LOW","LOW"] <- 1
+#table2 landscape_nutrition = MED, thermoreg_index = LOW, disturbance_index = LOW
+damage_risk_cpt["LOW-MED","LOW","MED","LOW","LOW"] <- 1
+damage_risk_cpt["LOW-MED","MED","MED","LOW","LOW"] <- 1
+damage_risk_cpt["MED","HIGH","MED","LOW","LOW"] <- 1
+#table3 landscape_nutrition = HIGH, thermoreg_index = LOW, disturbance_index = LOW
+damage_risk_cpt["LOW-MED","LOW","HIGH","LOW","LOW"] <- 1
+damage_risk_cpt["MED","MED","HIGH","LOW","LOW"] <- 1
+damage_risk_cpt["MED","HIGH","HIGH","LOW","LOW"] <- 1
+#table4 landscape_nutrition = LOW, thermoreg_index = MED, disturbance_index = LOW
+damage_risk_cpt["MED","LOW","LOW","MED","LOW"] <- 1
+damage_risk_cpt["MED","MED","LOW","MED","LOW"] <- 1
+damage_risk_cpt["MED-HIGH","HIGH","LOW","MED","LOW"] <- 1
+#table5 landscape_nutrition = MED, thermoreg_index = MED, disturbance_index = LOW
+damage_risk_cpt["MED","LOW","MED","MED","LOW"] <- 1
+damage_risk_cpt["MED","MED","MED","MED","LOW"] <- 1
+damage_risk_cpt["MED-HIGH","HIGH","MED","MED","LOW"] <- 1
+#table6 landscape_nutrition = HIGH, thermoreg_index = MED, disturbance_index = LOW
+damage_risk_cpt["MED","LOW","HIGH","MED","LOW"] <- 1
+damage_risk_cpt["MED-HIGH","MED","HIGH","MED","LOW"] <- 1
+damage_risk_cpt["MED-HIGH","HIGH","HIGH","MED","LOW"] <- 1
+#table7  landscape_nutrition = LOW, thermoreg_index = HIGH, disturbance_index = LOW
+damage_risk_cpt["MED-HIGH","LOW","LOW","HIGH","LOW"] <- 1
+damage_risk_cpt["MED-HIGH","MED","LOW","HIGH","LOW"] <- 1
+damage_risk_cpt["HIGH","HIGH","LOW","HIGH","LOW"] <- 1
+#table8 landscape_nutrition = MED, thermoreg_index = HIGH, disturbance_index = LOW
+damage_risk_cpt["MED-HIGH","LOW","MED","HIGH","LOW"] <- 1
+damage_risk_cpt["MED-HIGH","MED","MED","HIGH","LOW"] <- 1
+damage_risk_cpt["HIGH","HIGH","MED","HIGH","LOW"] <- 1
+#table9 landscape_nutrition = HIGH, thermoreg_index = HIGH, disturbance_index = LOW
+damage_risk_cpt["MED-HIGH","LOW","HIGH","HIGH","LOW"] <- 1
+damage_risk_cpt["HIGH","MED","HIGH","HIGH","LOW"] <- 1
+damage_risk_cpt["HIGH","HIGH","HIGH","HIGH","LOW"] <- 1
+#table10 landscape_nutrition = LOW, thermoreg_index = LOW, disturbance_index = MED
+damage_risk_cpt["LOW","LOW","LOW","LOW","MED"] <- 1
+damage_risk_cpt["LOW","MED","LOW","LOW","MED"] <- 1
+damage_risk_cpt["LOW-MED","HIGH","LOW","LOW","MED"] <- 1
+#table11 landscape_nutrition = MED, thermoreg_index = LOW, disturbance_index = MED
+damage_risk_cpt["LOW-MED","LOW","MED","LOW","MED"] <- 1
+damage_risk_cpt["LOW-MED","MED","MED","LOW","MED"] <- 1
+damage_risk_cpt["MED","HIGH","MED","LOW","MED"] <- 1
+#table12 landscape_nutrition = HIGH, thermoreg_index = LOW, disturbance_index = MED
+damage_risk_cpt["LOW-MED","LOW","HIGH","LOW","MED"] <- 1
+damage_risk_cpt["MED","MED","HIGH","LOW","MED"] <- 1
+damage_risk_cpt["MED","HIGH","HIGH","LOW","MED"] <- 1
+#table13 landscape_nutrition = LOW, thermoreg_index = MED, disturbance_index = MED
+damage_risk_cpt["LOW-MED","LOW","LOW","MED","MED"] <- 1
+damage_risk_cpt["LOW-MED","MED","LOW","MED","MED"] <- 1
+damage_risk_cpt["MED","HIGH","LOW","MED","MED"] <- 1
+#table14 landscape_nutrition = MED, thermoreg_index = MED, disturbance_index = MED
+damage_risk_cpt["MED","LOW","MED","MED","MED"] <- 1
+damage_risk_cpt["MED","MED","MED","MED","MED"] <- 1
+damage_risk_cpt["MED-HIGH","HIGH","MED","MED","MED"] <- 1
+#table15  landscape_nutrition = HIGH, thermoreg_index = MED, disturbance_index = MED
+damage_risk_cpt["MED","LOW","HIGH","MED","MED"] <- 1
+damage_risk_cpt["MED-HIGH","MED","HIGH","MED","MED"] <- 1
+damage_risk_cpt["MED-HIGH","HIGH","HIGH","MED","MED"] <- 1
+#table16 landscape_nutrition = LOW, thermoreg_index = HIGH, disturbance_index = MED
+damage_risk_cpt["MED","LOW","LOW","HIGH","MED"] <- 1
+damage_risk_cpt["MED","MED","LOW","HIGH","MED"] <- 1
+damage_risk_cpt["MED","HIGH","LOW","HIGH","MED"] <- 1
+#table17 landscape_nutrition = MED, thermoreg_index = HIGH, disturbance_index = MED
+damage_risk_cpt["MED-HIGH","LOW","MED","HIGH","MED"] <- 1
+damage_risk_cpt["MED-HIGH","MED","MED","HIGH","MED"] <- 1
+damage_risk_cpt["HIGH","HIGH","MED","HIGH","MED"] <- 1
+#table18 landscape_nutrition = HIGH, thermoreg_index = HIGH, disturbance_index = MED
+damage_risk_cpt["MED-HIGH","LOW","HIGH","HIGH","MED"] <- 1
+damage_risk_cpt["HIGH","MED","HIGH","HIGH","MED"] <- 1
+damage_risk_cpt["HIGH","HIGH","HIGH","HIGH","MED"] <- 1
+#table19 landscape_nutrition = LOW, thermoreg_index = LOW, disturbance_index = HIGH
+damage_risk_cpt["LOW","LOW","LOW","LOW","HIGH"] <- 1
+damage_risk_cpt["LOW","MED","LOW","LOW","HIGH"] <- 1
+damage_risk_cpt["LOW","HIGH","LOW","LOW","HIGH"] <- 1
+#table20 landscape_nutrition = MED, thermoreg_index = LOW, disturbance_index = HIGH
+damage_risk_cpt["LOW","LOW","MED","LOW","HIGH"] <- 1
+damage_risk_cpt["LOW","MED","MED","LOW","HIGH"] <- 1
+damage_risk_cpt["LOW-MED","HIGH","MED","LOW","HIGH"] <- 1
+#table21 landscape_nutrition = HIGH, thermoreg_index = LOW, disturbance_index = HIGH
+damage_risk_cpt["LOW","LOW","HIGH","LOW","HIGH"] <- 1
+damage_risk_cpt["LOW-MED","MED","HIGH","LOW","HIGH"] <- 1
+damage_risk_cpt["LOW-MED","HIGH","HIGH","LOW","HIGH"] <- 1
+#table22 landscape_nutrition = LOW, thermoreg_index = MED, disturbance_index = HIGH
+damage_risk_cpt["LOW","LOW","LOW","MED","HIGH"] <- 1
+damage_risk_cpt["LOW","MED","LOW","MED","HIGH"] <- 1
+damage_risk_cpt["LOW","HIGH","LOW","MED","HIGH"] <- 1
+#table23 landscape_nutrition = MED, thermoreg_index = MED, disturbance_index = HIGH
+damage_risk_cpt["LOW","LOW","MED","MED","HIGH"] <- 1
+damage_risk_cpt["LOW","MED","MED","MED","HIGH"] <- 1
+damage_risk_cpt["LOW-MED","HIGH","MED","MED","HIGH"] <- 1
+#table24 landscape_nutrition = HIGH, thermoreg_index = MED, disturbance_index = HIGH
+damage_risk_cpt["LOW","LOW","HIGH","MED","HIGH"] <- 1
+damage_risk_cpt["LOW-MED","MED","HIGH","MED","HIGH"] <- 1
+damage_risk_cpt["LOW-MED","HIGH","HIGH","MED","HIGH"] <- 1
+#table25  landscape_nutrition = LOW, thermoreg_index = HIGH, disturbance_index = HIGH
+damage_risk_cpt["LOW-MED","LOW","LOW","HIGH","HIGH"] <- 1
+damage_risk_cpt["LOW-MED","MED","LOW","HIGH","HIGH"] <- 1
+damage_risk_cpt["LOW-MED","HIGH","LOW","HIGH","HIGH"] <- 1
+#table26 landscape_nutrition = MED, thermoreg_index = HIGH, disturbance_index = HIGH
+damage_risk_cpt["LOW-MED","LOW","MED","HIGH","HIGH"] <- 1
+damage_risk_cpt["LOW-MED","MED","MED","HIGH","HIGH"] <- 1
+damage_risk_cpt["MED","HIGH","MED","HIGH","HIGH"] <- 1
+#table27 landscape_nutrition = HIGH, thermoreg_index = HIGH, disturbance_index = HIGH
+damage_risk_cpt["LOW-MED","LOW","HIGH","HIGH","HIGH"] <- 1
+damage_risk_cpt["MED","MED","HIGH","HIGH","HIGH"] <- 1
+damage_risk_cpt["MED","HIGH","HIGH","HIGH","HIGH"] <- 1
+
+damage_risk_cpt
 ```
 
 ### Create BN Structure
@@ -233,11 +303,59 @@ deer_damage_cpt
 #| warning: false
 #| message: false
 
-net<-model2network("[urban_prox][road_density][linear_feature][woodland][patch_size][total_edge][shelter][disturb_index|urban_prox:road_density][nutritional|woodland:patch_size:total_edge][deer_damage|disturb_index:linear_feature:shelter:nutritional]") # You dont need to repeat the names of the nodes with parents (child nodes) 
+# Step 1: Explicitly define the nodes in the network
+nodes <- c(
+  "disturb_index",
+  "urban_prox",
+  "road_density",
+  "connectivity",
+  "landscape_nutritional_score",
+  "landscape_nutrition",
+  "lf_density",
+  "woodland_type",
+  "thermoreg_index",
+  "DAMS_MAX",
+  "damage_risk",
+  "patch_quality"
+)
+
+#empty graph
+e = empty.graph(nodes)
+
+arc.set = matrix(c("urban_prox", "disturb_index",
+                     "road_density", "disturb_index", 
+                     "connectivity", "disturb_index",
+                     "lf_density","landscape_nutrition",
+                     "landscape_nutritional_score","landscape_nutrition",
+                     "woodland_type","patch_quality",
+                     "DAMS_MAX","thermoreg_index",
+                     "disturb_index","damage_risk",
+                     "landscape_nutrition","damage_risk",
+                     "patch_quality","damage_risk",
+                     "thermoreg_index","damage_risk"),
+             ncol = 2, byrow = TRUE,
+             dimnames = list(NULL, c("from", "to")))
+
+arcs(e) <- arc.set
+
+model_string <- modelstring(e) #"[disturb_index|urban_prox:road_density:connectivity][landscape_nutrition|lf_density:landscape_nutritional_score][patch_quality|woodland_type][thermoreg_index|DAMS_MAX][damage_risk|disturb_index:patch_quality:landscape_nutrition:thermoreg_index]"
+
+net<-model2network(model_string) 
+# You dont need to repeat the names of the nodes with parents (child nodes) 
 
 # Custom fitting network (matching up the nodes to their CPTs)
-dfit = custom.fit(net, dist = list(urban_prox = urban_prox_cpt, road_density = road_density_cpt,linear_feature = linear_feature_cpt, woodland=woodland_cpt,
-                                   patch_size=patch_size_cpt, total_edge=total_edge_cpt, shelter=shelter_cpt, disturb_index=disturb_index_cpt,nutritional= nutritional_index_cpt,deer_damage= deer_damage_cpt))
+dfit = custom.fit(net, dist = list(road_density=road_density_cpt, 
+                                   urban_prox=urban_prox_cpt,
+                                   connectivity=connectivity_cpt,
+                                   lf_density=lf_density_cpt,
+                                   DAMS_MAX=dams_cpt,
+                                   woodland_type=patch_type_cpt,
+                                   landscape_nutritional_score=landscape_nutritional_score_cpt, 
+                                   disturb_index=disturb_index_cpt, 
+                                   patch_quality=patch_quality_cpt,
+                                   landscape_nutrition=landscape_nutrition_cpt,
+                                   thermoreg_index=thermoreg_cpt,
+                                   damage_risk=damage_risk_cpt))
 
 
 ```
@@ -271,7 +389,7 @@ dfit
 #| echo: true
 #| warning: false
 #| message: false
-cpquery(dfit, c(total_edge == "LOW"|shelter == "LOW"|woodland=="BROADLEAVED"), (deer_damage=="HIGH"))
+cpquery(dfit, c(patch_quality == "LOW"|DAMS_MAX == "HIGH"|woodland_type=="BROADLEAVED"), (damage_risk=="LOW"))
 
 ```
 
@@ -284,25 +402,58 @@ cpquery(dfit, c(total_edge == "LOW"|shelter == "LOW"|woodland=="BROADLEAVED"), (
 
 # need to do some cleaning of dummy data
 dummy_BBN_spatial_data <- readRDS("C:/Users/ik929086/Documents/iDeer_Local/BBN_structure/inputs/dummy_BBN_spatial_data.RDS")
+
+bbn_dat <- read.csv(here("data/derived-data/nfi_2015_extracted_data_categorical.csv"))
+bbn_dat <- bbn_dat %>% slice(1:285,)
+bbn_dat <- cbind(bbn_dat,dummy_BBN_spatial_data$geometry)
+bbn_dat <- st_as_sf(bbn_dat)
+bbn_dat <- bbn_dat%>%select(-c(total_edge_pix_b250))
+
+dummy_BBN_spatial_data <- bbn_dat
+
 #convert to upper
-dummy_BBN_spatial_data<-dummy_BBN_spatial_data |> 
+dummy_BBN_spatial_data<-dummy_BBN_spatial_data %>% 
  mutate(across(where(is.character), toupper))
 
-dummy_BBN_spatial_data<-dummy_BBN_spatial_data |> 
-  mutate(across(patch_size:damage, ~gsub("MEDIUM","MED",.)))
-test_data<-dummy_BBN_spatial_data |> st_drop_geometry() |>
-  dplyr::select(patch_size:woodland)
+dummy_BBN_spatial_data <- dummy_BBN_spatial_data %>% 
+  mutate(IFT = gsub(
+    pattern = "CONIFER", replacement = "Conifer", x = IFT)) %>% 
+  mutate(IFT = gsub(
+    pattern = "BROADLEAVED", replacement = "Broadleaved", x = IFT)) %>% 
+   mutate(IFT = gsub(
+    pattern = "BROADLEAF", replacement = "Broadleaf", x = IFT)) %>%
+mutate(IFT = gsub(
+    pattern = "MIXED_PREDOM_", replacement = "Mixed_Predom_", x = IFT)) 
 
-test_data<-test_data |> 
+test_data<-dummy_BBN_spatial_data %>% st_drop_geometry() %>%
+  dplyr::select(IFT:incoming_connect)
+
+test_data<-test_data %>% 
   mutate_if(is.character, as.factor)
 
-levels(test_data$patch_size)<-c("LOW", "MED", "HIGH")
+#Ensure variable names match those in BBN
+test_data<-test_data%>%rename(woodland_type=IFT,
+                              road_density=all_roads_1000,
+                              lf_density=lf_250,
+                              urban_prox=urban_proximity,
+                              landscape_nutritional_score=nli_edge_types_250,
+                              DAMS_MAX=focal.dams.250,
+                              connectivity=incoming_connect,
+                              damage_risk=damage)
+
+levels(test_data$woodland_type) <- c("Broadleaved", "Mixed_Predom_Broadleaf", "Mixed_Predom_Conifer", "Conifer")
 levels(test_data$road_density)<-c("LOW", "MED", "HIGH")
-levels(test_data$nutritional)<-c("LOW", "MED", "HIGH")
+levels(test_data$landscape_nutritional_score)<-c("LOW", "MED", "HIGH")
 levels(test_data$urban_prox)<-c("LOW", "MED", "HIGH")
-levels(test_data$total_edge)<-c("LOW", "MED", "HIGH")
-levels(test_data$linear_feature)<-c("LOW", "MED", "HIGH")
-levels(test_data$shelter)<-c("LOW", "MED", "HIGH")
+levels(test_data$road_density)<-c("LOW", "MED", "HIGH")
+levels(test_data$lf_density)<-c("LOW", "MED", "HIGH")
+levels(test_data$DAMS_MAX)<-c("LOW", "MED", "HIGH")
+
+# Replace "0" with "LOW" and "1" with "HIGH" using factor
+test_data <- test_data %>%
+  mutate(damage_risk = factor(damage_risk, levels = c(0, 1), labels = c("LOW", "HIGH")))
+
+
 
 
 ```
