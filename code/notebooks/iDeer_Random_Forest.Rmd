@@ -1,0 +1,381 @@
+
+#Try Random Forest modelling of 2015 raster extracted data from Chloe
+#May not need a BN!
+#RF should allow us to whittle down which spatial scale to use for each variable
+
+```{r, echo=FALSE, results="hide"}
+library(here)
+library(dplyr)
+library(ggplot2)
+library(qgraph)
+library(ROCR)
+library(bnlearn)
+library(BiocManager)
+library(ranger)
+library(h2o)
+library(randomForest)
+library(progress)
+library(sf)
+#BiocManager::install("Rgraphviz", force = TRUE)
+library(Rgraphviz)
+project_dir <- here()
+input_dir <- here("Random_Forest","inputs")
+output_dir <- here("Random_Forest","outputs")
+```
+
+
+```{r}
+#Read in tidied extracted raster data ####
+
+df <- read.csv(file = paste0(output_dir,"/nfi_2015_extracted_data_tidied.csv"))
+df
+
+#Filter for high deer density (>100 per km squared)
+
+hist(df$MAXDEER)
+
+df <- df %>% filter(MAXDEER > 100)
+
+
+#Plot deer density data
+
+uk10<- st_read(dsn = "C:/Users/ik929086/OneDrive - University of Reading/Documents/Spatial datasets/BNG/OS-British-National-Grids-main/os_bng_grids/os_bng_grids.gpkg", layer = "10km_grid")
+
+#cbind tile geometry to deer density
+
+uk10 <- uk10 %>% rename(TILE_NAME = tile_name)
+
+df <- merge(uk10, df, by = "TILE_NAME")
+
+
+
+df%>%mutate(SQUID=sub("_.*", "", SQUID_SECTION)) -> df
+#some squares have multiple section(non-independent)
+#x=table(df$SQUID)
+#hist(x)
+#length(unique(df$SQUID))
+
+#Select the largest SQUID section from each 10K square
+df <- df%>%group_by(SQUID)%>%filter(SECTION_AREA.y == max(SECTION_AREA.y))%>%ungroup()
+
+df <- as.data.frame(df)
+
+```
+
+
+```{r}
+#Prepare data for Random Forest ####
+
+#Data need to be in long format, with columns containing the variable name, buffer size and thematic resolution
+
+#Make separate dataframes for each variable
+
+#Focal DAMS ####
+
+long_dams <- df %>% select(SQUID_SECTION, REGION_CODE.y, focal.dams.250, focal.dams.500, focal.dams.1000) %>%
+tidyr::pivot_longer(cols = -c(SQUID_SECTION, REGION_CODE.y), 
+                     names_to = "buffer_size", 
+                     names_prefix = "focal.dams.", 
+                     values_to = "focal.dams") 
+
+#Roads ####
+
+long_roads  <- df %>% select(SQUID_SECTION, REGION_CODE.y, motorway_250, motorway_500, motorway_1000, Ard_250, Ard_500,Ard_1000, Brd_250, Brd_500, Brd_1000, all_roads_250, all_roads_500, all_roads_1000, AB_roads_250, AB_roads_500, AB_roads_1000) %>%
+tidyr::pivot_longer(cols = -c(SQUID_SECTION, REGION_CODE.y),
+            names_to = c("them_res", "buffer_size"), 
+            names_pattern = "(.*)_(\\d+)",  # Pattern to extract variable and buffer_size
+            values_to = "roads")
+
+#Linear features ####
+
+long_lf  <- df %>% select(SQUID_SECTION, REGION_CODE.y, lf_250, lf_500, lf_1000) %>%
+tidyr::pivot_longer( 
+                        cols = -c(SQUID_SECTION,REGION_CODE.y),
+                         names_to = c("them_res", "buffer_size"), 
+                         names_pattern = "(.*)_([0-9]+)",  # Pattern to extract variable and buffer_size
+                         values_to = "lf")
+
+#Nutritional Landscape Index ####
+
+long_nli  <- df %>% select(SQUID_SECTION, REGION_CODE.y, starts_with("nli")) %>%
+tidyr::pivot_longer( 
+                        cols = -c(SQUID_SECTION,REGION_CODE.y),
+                         names_to = c("them_res", "buffer_size"), 
+                         names_pattern = "^(.*)_([0-9]+)$",  # Pattern to extract variable and buffer_size
+                         values_to = "NLI")
+
+#Total woodland edge length ####
+
+long_edges <- df %>% select(SQUID_SECTION, REGION_CODE.y, total_edge_pix_b250, total_edge_pix_b500, total_edge_pix_b1000) %>%
+  tidyr::pivot_longer( 
+                        cols = -c(SQUID_SECTION,REGION_CODE.y),
+                         names_to = c("them_res", "buffer_size"), 
+                         names_sep = "_b",  # Pattern to extract variable and buffer_size
+                         values_to = "edges")
+
+#Urban and suburban
+#Them_res = min distance to urb or suburb, OR distance to nearest urban
+
+long_urban <- df %>% select(SQUID_SECTION, REGION_CODE.y, nearest_suburban, nearest_urban) %>%
+  mutate(nearest_any_urb = pmin(nearest_urban, nearest_suburban)) %>%
+  select(-nearest_suburban) %>%
+  tidyr::pivot_longer(cols = -c(SQUID_SECTION,REGION_CODE.y),
+  names_to = c("them_res"),
+  values_to = "urban")
+
+long_deer <- df %>% select(SQUID_SECTION, REGION_CODE.y, weighted_density, MAXDEER) %>%
+  tidyr::pivot_longer(cols = -c(SQUID_SECTION,REGION_CODE.y),
+  names_to = c("them_res"),
+  values_to = "deer")
+
+
+#Spatially constant factors (IFT, damage) ####
+
+core.dat <- df %>% select(SQUID_SECTION, REGION_CODE.y, IFT, damage)
+
+```
+
+```{r}
+#Expand.grid for all buffer sizes and thematic res for each variable
+
+#FULL GRID:
+
+focal.dams.buff <- c(250,500,1000)
+roads.buff <- c(250,500,1000)
+lf.buff <- c(250,500,1000)
+NLI.buff <- c(250,500,1000)
+edge.buff <- c(250,500,1000)
+roads.them.res <- c("motorway","Ard","Brd","AB_roads","all_roads")
+NLI.them.res <- c("nli_edge_types","nli_edges10")
+urban.them.res <- c("nearest_urban","nearest_any_urb")
+#deer.them.res <- c("MAXDEER","weighted_density")
+
+columns <- c("focal.dams.buff","roads.buff","lf.buff","NLI.buff","edge.buff","roads.them.res","NLI.them.res","urban.them.res")#,"deer.them.res")
+combinations <- expand.grid(focal.dams.buff, roads.buff, lf.buff, NLI.buff, edge.buff,roads.them.res, NLI.them.res, urban.them.res)#, deer.them.res)
+colnames(combinations) <- columns
+
+#Add row_id col to expand.grid table
+
+combinations <- combinations %>% mutate(row_id =1:nrow(combinations)) %>%
+  select(row_id, everything()) #move row_id to column 1 position
+
+#add some performance metric so we can evaluate performance
+
+combinations <- combinations%>% mutate(performance1 =NA, performance2=NA, performance3=NA) 
+
+```
+
+```{r}
+##Expand.grid for all buffer sizes and thematic res for each variable
+
+#PARTIAL GRID FOR TESTING:
+
+#Use 250 and 1000m radius only
+#Urban OR suburban
+#All roads combined
+
+focal.dams.buff <- c(250,500,1000)
+roads.buff <- c(250,500,1000)
+lf.buff <- c(250,500,1000)
+NLI.buff <- c(250,500,1000)
+edge.buff <- c(250,500,1000)
+roads.them.res <- c("all_roads", "AB_roads")
+NLI.them.res <- c("nli_edge_types","nli_edges10")
+urban.them.res <- c("nearest_any_urb")
+#deer.them.res <- c("MAXDEER","weighted_density")
+
+columns <- c("focal.dams.buff","roads.buff","lf.buff","NLI.buff","edge.buff","roads.them.res","NLI.them.res","urban.them.res")#,"deer.them.res")
+combinations <- expand.grid(focal.dams.buff, roads.buff, lf.buff, NLI.buff, edge.buff,roads.them.res, NLI.them.res, urban.them.res)#, deer.them.res)
+colnames(combinations) <- columns
+
+#Add row_id col to expand.grid table
+
+combinations <- combinations %>% mutate(row_id =1:nrow(combinations)) %>%
+  select(row_id, everything()) #move row_id to column 1 position
+
+#add some performance metric so we can evaluate performance
+
+combinations <- combinations%>% mutate(performance1 =NA, performance2=NA, performance3=NA) 
+
+```
+
+
+```{r}
+
+# make a grid of all the possible combos of hyper paramters we could set when tuning RFs. We will pick the optimum combo of hyperparams for each RF
+features <- c("IFT", "edges", "NLI", "lf", "roads", "focal.dams","urban")#,"deer")
+n_features <- length(features) #7
+
+
+hyper_grid <- expand.grid(
+  mtry = seq(1:(n_features)),
+  num.trees.multiply = c(10,15,20),
+  min.node.size = c(1, 3, 5, 10), 
+  replace = c(TRUE, FALSE),                     
+  sample.fraction = c(.5, .63, .8),                       
+  rmse = NA                                               
+)
+
+hyper_grid
+
+```
+```{r}
+combinations <- combinations%>%slice(506:n())
+```
+
+
+```{r}
+#Loop ####
+
+# Initialize a progress bar
+pb1 <- progress_bar$new(total = nrow(hyper_grid))
+
+for (i in 1:nrow(combinations)){
+  
+  combinations_combo <- combinations[i,]
+  
+  #subset lf
+  lf_sub <- long_lf%>%filter(buffer_size == combinations_combo$lf.buff) %>% 
+    select(SQUID_SECTION, REGION_CODE.y, lf)
+  #subset roads
+  road_sub <- long_roads%>%filter(buffer_size== combinations_combo$roads.buff & them_res == combinations_combo$roads.them.res) %>%
+    select(SQUID_SECTION, REGION_CODE.y, roads)
+  #subset nli
+  nli_sub <- long_nli%>%filter(buffer_size == combinations_combo$NLI.buff & them_res == combinations_combo$NLI.them.res) %>% select(SQUID_SECTION, REGION_CODE.y, NLI) 
+  #subset edges
+  edges_sub <- long_edges%>%filter(buffer_size ==combinations_combo$edge.buff) %>%
+    select(SQUID_SECTION, REGION_CODE.y, edges)
+  #subset focal.dams
+  dams_sub <- long_dams%>%filter(buffer_size == combinations_combo$focal.dams.buff)%>%
+    select(SQUID_SECTION, REGION_CODE.y, focal.dams)
+  #subset urban
+  urban_sub <- long_urban%>%filter(them_res == combinations_combo$urban.them.res) %>%
+    select(SQUID_SECTION, REGION_CODE.y, urban)
+  #subset deer density
+  #deer_sub <- long_deer%>%filter(them_res == combinations_combo$deer.them.res)%>%
+  #select(SQUID_SECTION, REGION_CODE.y, deer)
+  
+  data_sub <- merge(core.dat, lf_sub, by=c("SQUID_SECTION", "REGION_CODE.y"))
+  data_sub <- merge(data_sub, road_sub, by=c("SQUID_SECTION", "REGION_CODE.y"))
+  data_sub <- merge(data_sub, nli_sub, by=c("SQUID_SECTION", "REGION_CODE.y"))
+  data_sub <- merge(data_sub, edges_sub, by  = c("SQUID_SECTION", "REGION_CODE.y"))
+  data_sub <- merge(data_sub, dams_sub, by=c("SQUID_SECTION", "REGION_CODE.y"))
+  data_sub <- merge(data_sub, urban_sub, by = c("SQUID_SECTION", "REGION_CODE.y"))
+  #data_sub <- merge(data_sub, deer_sub, by = c("SQUID_SECTION", "REGION_CODE.y"))
+
+  #Make training dataset
+  #We are not spatially segregating the test and train data, as REGION and deer density are related
+  #Instead, randomly subset 80% of the whole dataset
+  set.seed(123)
+  data_sub_train <- data_sub %>%
+    sample_frac(0.8, replace = FALSE)
+  
+  # Create training and testing subsets
+  #Randomly sample 80% of subsetted data
+  training.dat  <- data_sub_train %>%
+  sample_frac(0.8, replace = FALSE)
+  
+  #Remaining 20% is test.in data (in-bag testing)
+  test.in <- data_sub_train %>%
+  anti_join(training.dat, by = "SQUID_SECTION")
+  
+# for each subsetted dataset, we will need to fit a RF with the optimum hyperparameter set:
+
+# Execute full cartesian grid search
+for(j in seq_len(nrow(hyper_grid))) {
+  # fit model for jth hyperparameter combination  
+    fit <- ranger::ranger(
+    formula         = damage ~., 
+    data            = training.dat%>%select(!c(SQUID_SECTION, REGION_CODE.y)), 
+    num.trees       = n_features * hyper_grid$num.trees.multiply[j], #This massively affects processing time
+    mtry            = hyper_grid$mtry[j],
+    min.node.size   = hyper_grid$min.node.size[j],
+    replace         = hyper_grid$replace[j],
+    sample.fraction = hyper_grid$sample.fraction[j],
+    verbose         = FALSE,
+    seed            = 123,
+    respect.unordered.factors = 'order',
+  )  # export OOB error   
+    hyper_grid$rmse[j] <- sqrt(fit$prediction.error)
+}
+# pick best hp combo
+
+best_hp <- hyper_grid%>%arrange(rmse)%>%slice_min(rmse)
+best_hp
+
+#Best hp indicates training data should be partitioned 
+
+
+rf  <- randomForest::randomForest(damage ~ . ,
+                                   data = training.dat%>%select(-SQUID_SECTION),
+                                   mtry = best_hp$mtry,
+                                   nodesize = 5,
+                                   ntree= n_features * best_hp$num.trees.multiply, #This massively affects processing time
+                                   replace = best_hp$replace
+                                  )# anything i've missed??
+
+#View results
+rf
+
+#add performance 1 metric - which is the var exp %
+var.exp <- 100 * (1-sum((rf$y- rf$pred   )^2) /
+      sum((rf $y-mean(rf$y))^2))
+
+combinations[i,]$performance1 <- var.exp
+
+# add performance metric 2 based on a portion of the training dataset, sampled randomly:
+
+test.in $pred <- predict(rf, newdata=test.in , type="response")
+var.exp <- 100 * (1-sum((test.in $damage- test.in $pred   )^2) /
+      sum((test.in $damage-mean(test.in $damage))^2))
+
+combinations[i,]$performance2 <- var.exp
+
+
+#Make "out-of-bag" test dataset
+test.out <-   data_sub %>%
+  anti_join(training.dat, by = "SQUID_SECTION")
+# performance metric 3, which is using test.out data (out-of-bag)
+test.out$pred <- predict(rf, newdata=test.out , type="response")
+var.exp <- 100 * (1-sum((test.out $damage- test.out $pred   )^2) /
+      sum((test.out$damage-mean(test.out$damage))^2))
+
+combinations[i,]$performance3 <- var.exp
+
+  # Update the progress bar
+  pb1$tick()
+######
+
+}
+
+write.csv(combinations, file = paste0(output_dir,"/randomforest_performance_506_onwards.csv"))#save somewhere  
+
+
+```
+
+```{r}
+
+combinations_505 <- read.csv(file = paste0(output_dir,"/randomforest_performance_upto_505.csv"))
+#remove rows 506 onwards
+combinations_505 <- combinations_505 %>% slice(1:505)
+combinations_506 <- read.csv(file = paste0(output_dir,"/randomforest_performance_506_onwards.csv"))
+
+#merge
+combinations <- rbind(combinations_505, combinations_506)
+
+hist(combinations$performance1)
+hist(combinations$performance2)
+hist(combinations$performance3)
+
+combinations%>%ggplot()+
+  geom_point(aes(x=NLI.buff, y=performance1, col=focal.dams.buff, shape=NLI.them.res))+
+  facet_wrap(~roads.them.res)+
+  theme_bw()+
+  scale_colour_viridis_c()
+
+
+plot(combinations$performance1, combinations$performance2)
+lm1 <- lm(performance2 ~ performance1, data=combinations)
+abline(lm1)
+```
+
