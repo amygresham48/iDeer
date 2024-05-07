@@ -17,47 +17,213 @@ library(tidyverse, quietly = TRUE)
 library(sf)
 ```
 
-### Create Conditional Probability Tables (CPT)
+### Create Conditional Probability Tables (CPT
 
-```{r CPTs}
+```{r Disturbance_CPT}
 #| echo: true
 #| warning: false
 #| message: false
 
-urban_prox_cpt<-matrix(c(0.3333333, 0.3333333,0.3333333), ncol=3, dimnames = list(NULL, c("LOW", "MED","HIGH")))
-road_density_cpt<-matrix(c(0.3333333, 0.3333333,0.3333333), ncol=3, dimnames = list(NULL, c("LOW", "MED","HIGH")))
+#urban_prox_cpt<-matrix(c(0,0,0), ncol=3, dimnames = list(NULL, c("LOW", "MED","HIGH")))
+#road_density_cpt<-matrix(c(0,0,0), ncol=3, dimnames = list(NULL, c("LOW", "MED","HIGH")))
+#connectivity_cpt<-matrix(c(0,0,0),ncol = 3,dimnames = list(NULL, c("LOW", "MED","HIGH")))
 
-disturb_index_cpt<-c(rep(0.3333333,27))#3^3
+#disturb_index_cpt<-c(rep(0,81))#3^4
 
-dim(disturb_index_cpt) = c(3, 3, 3)
+#dim(disturb_index_cpt) = c(3, 3, 3, 3)
 
-dimnames(disturb_index_cpt) = list("disturb_index" = c("LOW", "MED", "HIGH"), "urban_prox" =  c("LOW","MED", "HIGH"),"road_density" = c("LOW", "MED", "HIGH"))
+#dimnames(disturb_index_cpt) = list("disturb_index" = c("LOW", "MED", "HIGH"), "urban_prox" =  c("LOW","MED", "HIGH"),"road_density" = c("LOW", "MED", "HIGH"),"connectivity"=c("LOW","MED","HIGH"))
 
-patch_size_cpt<-matrix(c(0.3333333, 0.3333333,0.3333333), ncol=3, dimnames = list(NULL, c("LOW", "MED","HIGH")))
+disturb_index_cpt <- array(
+  0,  # Default probability for each cell
+  dim = c(3, 3, 3, 3),  # Shape of the array (3x3x3)
+  dimnames = list(
+    disturb_index = c("LOW", "MED", "HIGH"),
+    road_density = c("LOW", "MED", "HIGH"),
+    urban_prox = c("LOW","MED","HIGH"),
+    connectivity = c("LOW", "MED", "HIGH")
+  )
+)
+#order = disturb_index, road_density, urban_prox,connectivity
+#table1: urban_prox = LOW, connectivity = LOW
+disturb_index_cpt["LOW","LOW","LOW","LOW"] <- 1
+disturb_index_cpt["MED","MED","LOW","LOW"] <- 1
+disturb_index_cpt["HIGH","HIGH","LOW","LOW"] <- 1
+#table2:  urban_prox = MED, connectivity = LOW
+disturb_index_cpt["MED","LOW","MED","LOW"] <- 1
+disturb_index_cpt["MED","MED","MED","LOW"] <- 1
+disturb_index_cpt["HIGH","HIGH","MED","LOW"] <- 1
+#table3: urban_prox = HIGH, connectivity = LOW
+disturb_index_cpt["HIGH","LOW","HIGH","LOW"] <- 1
+disturb_index_cpt["HIGH","MED","HIGH","LOW"] <- 1
+disturb_index_cpt["HIGH","HIGH","HIGH","LOW"] <- 1
+#table4: urban_prox = LOW, connectivity = MED
+disturb_index_cpt["LOW","LOW","LOW","MED"] <- 1
+disturb_index_cpt["MED","MED","LOW","MED"] <- 1
+disturb_index_cpt["MED","HIGH","LOW","MED"] <- 1
+#table5: urban_prox = MED, connectivity = MED
+disturb_index_cpt["LOW","LOW","MED","MED"] <- 1
+disturb_index_cpt["MED","MED","MED","MED"] <- 1
+disturb_index_cpt["HIGH","HIGH","MED","MED"] <- 1
+#table6: urban_prox = HIGH, connectivity = MED
+disturb_index_cpt["HIGH","LOW","HIGH","MED"] <- 1
+disturb_index_cpt["HIGH","MED","HIGH","MED"] <- 1
+disturb_index_cpt["HIGH","HIGH","HIGH","MED"] <- 1
+#table7: urban_prox = LOW, connectivity = HIGH
+disturb_index_cpt["LOW","LOW","LOW","HIGH"] <- 1
+disturb_index_cpt["LOW","MED","LOW","HIGH"] <- 1
+disturb_index_cpt["MED","HIGH","LOW","HIGH"] <- 1
+#table8: urban_prox = MED, connectivity = HIGH
+disturb_index_cpt["MED","LOW","MED","HIGH"] <- 1
+disturb_index_cpt["MED","MED","MED","HIGH"] <- 1
+disturb_index_cpt["HIGH","HIGH","MED","HIGH"] <- 1
+#table9: urban_prox = HIGH, connectivity = HIGH
+disturb_index_cpt["MED","LOW","HIGH","HIGH"] <- 1
+disturb_index_cpt["MED","MED","HIGH","HIGH"] <- 1
+disturb_index_cpt["HIGH","HIGH","HIGH","HIGH"] <- 1
 
-total_edge_cpt<-matrix(c(0.3333333, 0.3333333,0.3333333), ncol=3, dimnames = list(NULL, c("LOW", "MED","HIGH")))
+disturb_index_cpt
 
-woodland_cpt<-matrix(c(0.25,0.25,0.25,0.25), ncol=4, dimnames = list(NULL, c( "BROADLEAVED","CONIFER", "MIXED_PREDOM_BROADLEAF","MIXED_PREDOM_CONIFER")))
+```
+
+```{r}
+
+#Woodland nutritional quality CPT ####
+#Patch type
+patch_quality_cpt<-matrix(c(0.25,0.25,0.25,0.25), ncol=4, dimnames = list(NULL, c( "BROADLEAVED","CONIFER", "MIXED_PREDOM_BROADLEAF","MIXED_PREDOM_CONIFER")))
+
+#patch_size_cpt<-matrix(c(0.3333333, 0.3333333,0.3333333), ncol=3, dimnames = list(NULL, c("LOW", "MED","HIGH")))
+
+#total_edge_cpt<-matrix(c(0.3333333, 0.3333333,0.3333333), ncol=3, dimnames = list(NULL, c("LOW", "MED","HIGH")))
+
+```
+
+```{r}
+#Landscape nutritional quality CPT ####
+#Linear feature density and nutritional landscape composition score
+
+landscape_nutrition_cpt <- array(
+  0,  # Default probability for each cell
+  dim = c(3, 3, 3),  # Shape of the array (3x3)
+  dimnames = list(
+    landscape_quality_index = c("LOW", "MED", "HIGH"),
+    nutritional_comp = c("LOW", "MED", "HIGH"),
+    lf_density = c("LOW","MED","HIGH")
+  )
+)
+#order = landscape_quality_index, nutritional_comp, lf_density
+landscape_nutrition_cpt["LOW","LOW","LOW"] <- 1
+landscape_nutrition_cpt["MED","MED","LOW"] <- 1
+landscape_nutrition_cpt["HIGH","HIGH","LOW"] <- 1
+landscape_nutrition_cpt["LOW","LOW","MED"] <- 1
+landscape_nutrition_cpt["HIGH","MED","MED"] <- 1
+landscape_nutrition_cpt["HIGH","HIGH","MED"] <- 1
+landscape_nutrition_cpt["MED","LOW","HIGH"] <- 1
+landscape_nutrition_cpt["HIGH","MED","HIGH"] <- 1
+landscape_nutrition_cpt["HIGH","HIGH","HIGH"] <- 1
+
+landscape_nutrition_cpt
 
 
-nutritional_index_cpt<-c(rep(0.333333,108)) 
+```
 
-dim(nutritional_index_cpt) = c(3, 3, 3,4)
+```{r}
+#Thermoregulation Index CPT
 
-dimnames(nutritional_index_cpt) = list("nutritional" = c("LOW", "MED", "HIGH"), "patch_size" =  c("LOW","MED", "HIGH"),"total_edge" = c("LOW", "MED", "HIGH"),
-                                       "woodland" = c("BROADLEAVED","CONIFER", "MIXED_PREDOM_BROADLEAF","MIXED_PREDOM_CONIFER"))
+thermoreg_cpt <- array(
+  0,  # Default probability for each cell
+  dim = c(3, 3),  # Shape of the array
+  dimnames = list(
+    thermoreg_index = c("LOW", "MED", "HIGH"),
+    DAMS_MAX = c("LOW", "MED", "HIGH")
+  )
+)
+#order = DAMS_MAX, thermoreg_index
+thermoreg_cpt["LOW","LOW"] <- 1
+thermoreg_cpt["MED","MED"] <- 1
+thermoreg_cpt["HIGH","HIGH"] <- 1
 
+thermoreg_cpt
+```
 
-linear_feature_cpt<-matrix(c(0.3333333, 0.3333333,0.3333333), ncol=3, dimnames = list(NULL, c("LOW", "MED","HIGH")))
-shelter_cpt<-matrix(c(0.3333333, 0.3333333,0.3333333), ncol=3, dimnames = list(NULL, c("LOW", "MED","HIGH")))
+```{r}
+#Final CPT: deer damage risk
 
-
-deer_damage_cpt<-c(rep(0.333333,243))#3^5
-
-dim(deer_damage_cpt) = c(3, 3, 3,3,3)
-
-dimnames(deer_damage_cpt) = list("deer_damage" = c("LOW", "MED", "HIGH"), "disturb_index" =  c("LOW","MED", "HIGH"),"linear_feature" = c("LOW", "MED", "HIGH"), "nutritional"=c("LOW","MED","HIGH"), "shelter"=c("LOW","MED", "HIGH"))
-
+deer_damage_cpt <- array(
+  0,  # Default probability for each cell
+  dim = c(5, 3, 3, 3, 3),  # Shape of the array
+  dimnames = list(
+    damage_risk = c("LOW","LOW-MED","MED","MED-HIGH","HIGH"),
+    patch_quality = c("LOW", "MED", "HIGH"),
+    landscape_quality = c("LOW", "MED", "HIGH"),
+    thermoreg_index = c("LOW", "MED", "HIGH"),
+    disturbance_index = c("LOW", "MED", "HIGH")
+    
+  )
+)
+#order = damage_risk, patch_quality,landscape_quality,thermoreg_index,disturbance
+#table1 landscape_quality = LOW, thermoreg_index = LOW, disturbance_index = LOW
+deer_damage_cpt["LOW-MED","LOW","LOW","LOW","LOW"] <- 1
+deer_damage_cpt["LOW-MED","MED","LOW","LOW","LOW"] <- 1
+deer_damage_cpt["MED","HIGH","LOW","LOW","LOW"] <- 1
+#table2 landscape_quality = MED, thermoreg_index = LOW, disturbance_index = LOW
+deer_damage_cpt["LOW-MED","LOW","MED","LOW","LOW"] <- 1
+deer_damage_cpt["LOW-MED","MED","MED","LOW","LOW"] <- 1
+deer_damage_cpt["MED","HIGH","MED","LOW","LOW"] <- 1
+#table3 landscape_quality = HIGH, thermoreg_index = LOW, disturbance_index = LOW
+deer_damage_cpt["LOW-MED","LOW","HIGH","LOW","LOW"] <- 1
+deer_damage_cpt["MED","MED","HIGH","LOW","LOW"] <- 1
+deer_damage_cpt["MED","HIGH","HIGH","LOW","LOW"] <- 1
+#table4 landscape_quality = LOW, thermoreg_index = MED, disturbance_index = LOW
+deer_damage_cpt["MED","LOW","LOW","MED","LOW"] <- 1
+deer_damage_cpt["MED","MED","LOW","MED","LOW"] <- 1
+deer_damage_cpt["MED-HIGH","HIGH","LOW","MED","LOW"] <- 1
+#table5 landscape_quality = MED, thermoreg_index = MED, disturbance_index = LOW
+deer_damage_cpt["MED","LOW","MED","MED","LOW"] <- 1
+deer_damage_cpt["MED","MED","MED","MED","LOW"] <- 1
+deer_damage_cpt["MED-HIGH","HIGH","MED","MED","LOW"] <- 1
+#table6 landscape_quality = HIGH, thermoreg_index = MED, disturbance_index = LOW
+deer_damage_cpt["MED","LOW","HIGH","MED","LOW"] <- 1
+deer_damage_cpt["MED-HIGH","MED","HIGH","MED","LOW"] <- 1
+deer_damage_cpt["MED-HIGH","HIGH","HIGH","MED","LOW"] <- 1
+#table7  landscape_quality = LOW, thermoreg_index = HIGH, disturbance_index = LOW
+deer_damage_cpt["MED-HIGH","LOW","LOW","HIGH","LOW"] <- 1
+deer_damage_cpt["MED-HIGH","MED","LOW","HIGH","LOW"] <- 1
+deer_damage_cpt["HIGH","HIGH","LOW","HIGH","LOW"] <- 1
+#table8 landscape_quality = MED, thermoreg_index = HIGH, disturbance_index = LOW
+deer_damage_cpt["MED-HIGH","LOW","MED","HIGH","LOW"] <- 1
+deer_damage_cpt["MED-HIGH","MED","MED","HIGH","LOW"] <- 1
+deer_damage_cpt["HIGH","HIGH","MED","HIGH","LOW"] <- 1
+#table9 landscape_quality = HIGH, thermoreg_index = HIGH, disturbance_index = LOW
+deer_damage_cpt["MED-HIGH","LOW","HIGH","HIGH","LOW"] <- 1
+deer_damage_cpt["HIGH","MED","HIGH","HIGH","LOW"] <- 1
+deer_damage_cpt["HIGH","HIGH","HIGH","HIGH","LOW"] <- 1
+#table10 landscape_quality = LOW, thermoreg_index = LOW, disturbance_index = MED
+deer_damage_cpt["LOW","LOW","LOW","LOW","MED"] <- 1
+deer_damage_cpt["LOW","MED","LOW","LOW","MED"] <- 1
+deer_damage_cpt["LOW-MED","HIGH","LOW","LOW","MED"] <- 1
+#table11 landscape_quality = MED, thermoreg_index = LOW, disturbance_index = MED
+deer_damage_cpt["LOW-MED","LOW","MED","LOW","MED"] <- 1
+deer_damage_cpt["LOW-MED","MED","MED","LOW","MED"] <- 1
+deer_damage_cpt["MED","HIGH","MED","LOW","MED"] <- 1
+#table12 landscape_quality = HIGH, thermoreg_index = LOW, disturbance_index = MED
+deer_damage_cpt["LOW-MED","LOW","HIGH","LOW","MED"] <- 1
+deer_damage_cpt["MED","MED","HIGH","LOW","MED"] <- 1
+deer_damage_cpt["MED","HIGH","HIGH","LOW","MED"] <- 1
+#table13 landscape_quality = LOW, thermoreg_index = MED, disturbance_index = MED
+deer_damage_cpt["LOW-MED","LOW","LOW","MED","MED"] <- 1
+deer_damage_cpt["LOW-MED","MED","LOW","MED","MED"] <- 1
+deer_damage_cpt["MED","HIGH","LOW","MED","MED"] <- 1
+#table14 landscape_quality = MED, thermoreg_index = MED, disturbance_index = MED
+deer_damage_cpt["MED","LOW","MED","MED","MED"] <- 1
+deer_damage_cpt["MED","MED","MED","MED","MED"] <- 1
+deer_damage_cpt["MED-HIGH","HIGH","MED","MED","MED"] <- 1
+#table15  landscape_quality = HIGH, thermoreg_index = MED, disturbance_index = MED
+deer_damage_cpt["MED","LOW","HIGH","MED","MED"] <- 1
+deer_damage_cpt["MED-HIGH","MED","HIGH","MED","MED"] <- 1
+deer_damage_cpt["MED-HIGH","HIGH","HIGH","MED","MED"] <- 1
+#table16
+deer_damage_cpt
 ```
 
 ### Create BN Structure
