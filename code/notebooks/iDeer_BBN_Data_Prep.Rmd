@@ -343,7 +343,7 @@ df$total_edge_pix_b250 <- ifelse(df$total_edge_pix_b250 <= 500, "LOW",
 
 #Export
 
-write.csv(df_clean, file = file.path(here("data/derived-data/nfi_2015_extracted_data_categorical.csv")))
+write.csv(df, file = file.path(here("data/derived-data/nfi_2015_extracted_data_categorical.csv")))
 
 ```
 
