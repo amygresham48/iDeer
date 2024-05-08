@@ -187,15 +187,480 @@ buffered_cropped_rasters_spat <- lapply(buffered_cropped_rasters, convert_sublis
 ```
 
 ```{r}
-#Extract data for each woodland within 10km buffer around the 5 selected woodlands
+#NEAREST URBAN EXTRACTION ####
 
-#nearest urban extraction ####
+extract_urban_rasters <- function(buffered_woods_10km, raster_layer, woodlands) {
+  
+  # Initialize progress bar
+pb <- progress_bar$new(
+  format = "[:bar] :current/:total (:percent) in :elapsed, eta: :eta",
+  total = nrow(buffered_woods_10km),
+  clear = FALSE,   # Keep the progress bar on the screen
+  width = 60
+)
+  
+  # List to store extracted data
+  extraction_results <- list()
+  
+  # Loop through each buffered buffer and crop all rasters
+for (i in seq_along(buffered_woods_10km$geometry)) {
+  buffer_geometry <- buffered_woods_10km$geometry[i]
+      pb$tick()  # Update the progress bar
 
-nearest_urban_extract <- terra::extract(nearest_urban_cropped_spat, vect(hab_patches_all), fun = mean, na.rm=TRUE)  # returns a DF 
+  # Convert buffer geometry to a spatial object that raster can use
+  buffer_extent <- as(extent(st_bbox(buffer_geometry)), "Extent")
+  
+  # Crop raster to the current buffer extent
+  nearest_urban_cropped <- crop(nearest_urban, buffer_extent)
+  
+  #Convert to spatraster
+  nearest_urban_spatraster <- terra::rast(nearest_urban_cropped)
+  
+  #Filter for woodland patches that intersect buffer
+  
+  woods_buffer <- st_filter(woodlands, buffered_woods_10km[i, ], .predicate = st_intersects)
+  
+    # Extract data for all woodland polygons within the current buffer
+    extraction <- terra::extract(nearest_urban_spatraster, vect(woods_buffer), fun = mean, na.rm = TRUE)
+    
+    #cbind to the original woods_buffer columns
+    
+    extraction_cbind <- cbind(woods_buffer, extraction)
+    
+    # Store the extracted data in the results list
+    extraction_results[[paste("Buffer", i)]] <- extraction_cbind
+  }
+  
+  # Combine all extracted data into a single data frame
+  nearest_urban_extraction_results <- bind_rows(extraction_results)  # Combines all results into one data frame
+  
+  return(nearest_urban_extraction_results) # Return the combined data frame
+}
 
-plot(nearest_urban_cropped_spat)
-plot(woods$geometry[1,], add = TRUE)
+nearest_urban_extraction <- extract_urban_rasters(buffered_woods_10km, nearest_urban, hab_patches_all)
 
+ggplot(nearest_urban_extraction) +
+  geom_sf(aes(fill = nearest_urban_raster_2015_all_tiles_corrected))
+```
+
+```{r}
+#NEAREST SUBURBAN EXTRACTION ####
+extract_suburban_rasters <- function(buffered_woods_10km, raster_layer, woodlands) {
+  
+  # Initialize progress bar
+pb <- progress_bar$new(
+  format = "[:bar] :current/:total (:percent) in :elapsed, eta: :eta",
+  total = nrow(buffered_woods_10km),
+  clear = FALSE,   # Keep the progress bar on the screen
+  width = 60
+)
+  
+  # List to store extracted data
+  extraction_results <- list()
+  
+  # Loop through each buffered buffer and crop all rasters
+for (i in seq_along(buffered_woods_10km$geometry)) {
+  buffer_geometry <- buffered_woods_10km$geometry[i]
+      pb$tick()  # Update the progress bar
+
+  # Convert buffer geometry to a spatial object that raster can use
+  buffer_extent <- as(extent(st_bbox(buffer_geometry)), "Extent")
+  
+  # Crop raster to the current buffer extent
+  nearest_suburban_cropped <- crop(nearest_suburb, buffer_extent)
+  
+  #Convert to spatraster
+  nearest_suburban_spatraster <- terra::rast(nearest_suburban_cropped)
+  
+  #Filter for woodland patches that intersect buffer
+  
+  woods_buffer <- st_filter(woodlands, buffered_woods_10km[i, ], .predicate = st_intersects)
+  
+    # Extract data for all woodland polygons within the current buffer
+    extraction <- terra::extract(nearest_suburban_spatraster, vect(woods_buffer), fun = mean, na.rm = TRUE)
+    
+    #cbind to the original woods_buffer columns
+    
+    extraction_cbind <- cbind(woods_buffer, extraction)
+    
+    # Store the extracted data in the results list
+    extraction_results[[paste("Buffer", i)]] <- extraction_cbind
+  }
+  
+  # Combine all extracted data into a single data frame
+  nearest_suburban_extraction_results <- bind_rows(extraction_results)  # Combines all results into one data frame
+  
+  return(nearest_suburban_extraction_results) # Return the combined data frame
+}
+
+nearest_suburban_extraction <- extract_suburban_rasters(buffered_woods_10km, nearest_suburban, hab_patches_all)
+
+ggplot(nearest_suburban_extraction) +
+  geom_sf(aes(fill = nearest_suburban_raster_2015_all_tiles_corrected))
+```
+
+```{r}
+#MAX DAMS EXTRACTION ####
+extract_dams_raster <- function(buffered_woods_10km, raster_layer, woodlands) {
+  
+  # Initialize progress bar
+pb <- progress_bar$new(
+  format = "[:bar] :current/:total (:percent) in :elapsed, eta: :eta",
+  total = nrow(buffered_woods_10km),
+  clear = FALSE,   # Keep the progress bar on the screen
+  width = 60
+)
+  
+  # List to store extracted data
+  extraction_results <- list()
+  
+  # Loop through each buffered buffer and crop all rasters
+for (i in seq_along(buffered_woods_10km$geometry)) {
+  buffer_geometry <- buffered_woods_10km$geometry[i]
+      pb$tick()  # Update the progress bar
+
+  # Convert buffer geometry to a spatial object that raster can use
+  buffer_extent <- as(extent(st_bbox(buffer_geometry)), "Extent")
+  
+  # Crop raster to the current buffer extent
+  dams_cropped <- crop(dams, buffer_extent)
+  
+  #Convert to spatraster
+  dams_spatraster <- terra::rast(dams_cropped)
+  
+  #Filter for woodland patches that intersect buffer
+  
+  woods_buffer <- st_filter(woodlands, buffered_woods_10km[i, ], .predicate = st_intersects)
+  
+    # Extract data for all woodland polygons within the current buffer
+    extraction <- terra::extract(dams_spatraster, vect(woods_buffer), fun = mean, na.rm = TRUE)
+    
+    #cbind to the original woods_buffer columns
+    
+    extraction_cbind <- cbind(woods_buffer, extraction)
+    
+    # Store the extracted data in the results list
+    extraction_results[[paste("Buffer", i)]] <- extraction_cbind
+  }
+  
+  # Combine all extracted data into a single data frame
+ dams_extraction_results <- bind_rows(extraction_results)  # Combines all results into one data frame
+  
+  return(dams_extraction_results) # Return the combined data frame
+}
+
+dams_extraction <- extract_dams_raster(buffered_woods_10km, dams, hab_patches_all)
+
+ggplot(dams_extraction) +
+  geom_sf(aes(fill = focal.dams.1000.max))
+```
+
+```{r}
+#LINEAR FEATURES EXTRACTION ####
+extract_lf_raster <- function(buffered_woods_10km, raster_layer, woodlands) {
+  
+  # Initialize progress bar
+pb <- progress_bar$new(
+  format = "[:bar] :current/:total (:percent) in :elapsed, eta: :eta",
+  total = nrow(buffered_woods_10km),
+  clear = FALSE,   # Keep the progress bar on the screen
+  width = 60
+)
+  
+  # List to store extracted data
+  extraction_results <- list()
+  
+  # Loop through each buffered buffer and crop all rasters
+for (i in seq_along(buffered_woods_10km$geometry)) {
+  buffer_geometry <- buffered_woods_10km$geometry[i]
+      pb$tick()  # Update the progress bar
+
+  # Convert buffer geometry to a spatial object that raster can use
+  buffer_extent <- as(extent(st_bbox(buffer_geometry)), "Extent")
+  
+  # Crop raster to the current buffer extent
+  lf_cropped <- crop(lf, buffer_extent)
+  
+  #Convert to spatraster
+  lf_spatraster <- terra::rast(lf_cropped)
+  
+  #Filter for woodland patches that intersect buffer
+  
+  woods_buffer <- st_filter(woodlands, buffered_woods_10km[i, ], .predicate = st_intersects)
+  
+    # Extract data for all woodland polygons within the current buffer
+    extraction <- terra::extract(lf_spatraster, vect(woods_buffer), fun = mean, na.rm = TRUE)
+    
+    #cbind to the original woods_buffer columns
+    
+    extraction_cbind <- cbind(woods_buffer, extraction)
+    
+    # Store the extracted data in the results list
+    extraction_results[[paste("Buffer", i)]] <- extraction_cbind
+  }
+  
+  # Combine all extracted data into a single data frame
+lf_extraction_results <- bind_rows(extraction_results)  # Combines all results into one data frame
+  
+  return(lf_extraction_results) # Return the combined data frame
+}
+
+lf_extraction <- extract_lf_raster(buffered_woods_10km, lf, hab_patches_all)
+
+ggplot(lf_extraction) +
+  geom_sf(aes(fill = lf_1000_mosaic_all_tiles_corrected))
+```
+
+```{r}
+#A ROAD DENSITY EXTRACTION ####
+extract_ard_raster <- function(buffered_woods_10km, raster_layer, woodlands) {
+  
+  # Initialize progress bar
+pb <- progress_bar$new(
+  format = "[:bar] :current/:total (:percent) in :elapsed, eta: :eta",
+  total = nrow(buffered_woods_10km),
+  clear = FALSE,   # Keep the progress bar on the screen
+  width = 60
+)
+  
+  # List to store extracted data
+  extraction_results <- list()
+  
+  # Loop through each buffered buffer and crop all rasters
+for (i in seq_along(buffered_woods_10km$geometry)) {
+  buffer_geometry <- buffered_woods_10km$geometry[i]
+      pb$tick()  # Update the progress bar
+
+  # Convert buffer geometry to a spatial object that raster can use
+  buffer_extent <- as(extent(st_bbox(buffer_geometry)), "Extent")
+  
+  # Crop raster to the current buffer extent
+  ard_cropped <- crop(a_roads, buffer_extent)
+  
+  #Convert to spatraster
+  ard_spatraster <- terra::rast(ard_cropped)
+  
+  #Filter for woodland patches that intersect buffer
+  
+  woods_buffer <- st_filter(woodlands, buffered_woods_10km[i, ], .predicate = st_intersects)
+  
+    # Extract data for all woodland polygons within the current buffer
+    extraction <- terra::extract(ard_spatraster, vect(woods_buffer), fun = mean, na.rm = TRUE)
+    
+    #cbind to the original woods_buffer columns
+    
+    extraction_cbind <- cbind(woods_buffer, extraction)
+    
+    # Store the extracted data in the results list
+    extraction_results[[paste("Buffer", i)]] <- extraction_cbind
+  }
+  
+  # Combine all extracted data into a single data frame
+ard_extraction_results <- bind_rows(extraction_results)  # Combines all results into one data frame
+  
+  return(ard_extraction_results) # Return the combined data frame
+}
+
+ard_extraction <- extract_ard_raster(buffered_woods_10km, a_roads, hab_patches_all)
+
+ggplot(ard_extraction) +
+  geom_sf(aes(fill = Ard_1000_mosaic_all_tiles_corrected))
+```
+
+```{r}
+#B ROAD DENSITY EXTRACTION ####
+extract_brd_raster <- function(buffered_woods_10km, raster_layer, woodlands) {
+  
+  # Initialize progress bar
+pb <- progress_bar$new(
+  format = "[:bar] :current/:total (:percent) in :elapsed, eta: :eta",
+  total = nrow(buffered_woods_10km),
+  clear = FALSE,   # Keep the progress bar on the screen
+  width = 60
+)
+  
+  # List to store extracted data
+  extraction_results <- list()
+  
+  # Loop through each buffered buffer and crop all rasters
+for (i in seq_along(buffered_woods_10km$geometry)) {
+  buffer_geometry <- buffered_woods_10km$geometry[i]
+      pb$tick()  # Update the progress bar
+
+  # Convert buffer geometry to a spatial object that raster can use
+  buffer_extent <- as(extent(st_bbox(buffer_geometry)), "Extent")
+  
+  # Crop raster to the current buffer extent
+  brd_cropped <- crop(b_roads, buffer_extent)
+  
+  #Convert to spatraster
+  brd_spatraster <- terra::rast(brd_cropped)
+  
+  #Filter for woodland patches that intersect buffer
+  
+  woods_buffer <- st_filter(woodlands, buffered_woods_10km[i, ], .predicate = st_intersects)
+  
+    # Extract data for all woodland polygons within the current buffer
+    extraction <- terra::extract(brd_spatraster, vect(woods_buffer), fun = mean, na.rm = TRUE)
+    
+    #cbind to the original woods_buffer columns
+    
+    extraction_cbind <- cbind(woods_buffer, extraction)
+    
+    # Store the extracted data in the results list
+    extraction_results[[paste("Buffer", i)]] <- extraction_cbind
+  }
+  
+  # Combine all extracted data into a single data frame
+brd_extraction_results <- bind_rows(extraction_results)  # Combines all results into one data frame
+  
+  return(brd_extraction_results) # Return the combined data frame
+}
+
+brd_extraction <- extract_brd_raster(buffered_woods_10km, b_roads, hab_patches_all)
+
+ggplot(brd_extraction) +
+  geom_sf(aes(fill = Brd_1000_mosaic_all_tiles_corrected))
+```
+
+```{r}
+#MOTORWAY DENSITY EXTRACTION ####
+extract_motorways_raster <- function(buffered_woods_10km, raster_layer, woodlands) {
+  
+  # Initialize progress bar
+pb <- progress_bar$new(
+  format = "[:bar] :current/:total (:percent) in :elapsed, eta: :eta",
+  total = nrow(buffered_woods_10km),
+  clear = FALSE,   # Keep the progress bar on the screen
+  width = 60
+)
+  
+  # List to store extracted data
+  extraction_results <- list()
+  
+  # Loop through each buffered buffer and crop all rasters
+for (i in seq_along(buffered_woods_10km$geometry)) {
+  buffer_geometry <- buffered_woods_10km$geometry[i]
+      pb$tick()  # Update the progress bar
+
+  # Convert buffer geometry to a spatial object that raster can use
+  buffer_extent <- as(extent(st_bbox(buffer_geometry)), "Extent")
+  
+  # Crop raster to the current buffer extent
+  motorways_cropped <- crop(motorways, buffer_extent)
+  
+  #Convert to spatraster
+  motorways_spatraster <- terra::rast(motorways_cropped)
+  
+  #Filter for woodland patches that intersect buffer
+  
+  woods_buffer <- st_filter(woodlands, buffered_woods_10km[i, ], .predicate = st_intersects)
+  
+    # Extract data for all woodland polygons within the current buffer
+    extraction <- terra::extract(motorways_spatraster, vect(woods_buffer), fun = mean, na.rm = TRUE)
+    
+    #cbind to the original woods_buffer columns
+    
+    extraction_cbind <- cbind(woods_buffer, extraction)
+    
+    # Store the extracted data in the results list
+    extraction_results[[paste("Buffer", i)]] <- extraction_cbind
+  }
+  
+  # Combine all extracted data into a single data frame
+motorways_extraction_results <- bind_rows(extraction_results)  # Combines all results into one data frame
+  
+  return(motorways_extraction_results) # Return the combined data frame
+}
+
+motorways_extraction <- extract_motorways_raster(buffered_woods_10km, motorways, hab_patches_all)
+
+ggplot(motorways_extraction) +
+  geom_sf(aes(fill = motorway_1000_mosaic_all_tiles_corrected))
+```
+
+```{r}
+#LAND COVER EXTRACTION ####
+
+land_cover_func <- function(buffered_woods_10km, raster_layer, woodlands) {
+  
+  # Initialize progress bar
+pb <- progress_bar$new(
+  format = "[:bar] :current/:total (:percent) in :elapsed, eta: :eta",
+  total = nrow(buffered_woods_10km),
+  clear = FALSE,   # Keep the progress bar on the screen
+  width = 60
+)
+  
+  # List to store extracted data
+  extraction_results <- list()
+  
+  # Loop through each buffered buffer and crop all rasters
+for (i in seq_along(buffered_woods_10km$geometry)) {
+  buffer_geometry <- buffered_woods_10km$geometry[i]
+      pb$tick()  # Update the progress bar
+
+  # Convert buffer geometry to a spatial object that raster can use
+  buffer_extent <- as(extent(st_bbox(buffer_geometry)), "Extent")
+  
+  # Crop raster to the current buffer extent
+  lc_cropped <- crop(map, buffer_extent)
+  
+  #Convert to spatraster
+  lc_spatraster <- terra::rast(lc_cropped)
+  
+  #Filter for woodland patches that intersect buffer
+  
+  woods_buffer <- st_filter(woodlands, buffered_woods_10km[i, ], .predicate = st_intersects)
+  
+}
+}
+
+#######################################
+
+POLY=as(hab_patches_all, "Spatial")
+veg = map
+#ext<-raster::extract(lc, POLY, method='simple')
+#class(ext)  # a list
+## [1] "list"
+#length(ext) # three elements, a vector of land use values for each region
+## [1] 3
+
+polyFragStats <- function(POLY, veg) {
+  # Create a buffer around the polygon
+  buffer_poly <- buffer(POLY, width = 250, dissolve = TRUE)
+  
+  # Cut out the original polygon from the buffer
+  buffer_area <- erase(buffer_poly, POLY)
+  
+  # Crop land cover map by the buffer area
+  fcrop <- crop(veg, buffer_area)
+  
+  # Mask the cropped land cover map
+  fmask <- mask(fcrop, buffer_area)
+  
+  # Extract class statistics
+  res <- raster::extract(fmask, buffer_area, method = "simple")
+  
+  # Convert the results to a data frame and calculate statistics
+  res <- as.data.frame(table(res))
+  res$SQUID_SECTION <- POLY$SQUID_SECTION
+  
+  res <- res %>%
+    mutate(total_pix = as.numeric(sum(Freq)),
+           class = res) %>%
+    dplyr::select(SQUID_SECTION, class, Freq, total_pix) %>%
+    mutate(perc_cov = Freq * 100 / total_pix, buff_area = area(buffer_area))
+  
+  return(res)
+}
+
+
+respoly <- ldply(1:length(POLY), function(i) {  # for each point
+  out <- polyFragStats(POLY[i,],  veg=veg) # compute fragstats metrics 
+  out$buffer_size <- "b150"
+  return(out)
+})  
 ```
 
 ### #Calculate connectivity for every woodland inside the 10km buffers
@@ -255,19 +720,10 @@ for (i in seq_along(buffered_woods_10km$geometry)) {
   source_woods <- st_filter(hab_patches_all, buffered_woods_12km[i, ], .predicate = st_intersects)
 
   # Crop the woodlands in the original 10km square to get the focal patches
-  focal_woods <- st_filter(hab_patches_all, focal_wood_geometry, .predicate = st_within)
+  focal_woods <- st_filter(hab_patches_all, focal_wood_geometry, .predicate = st_intersects)
 
   # Calculate connectivity for each focal woodland
   Connectivity_table <- NULL
-
-  # Initialize a progress bar
-  num_focal_woods <- nrow(focal_woods)
-  pb <- progress_bar$new(
-    format = "[:bar] :current/:total (:percent) in :elapsed, eta: :eta",
-    total = num_focal_woods,
-    clear = FALSE,
-    width = 60
-  )
 
   # Loop through each focal woodland to calculate connectivity
   for (j in 1:num_focal_woods) {
