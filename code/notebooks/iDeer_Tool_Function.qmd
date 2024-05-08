@@ -1,0 +1,27 @@
+---
+title: "iDeer Tool Function"
+format: html
+editor: visual
+
+#User selects point on map
+#Choose whether it's 10 or 20km landscape around it
+#Cut all raster to square, buffer by 2km
+#Extract the metrics (roads, urban, connectivity etc)
+#Run the BBN
+#Loop this process for the 5 different landscapes
+#Do this for the 5 DIA regions
+#Write as a function
+---
+
+```{r}
+library(dplyr)
+library(sf)
+library(raster)
+```
+
+```{r} #Load data ####}
+#Load uk10k squares
+
+
+#Load NFI/LCM2015 master map
+```
