@@ -17,11 +17,261 @@ editor: visual
 library(dplyr)
 library(sf)
 library(raster)
+library(here)
+here()
 ```
 
-```{r} #Load data ####}
+```{r}
+#Load data ####
 #Load uk10k squares
-
+uk10k <- st_read(here("data/raw-data/10k_buffers_EW.shp"))
 
 #Load NFI/LCM2015 master map
+map <- raster(here("data/derived-data/2015-spatial-layers/edge_core_raster_all_buffers_EW.tif"))
+
+#Load roads at 1km scale
+a_roads <- raster(here("data/derived-data/2015-spatial-layers/Ard_1000_mosaic_all_buffers_corrected.tif"))
+b_roads <- raster(here("data/derived-data/2015-spatial-layers/Brd_1000_mosaic_all_buffers_corrected.tif"))
+motorways <- raster(here("data/derived-data/2015-spatial-layers/motorway_1000_mosaic_all_buffers_corrected.tif"))
+
+#Load nearest urban
+nearest_urban <- raster(here("data/derived-data/2015-spatial-layers/nearest_urban_raster_2015_all_buffers_corrected.tif"))
+nearest_suburb <- raster(here("data/derived-data/2015-spatial-layers/nearest_suburban_raster_2015_all_buffers_corrected.tif"))
+
+#Load linear features at 1km scale
+lf <- raster(here("data/derived-data/2015-spatial-layers/linear_features/lf_1000_mosaic_all_buffers_corrected.tif"))
+
+#Load MAX DAMS at 1km scale
+dams <- raster(here("data/derived-data/2015-spatial-layers/Max_DAMS/focal.dams.1000.max.tif"))
+
+#Load landscape nutritional scores for raster categories
+#Edge forage quality scores sum of woodland score + adjacent land cover score
+edge.val.types <- read.csv(file.path(here("data/raw-data/Expert_derived_quality_ranks_edge_types.csv")))
+
+#Read in woodland polygon dataset
+#Combined NFI 2015 and LCM 2015 woodlands
+
+hab_patches_all <- st_read(here("data/derived-data/nfi_lcm_overlaid_shapefile_woods_export.shp"))
+
+head(hab_patches_all)
+
+hab_patches_all <- hab_patches_all %>%
+  rename(patch_ID = Id) %>%
+  rename(patch_area = Shape_Area)
+```
+
+```{r}
+
+#Choose five woodlands within the DIA priority areas
+#Suffolk
+suffolk_wood <- hab_patches_all %>% subset(patch_ID == 260977)
+#Cumbria
+cumbria_wood <- hab_patches_all %>% subset(patch_ID == 142765)
+#South Wales 
+sw_wood <- hab_patches_all %>% subset(patch_ID == 340972)
+#North Wales
+nw_wood <- hab_patches_all %>% subset(patch_ID == 188539)
+#Oxford 
+ox_wood <- hab_patches_all %>% subset(patch_ID == 370647)
+#select all buffers together
+# Select the desired buffers
+woods <- hab_patches_all %>%
+  filter(patch_ID %in% c("260977", "142765", "340972", "188539", "370647"))
+woods <- st_as_sf(woods)
+
+```
+
+```{r}
+# Generate random points within each woodland
+#random_points_list <- lapply(woods$geometry, generate_random_point)  
+#random_points <- as.data.frame(random_points_list)
+#random_points <- random_points %>%
+#  pivot_longer(cols = everything(), values_to = "geometry") #tidy object
+#random_points <- random_points %>% dplyr::select(-name)
+# Create an sf object with the random points and patch IDs
+#wood_metadata <- st_drop_geometry(woods)
+#wood_points <- cbind(wood_metadata, random_points)
+#wood_points <- st_as_sf(wood_points)
+```
+
+```{r}
+#Buffer all woods by 10km
+buffered_woods_10km <- st_as_sf(st_buffer(woods, dist = 10000))  # dist = 10km in meters
+#Buffer all woods by 12km (10km landscape + 2km edge buffer)
+buffered_woods_12km <- st_as_sf(st_buffer(woods, dist = 12000))  # dist = 10km in meters
+
+#ensure crs of buffers is BNG
+st_crs(buffered_woods_12km) <- 27700
+st_crs(buffered_woods_10km) <- 27700
+
+#Check points, woodlands buffers line up
+plot(st_geometry(buffered_woods_12km), col = NA)
+plot(st_geometry(woods), col = "black", add = TRUE)
+#plot(st_geometry(wood_points), add = TRUE, col = "red")
+
+```
+
+```{r}
+# Cropped rasters list to store results
+
+#Should we set a centre point for each woodland and crop around that to make a square?
+#At the moment it is buffering to the edge of the woodland, making an irregular shaped buffer.
+
+buffered_cropped_rasters <- list()
+
+# Loop through each buffered buffer and crop all rasters
+for (i in seq_along(buffered_woods_12km$geometry)) {
+  buffer_geometry <- buffered_woods_12km$geometry[i]
+  
+  # Convert buffer geometry to a spatial object that raster can use
+  buffer_extent <- as(extent(st_bbox(buffer_geometry)), "Extent")
+  
+  # Crop each raster to the current buffer extent
+  map_cropped <- crop(map, buffer_extent)
+  a_roads_cropped <- crop(a_roads, buffer_extent)
+  b_roads_cropped <- crop(b_roads, buffer_extent)
+  motorways_cropped <- crop(motorways, buffer_extent)
+  nearest_urban_cropped <- crop(nearest_urban, buffer_extent)
+  nearest_suburb_cropped <- crop(nearest_suburb, buffer_extent)
+  lf_cropped <- crop(lf, buffer_extent)
+  dams_cropped <- crop(dams, buffer_extent)
+  
+  # Store the cropped rasters in the list, using the buffer name as the key
+  buffered_cropped_rasters[[paste("buffer", buffered_woods_12km$patch_ID[i])]] <- list(
+    map = map_cropped,
+    a_roads = a_roads_cropped,
+    b_roads = b_roads_cropped,
+    motorways = motorways_cropped,
+    nearest_urban = nearest_urban_cropped,
+    nearest_suburb = nearest_suburb_cropped,
+    lf = lf_cropped,
+    dams = dams_cropped
+  )
+}
+
+plot(buffered_cropped_rasters[[1]]$map)
+plot(buffered_woods_12km$geometry[1,], add=TRUE, border="blue", lwd=2, col=NA)
+```
+
+### #Calculate connectivity for every woodland inside the 10km buffers
+
+#### #Use source patches from 12km buffer
+
+```{r}
+#### SET CONNECTIVITY PARAMETERS ####
+# connectivity parametetrs - % of dispersers reaching a set distance #
+percentage_dispersers <- 0.05 ### 5%
+dispersal_distance <- 434 #Gets curve up to 1000m on x axis
+dispersal_contribution <-
+  -((log(1 / percentage_dispersers)) / dispersal_distance)
+
+# Buffer distance represents the cut off - this stops the script measuring every pairwise combination
+dispersal_cutoff <- 0.999 ### 99.9% cut off
+#buffer_cutoff <-
+  #round(log(1 / (1 - dispersal_cutoff)) / (log(1 / percentage_dispersers) /
+                                             #dispersal_distance), digits = 2)
+buffer_cutoff = 1000 #1km
+
+# test & plot of dispersal contribution for sequence of distance up to buffer_cutoff
+test <-
+  data.frame(distance = (seq(0, buffer_cutoff, by = 0.5))) %>%
+  mutate(contribution = (exp(dispersal_contribution * distance) * 100))
+
+ggplot(data = test, aes(x = distance, y = contribution, group = 1)) +
+  geom_line() +
+  geom_point() +
+  geom_vline(xintercept = buffer_cutoff, color = "red")
+
+#See how buffer size looks
+focal_patch_buffer <- st_buffer(hab_patches[1,], buffer_cutoff)
+plot(st_geometry(focal_patch_buffer))
+plot(st_geometry(hab_patches[1,]),add=TRUE)
+
+```
+
+```{r}
+
+connectivity_results <- list()
+
+# Initialize progress bar
+pb <- progress_bar$new(
+  format = "[:bar] :current/:total (:percent) in :elapsed, eta: :eta",
+  total = num_patches,
+  clear = FALSE,   # Keep the progress bar on the screen
+  width = 60
+)
+
+# Loop through each 10km square
+for (i in seq_along(buffered_woods_10km$geometry)) {
+  # Get the unbuffered woodland (10km square)
+  focal_wood_geometry <- buffered_woods_10km$geometry[i]
+
+  # Use the 12km buffer as the source patches area
+  source_woods <- st_filter(hab_patches_all, buffered_woods_12km[i, ], .predicate = st_intersects)
+
+  # Crop the woodlands in the original 10km square to get the focal patches
+  focal_woods <- st_filter(hab_patches_all, focal_wood_geometry, .predicate = st_within)
+
+  # Calculate connectivity for each focal woodland
+  Connectivity_table <- NULL
+
+  # Initialize a progress bar
+  num_focal_woods <- nrow(focal_woods)
+  pb <- progress_bar$new(
+    format = "[:bar] :current/:total (:percent) in :elapsed, eta: :eta",
+    total = num_focal_woods,
+    clear = FALSE,
+    width = 60
+  )
+
+  # Loop through each focal woodland to calculate connectivity
+  for (j in 1:num_focal_woods) {
+    pb$tick()  # Update the progress bar
+    
+    # Focal patch in the 10km square
+    focal_patch <- focal_woods[j, ]
+    
+    # Buffer around the focal patch to include source patches
+    focal_patch_buffer <- st_buffer(focal_patch, buffer_cutoff)
+    
+    # Find source patches within this buffer
+    source_patches <- st_filter(source_woods, focal_patch_buffer, .predicate = st_intersects)
+    
+    # Calculate distances between the focal and source patches
+    patch_dist <- as.vector(st_distance(focal_patch, source_patches))
+    
+    # Create a data frame for connectivity information
+    Conn_table_site <- data.frame(
+      focal_patch = focal_patch$patch_ID,
+      focal_patch_area = as.numeric(focal_patch$patch_area),
+      source_patch = source_patches$patch_ID,
+      source_patch_area = as.numeric(source_patches$patch_area),
+      distance = patch_dist,
+      incoming_connect = ifelse(
+        focal_patch$patch_ID == source_patches$patch_ID,
+        NA,
+        source_patches$patch_area * exp(dispersal_contribution * patch_dist)
+      )
+    )
+    
+    # Append to 'Connectivity_table'
+    if (is.null(Connectivity_table)) {
+      Connectivity_table <- Conn_table_site
+    } else {
+      Connectivity_table <- rbind(Connectivity_table, Conn_table_site)
+    }
+  }
+
+  # Store results for this tile
+  connectivity_results[[paste("Wood", buffered_woods_10km$patch_ID[i])]] <- Connectivity_table
+}
+
+```
+
+### Extract raster variables for all woodlands in 10km buffer
+
+#### Use 12km buffered raster for extractions
+
+```{r}
+
 ```
