@@ -449,12 +449,6 @@ levels(test_data$road_density)<-c("LOW", "MED", "HIGH")
 levels(test_data$lf_density)<-c("LOW", "MED", "HIGH")
 levels(test_data$DAMS_MAX)<-c("LOW", "MED", "HIGH")
 
-# Replace "0" with "LOW" and "1" with "HIGH" using factor
-test_data <- test_data %>%
-  mutate(damage_risk = factor(damage_risk, levels = c(0, 1), labels = c("LOW", "HIGH")))
-
-
-
 
 ```
 
