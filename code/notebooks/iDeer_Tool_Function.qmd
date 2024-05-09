@@ -25,9 +25,9 @@ library(progress)
 here()
 ```
 
-```{r}
-#Load data ####
+### Load data
 
+```{r}
 bng <- 27700
 
 #Load NFI/LCM2015 master map
@@ -69,6 +69,8 @@ hab_patches_all <- hab_patches_all %>%
   rename(patch_area = Shape_Area)
 ```
 
+### Choose woodlands
+
 ```{r}
 
 #Choose five woodlands within the DIA priority areas to extract data for
@@ -90,7 +92,10 @@ woods <- hab_patches_all %>%
   filter(patch_ID %in% c("260977", "142765", "340972", "188539", "370647"))
 woods <- st_as_sf(woods)
 
+
 ```
+
+### Buffer woodlands for spatial data extraction
 
 ```{r}
 #Buffer all woods by 10km
@@ -110,8 +115,6 @@ plot(st_geometry(woods), col = "black", add = TRUE)
 ```
 
 ### Extract raster variables for all woodlands in 10km buffer
-
-#### Use 12km buffered raster for extractions
 
 ```{r}
 #NEAREST URBAN EXTRACTION ####
@@ -653,9 +656,7 @@ pixel_frequencies <- extract_pixel_frequencies(woods_buffers, map, polygon_id_co
 write.csv(pixel_frequencies, here("data/derived-data/Tool-extract-function-test/woodland_patch_pixel_types.csv"))
 ```
 
-### #Calculate connectivity for every woodland inside the 10km buffers
-
-#### #Use source patches from 12km buffer
+### Calculate connectivity for every woodland inside the 10km buffers
 
 ```{r}
 #### SET CONNECTIVITY PARAMETERS ####
@@ -693,34 +694,31 @@ plot(st_geometry(hab_patches[1,]),add=TRUE)
 
 connectivity_results <- list()
 
-# Initialize progress bar
+  # Use the 12km buffer as the source patches area
+  source_woods <- st_filter(hab_patches_all, buffered_woods_12km, .predicate = st_intersects)
+
+  # Crop the woodlands in the original 10km square to get the focal patches
+  focal_woods <- st_filter(hab_patches_all, buffered_woods_10km, .predicate = st_intersects)
+
+  # Calculate connectivity for each focal woodland
+  Connectivity_table <- NULL
+  
+  # Initialize progress bar
 pb <- progress_bar$new(
   format = "[:bar] :current/:total (:percent) in :elapsed, eta: :eta",
-  total = num_patches,
+  total = nrow(focal_woods),
   clear = FALSE,   # Keep the progress bar on the screen
   width = 60
 )
 
-# Loop through each 10km square
-for (i in seq_along(buffered_woods_10km$geometry)) {
-  # Get the unbuffered woodland (10km square)
-  focal_wood_geometry <- buffered_woods_10km$geometry[i]
-
-  # Use the 12km buffer as the source patches area
-  source_woods <- st_filter(hab_patches_all, buffered_woods_12km[i, ], .predicate = st_intersects)
-
-  # Crop the woodlands in the original 10km square to get the focal patches
-  focal_woods <- st_filter(hab_patches_all, focal_wood_geometry, .predicate = st_intersects)
-
-  # Calculate connectivity for each focal woodland
-  Connectivity_table <- NULL
-
   # Loop through each focal woodland to calculate connectivity
-  for (j in 1:num_focal_woods) {
-    pb$tick()  # Update the progress bar
+  for (j in 1:nrow(focal_woods)) {
     
     # Focal patch in the 10km square
     focal_patch <- focal_woods[j, ]
+    
+    #update progress bar
+    pb$tick
     
     # Buffer around the focal patch to include source patches
     focal_patch_buffer <- st_buffer(focal_patch, buffer_cutoff)
@@ -751,11 +749,14 @@ for (i in seq_along(buffered_woods_10km$geometry)) {
     } else {
       Connectivity_table <- rbind(Connectivity_table, Conn_table_site)
     }
-  }
+  
 
-  # Store results for this tile
-  connectivity_results[[paste("Wood", buffered_woods_10km$patch_ID[i])]] <- Connectivity_table
+  # Store results for this woodland
+  connectivity_results[[paste("focal_wood", focal_woods$patch_ID[i])]] <- Connectivity_table
 }
+```
+
+```{r}
 #Filter Connectivity table for NAs
 
 #remove NA's from table
@@ -777,18 +778,21 @@ incoming_connectivity_sum <- Connectivity_table_filt %>%
 #### Calculate Nutritional Landscape Composition (at 1km scale)
 
 ```{r}
-#NUTRITIONAL LANDSCAPE QUALITY ####
+#CALCULATE NUTRITIONAL LANDSCAPE QUALITY ####
 
 lcm <- respoly
 #Filter out zeros, water, rock and sediment
-lcm <- lcm %>% filter(!class %in% c(0,12,13,14,15,16,17,18))
+#lcm <- lcm %>% filter(!class %in% c(0,12,13,14,15,16,17,18))
 #Filter out edge classes with .7 or .8 as these are saltwater and freshwater edges - not useful for deer
-lcm <- lcm %>% filter(!grepl(".7",class)) %>%
-                                       filter(!grepl(".8",class)) 
+#lcm <- lcm %>% filter(!grepl(".7",class)) %>%
+                                       #filter(!grepl(".8",class)) 
 
 #Load landscape nutritional scores for raster categories
 #Edge forage quality scores sum of woodland score + adjacent land cover score
-edge.val.types <- read.csv(file.path(here("data/raw-data/Expert_derived_quality_ranks_edge_types.csv")))
+#Water scores added in to prevent loss of woodland edge pixels
+#Water edge pixels receive one point higher than regular woodland
+#Still an edge so will be highly nutritious
+edge.val.types <- read.csv(file.path(here("data/raw-data/Expert_derived_quality_ranks_edge_types_with_water.csv")))
 edge.val.types$class <- as.factor(edge.val.types$class)
 
 #Stitch the quality scores into the lcm dataset
@@ -827,28 +831,44 @@ lc.edge.types.NLI <- left_join(woods_buffers, weighted_average_score_buffer, by 
 #### Calculate Nutritional Patch Composition
 
 ```{r}
-#NUTRITIONAL PATCH QUALITY ####
+#CALCULATE NUTRITIONAL PATCH QUALITY ####
 
 pcm <- pixel_frequencies
 pcm<-pcm%>%rename(class=pixel_values,
                   patch_ID=polygon_id,
                   perc_cov=percentage)
 #Filter out zeros, water, rock and sediment
-pcm <- pcm %>% filter(!class %in% c(0,12,13,14,15,16,17,18))
-#Filter out edge classes with .7 or .8 as these are saltwater and freshwater edges - not useful for deer
-pcm <- pcm %>% filter(!grepl(".7",class)) %>%
-                                       filter(!grepl(".8",class)) 
+#pcm <- pcm %>% filter(!class %in% c(0,12,13,14,15,16,17,18))
+#Filter out edge classes with .7 or .8 as these are saltwater and freshwater edges #- not useful for deer
+#pcm <- pcm %>% filter(!grepl(".7",class)) %>%
+                                       #filter(!grepl(".8",class)) 
 
 #Load landscape nutritional scores for raster categories
 #Edge forage quality scores sum of woodland score + adjacent land cover score
-edge.val.types <- read.csv(file.path(here("data/raw-data/Expert_derived_quality_ranks_edge_types.csv")))
+#Water scores added in to prevent loss of woodland edge pixels
+#Water edge pixels receive one point higher than regular woodland
+#Still an edge so will be highly nutritious
+edge.val.types <- read.csv(file.path(here("data/raw-data/Expert_derived_quality_ranks_edge_types_with_water.csv")))
 edge.val.types <- edge.val.types%>%dplyr::select(-"X")
-edge.val.types$class <- as.numeric(edge.val.types$class)
+
+#Check edge.val.types$class and pcm$class match in format
+class(edge.val.types$class)
+#[1] "numeric"
+edge.val.types <- edge.val.types%>%arrange(class)
+unique(edge.val.types$class)
+class(pcm$class)
+#[1] "numeric"
+pcm <-pcm%>%arrange(class)
+unique(pcm$class)
+
+# Round to 3 decimal places
+pcm$class <- round(pcm$class, 3)
+edge.val.types$class <- round(edge.val.types$class, 3)
 
 #Stitch the quality scores into the lcm dataset
 
-pc.edge.types <- pcm %>% left_join(edge.val.types, by = "class") %>%
-                                          filter(!is.na(Land.cover))
+pc.edge.types <- pcm %>% left_join(edge.val.types, by = c("class")) #%>%
+                                          #filter(!is.na(Land.cover))
 
 #Calculate Nutritional Landscape Index (NLI) for separate edges and lc ####
 #Weight edges by their type: https://www.sciencedirect.com/science/article/pii/S0304380009003871 #fig1  
@@ -876,7 +896,7 @@ weighted_average_score <- weighted_average_score %>%
 lc.edge.types.NPI <- left_join(woods_buffers, weighted_average_score, by = c("patch_ID"))
 ```
 
-#### left_join the datasets together
+#### left_join the data sets together
 
 ```{r}
 
@@ -919,11 +939,15 @@ df <- left_join(df, lc.edge.types.NPI, by = c("patch_ID","gridcode","Shape_Leng"
 #Nutritional Landscape Index ####
 df <- left_join(df, lc.edge.types.NLI, by = c("patch_ID","gridcode","Shape_Leng","patch_area"))
 
+#Connectivity ####
+
+df <- left_join(df, incoming_connectivity_sum, by = c("patch_ID"))
+
 #Add the geometry back in
 woodland_geometry <- woods_buffers%>%dplyr::select("patch_ID","geometry")
 
 df<-left_join(df,woodland_geometry, by=c("patch_ID"))
-df<-df%>%dplyr::select(-c("Shape_Leng","gridcode"))
+df<-df%>%dplyr::select(-c("Shape_Leng","gridcode","ID"))
 df<-df%>%rename(lf_1000 = lf_1000_mosaic_all_tiles_corrected)
 df<- st_as_sf(df)
 ```
@@ -983,10 +1007,407 @@ write.csv(df, file = file.path(here("data/derived-data/nfi_2015_extracted_data_c
 
 ```
 
-### Run the Bayesian Belief Network
+### Create the Bayesian Belief Network
+
+#### Initialize Conditional Probability Tables
 
 ```{r}
+#CPTS for measured nodes ####
+urban_prox_cpt<-matrix(c(0.333333,0.333333,0.333333), ncol=3, dimnames = list(NULL, c("LOW", "MED","HIGH")))
 
+road_density_cpt<-matrix(c(0.333333,0.333333,0.333333), ncol=3, dimnames = list(NULL, c("LOW", "MED","HIGH")))
+
+connectivity_cpt<-matrix(c(0.333333,0.333333,0.333333),ncol = 3,dimnames = list(NULL, c("LOW", "MED","HIGH")))
+
+landscape_nutritional_score_cpt<-matrix(c(0.333333,0.333333,0.333333),ncol = 3,dimnames = list(NULL, c("LOW", "MED","HIGH")))
+
+patch_nutritional_score_cpt <- matrix(c(0.333333,0.333333,0.333333),ncol = 3,dimnames = list(NULL, c("LOW", "MED","HIGH")))
+
+dams_cpt <- landscape_nutritional_score_cpt<-matrix(c(0.333333,0.333333,0.333333),ncol = 3,dimnames = list(NULL, c("LOW", "MED","HIGH")))
+
+lf_density_cpt <-matrix(c(0.333333,0.333333,0.333333),ncol = 3,dimnames = list(NULL, c("LOW", "MED","HIGH")))
+```
+
+```{r}
+#CPT for Disturbance Index ####
+
+disturb_index_cpt <- array(
+  0,  # Default probability for each cell
+  dim = c(3, 3, 3, 3),  # Shape of the array (3x3x3)
+  dimnames = list(
+    disturb_index = c("LOW", "MED", "HIGH"),
+    road_density = c("LOW", "MED", "HIGH"),
+    urban_prox = c("LOW","MED","HIGH"),
+    connectivity = c("LOW", "MED", "HIGH")
+  )
+)
+#order = disturb_index, road_density, urban_prox,connectivity
+#table1: urban_prox = LOW, connectivity = LOW
+disturb_index_cpt["LOW","LOW","LOW","LOW"] <- 1
+disturb_index_cpt["MED","MED","LOW","LOW"] <- 1
+disturb_index_cpt["HIGH","HIGH","LOW","LOW"] <- 1
+#table2:  urban_prox = MED, connectivity = LOW
+disturb_index_cpt["MED","LOW","MED","LOW"] <- 1
+disturb_index_cpt["MED","MED","MED","LOW"] <- 1
+disturb_index_cpt["HIGH","HIGH","MED","LOW"] <- 1
+#table3: urban_prox = HIGH, connectivity = LOW
+disturb_index_cpt["HIGH","LOW","HIGH","LOW"] <- 1
+disturb_index_cpt["HIGH","MED","HIGH","LOW"] <- 1
+disturb_index_cpt["HIGH","HIGH","HIGH","LOW"] <- 1
+#table4: urban_prox = LOW, connectivity = MED
+disturb_index_cpt["LOW","LOW","LOW","MED"] <- 1
+disturb_index_cpt["MED","MED","LOW","MED"] <- 1
+disturb_index_cpt["MED","HIGH","LOW","MED"] <- 1
+#table5: urban_prox = MED, connectivity = MED
+disturb_index_cpt["LOW","LOW","MED","MED"] <- 1
+disturb_index_cpt["MED","MED","MED","MED"] <- 1
+disturb_index_cpt["HIGH","HIGH","MED","MED"] <- 1
+#table6: urban_prox = HIGH, connectivity = MED
+disturb_index_cpt["HIGH","LOW","HIGH","MED"] <- 1
+disturb_index_cpt["HIGH","MED","HIGH","MED"] <- 1
+disturb_index_cpt["HIGH","HIGH","HIGH","MED"] <- 1
+#table7: urban_prox = LOW, connectivity = HIGH
+disturb_index_cpt["LOW","LOW","LOW","HIGH"] <- 1
+disturb_index_cpt["LOW","MED","LOW","HIGH"] <- 1
+disturb_index_cpt["MED","HIGH","LOW","HIGH"] <- 1
+#table8: urban_prox = MED, connectivity = HIGH
+disturb_index_cpt["MED","LOW","MED","HIGH"] <- 1
+disturb_index_cpt["MED","MED","MED","HIGH"] <- 1
+disturb_index_cpt["HIGH","HIGH","MED","HIGH"] <- 1
+#table9: urban_prox = HIGH, connectivity = HIGH
+disturb_index_cpt["MED","LOW","HIGH","HIGH"] <- 1
+disturb_index_cpt["MED","MED","HIGH","HIGH"] <- 1
+disturb_index_cpt["HIGH","HIGH","HIGH","HIGH"] <- 1
+
+disturb_index_cpt
+
+```
+
+```{r}
+#CPT for Nutritional Patch Index ####
+
+NPI_cpt <- array(
+  0,  # Default probability for each cell
+  dim = c(3, 3),  # Shape of the array (3x3)
+  dimnames = list(
+    NPI = c("LOW", "MED", "HIGH"),
+    patch_nutritional_score = c("LOW", "MED", "HIGH")
+  )
+)
+
+NPI_cpt["LOW","LOW"] <- 1
+NPI_cpt["MED","MED"] <- 1
+NPI_cpt["HIGH","HIGH"] <- 1
+
+NPI_cpt
+```
+
+```{r}
+#CPT for Nutritional Landscape Index ####
+
+
+NLI_cpt <- array(
+  0,  # Default probability for each cell
+  dim = c(3, 3, 3),  # Shape of the array (3x3)
+  dimnames = list(
+    NLI = c("LOW", "MED", "HIGH"),
+    landscape_nutritional_score = c("LOW", "MED", "HIGH"),
+    lf_density = c("LOW","MED","HIGH")
+  )
+)
+#order = landscape_quality_index, nutritional_comp, lf_density
+NLI_cpt["LOW","LOW","LOW"] <- 1
+NLI_cpt["MED","MED","LOW"] <- 1
+NLI_cpt["HIGH","HIGH","LOW"] <- 1
+NLI_cpt["LOW","LOW","MED"] <- 1
+NLI_cpt["HIGH","MED","MED"] <- 1
+NLI_cpt["HIGH","HIGH","MED"] <- 1
+NLI_cpt["MED","LOW","HIGH"] <- 1
+NLI_cpt["HIGH","MED","HIGH"] <- 1
+NLI_cpt["HIGH","HIGH","HIGH"] <- 1
+
+NLI_cpt
+```
+
+```{r}
+#CPT for Thermoregulation Index ####
+
+thermoreg_cpt <- array(
+  0,  # Default probability for each cell
+  dim = c(3, 3),  # Shape of the array
+  dimnames = list(
+    thermoreg_index = c("LOW", "MED", "HIGH"),
+    DAMS_MAX = c("LOW", "MED", "HIGH")
+  )
+)
+#order = DAMS_MAX, thermoreg_index
+thermoreg_cpt["LOW","LOW"] <- 1
+thermoreg_cpt["MED","MED"] <- 1
+thermoreg_cpt["HIGH","HIGH"] <- 1
+
+thermoreg_cpt
+```
+
+```{r}
+#Final CPT: deer damage risk
+
+damage_risk_cpt <- array(
+  0,  # Default probability for each cell
+  dim = c(5, 3, 3, 3, 3),  # Shape of the array
+  dimnames = list(
+    damage_risk = c("LOW","LOW-MED","MED","MED-HIGH","HIGH"),
+    NPI = c("LOW", "MED", "HIGH"),
+    NLI = c("LOW", "MED", "HIGH"),
+    thermoreg_index = c("LOW", "MED", "HIGH"),
+    disturb_index = c("LOW", "MED", "HIGH")
+    
+  )
+)
+#order = damage_risk, patch_quality,landscape_nutrition,thermoreg_index,disturbance
+#table1 landscape_nutrition = LOW, thermoreg_index = LOW, disturbance_index = LOW
+damage_risk_cpt["LOW-MED","LOW","LOW","LOW","LOW"] <- 1
+damage_risk_cpt["LOW-MED","MED","LOW","LOW","LOW"] <- 1
+damage_risk_cpt["MED","HIGH","LOW","LOW","LOW"] <- 1
+#table2 landscape_nutrition = MED, thermoreg_index = LOW, disturbance_index = LOW
+damage_risk_cpt["LOW-MED","LOW","MED","LOW","LOW"] <- 1
+damage_risk_cpt["LOW-MED","MED","MED","LOW","LOW"] <- 1
+damage_risk_cpt["MED","HIGH","MED","LOW","LOW"] <- 1
+#table3 landscape_nutrition = HIGH, thermoreg_index = LOW, disturbance_index = LOW
+damage_risk_cpt["LOW-MED","LOW","HIGH","LOW","LOW"] <- 1
+damage_risk_cpt["MED","MED","HIGH","LOW","LOW"] <- 1
+damage_risk_cpt["MED","HIGH","HIGH","LOW","LOW"] <- 1
+#table4 landscape_nutrition = LOW, thermoreg_index = MED, disturbance_index = LOW
+damage_risk_cpt["MED","LOW","LOW","MED","LOW"] <- 1
+damage_risk_cpt["MED","MED","LOW","MED","LOW"] <- 1
+damage_risk_cpt["MED-HIGH","HIGH","LOW","MED","LOW"] <- 1
+#table5 landscape_nutrition = MED, thermoreg_index = MED, disturbance_index = LOW
+damage_risk_cpt["MED","LOW","MED","MED","LOW"] <- 1
+damage_risk_cpt["MED","MED","MED","MED","LOW"] <- 1
+damage_risk_cpt["MED-HIGH","HIGH","MED","MED","LOW"] <- 1
+#table6 landscape_nutrition = HIGH, thermoreg_index = MED, disturbance_index = LOW
+damage_risk_cpt["MED","LOW","HIGH","MED","LOW"] <- 1
+damage_risk_cpt["MED-HIGH","MED","HIGH","MED","LOW"] <- 1
+damage_risk_cpt["MED-HIGH","HIGH","HIGH","MED","LOW"] <- 1
+#table7  landscape_nutrition = LOW, thermoreg_index = HIGH, disturbance_index = LOW
+damage_risk_cpt["MED-HIGH","LOW","LOW","HIGH","LOW"] <- 1
+damage_risk_cpt["MED-HIGH","MED","LOW","HIGH","LOW"] <- 1
+damage_risk_cpt["HIGH","HIGH","LOW","HIGH","LOW"] <- 1
+#table8 landscape_nutrition = MED, thermoreg_index = HIGH, disturbance_index = LOW
+damage_risk_cpt["MED-HIGH","LOW","MED","HIGH","LOW"] <- 1
+damage_risk_cpt["MED-HIGH","MED","MED","HIGH","LOW"] <- 1
+damage_risk_cpt["HIGH","HIGH","MED","HIGH","LOW"] <- 1
+#table9 landscape_nutrition = HIGH, thermoreg_index = HIGH, disturbance_index = LOW
+damage_risk_cpt["MED-HIGH","LOW","HIGH","HIGH","LOW"] <- 1
+damage_risk_cpt["HIGH","MED","HIGH","HIGH","LOW"] <- 1
+damage_risk_cpt["HIGH","HIGH","HIGH","HIGH","LOW"] <- 1
+#table10 landscape_nutrition = LOW, thermoreg_index = LOW, disturbance_index = MED
+damage_risk_cpt["LOW","LOW","LOW","LOW","MED"] <- 1
+damage_risk_cpt["LOW","MED","LOW","LOW","MED"] <- 1
+damage_risk_cpt["LOW-MED","HIGH","LOW","LOW","MED"] <- 1
+#table11 landscape_nutrition = MED, thermoreg_index = LOW, disturbance_index = MED
+damage_risk_cpt["LOW-MED","LOW","MED","LOW","MED"] <- 1
+damage_risk_cpt["LOW-MED","MED","MED","LOW","MED"] <- 1
+damage_risk_cpt["MED","HIGH","MED","LOW","MED"] <- 1
+#table12 landscape_nutrition = HIGH, thermoreg_index = LOW, disturbance_index = MED
+damage_risk_cpt["LOW-MED","LOW","HIGH","LOW","MED"] <- 1
+damage_risk_cpt["MED","MED","HIGH","LOW","MED"] <- 1
+damage_risk_cpt["MED","HIGH","HIGH","LOW","MED"] <- 1
+#table13 landscape_nutrition = LOW, thermoreg_index = MED, disturbance_index = MED
+damage_risk_cpt["LOW-MED","LOW","LOW","MED","MED"] <- 1
+damage_risk_cpt["LOW-MED","MED","LOW","MED","MED"] <- 1
+damage_risk_cpt["MED","HIGH","LOW","MED","MED"] <- 1
+#table14 landscape_nutrition = MED, thermoreg_index = MED, disturbance_index = MED
+damage_risk_cpt["MED","LOW","MED","MED","MED"] <- 1
+damage_risk_cpt["MED","MED","MED","MED","MED"] <- 1
+damage_risk_cpt["MED-HIGH","HIGH","MED","MED","MED"] <- 1
+#table15  landscape_nutrition = HIGH, thermoreg_index = MED, disturbance_index = MED
+damage_risk_cpt["MED","LOW","HIGH","MED","MED"] <- 1
+damage_risk_cpt["MED-HIGH","MED","HIGH","MED","MED"] <- 1
+damage_risk_cpt["MED-HIGH","HIGH","HIGH","MED","MED"] <- 1
+#table16 landscape_nutrition = LOW, thermoreg_index = HIGH, disturbance_index = MED
+damage_risk_cpt["MED","LOW","LOW","HIGH","MED"] <- 1
+damage_risk_cpt["MED","MED","LOW","HIGH","MED"] <- 1
+damage_risk_cpt["MED","HIGH","LOW","HIGH","MED"] <- 1
+#table17 landscape_nutrition = MED, thermoreg_index = HIGH, disturbance_index = MED
+damage_risk_cpt["MED-HIGH","LOW","MED","HIGH","MED"] <- 1
+damage_risk_cpt["MED-HIGH","MED","MED","HIGH","MED"] <- 1
+damage_risk_cpt["HIGH","HIGH","MED","HIGH","MED"] <- 1
+#table18 landscape_nutrition = HIGH, thermoreg_index = HIGH, disturbance_index = MED
+damage_risk_cpt["MED-HIGH","LOW","HIGH","HIGH","MED"] <- 1
+damage_risk_cpt["HIGH","MED","HIGH","HIGH","MED"] <- 1
+damage_risk_cpt["HIGH","HIGH","HIGH","HIGH","MED"] <- 1
+#table19 landscape_nutrition = LOW, thermoreg_index = LOW, disturbance_index = HIGH
+damage_risk_cpt["LOW","LOW","LOW","LOW","HIGH"] <- 1
+damage_risk_cpt["LOW","MED","LOW","LOW","HIGH"] <- 1
+damage_risk_cpt["LOW","HIGH","LOW","LOW","HIGH"] <- 1
+#table20 landscape_nutrition = MED, thermoreg_index = LOW, disturbance_index = HIGH
+damage_risk_cpt["LOW","LOW","MED","LOW","HIGH"] <- 1
+damage_risk_cpt["LOW","MED","MED","LOW","HIGH"] <- 1
+damage_risk_cpt["LOW-MED","HIGH","MED","LOW","HIGH"] <- 1
+#table21 landscape_nutrition = HIGH, thermoreg_index = LOW, disturbance_index = HIGH
+damage_risk_cpt["LOW","LOW","HIGH","LOW","HIGH"] <- 1
+damage_risk_cpt["LOW-MED","MED","HIGH","LOW","HIGH"] <- 1
+damage_risk_cpt["LOW-MED","HIGH","HIGH","LOW","HIGH"] <- 1
+#table22 landscape_nutrition = LOW, thermoreg_index = MED, disturbance_index = HIGH
+damage_risk_cpt["LOW","LOW","LOW","MED","HIGH"] <- 1
+damage_risk_cpt["LOW","MED","LOW","MED","HIGH"] <- 1
+damage_risk_cpt["LOW","HIGH","LOW","MED","HIGH"] <- 1
+#table23 landscape_nutrition = MED, thermoreg_index = MED, disturbance_index = HIGH
+damage_risk_cpt["LOW","LOW","MED","MED","HIGH"] <- 1
+damage_risk_cpt["LOW","MED","MED","MED","HIGH"] <- 1
+damage_risk_cpt["LOW-MED","HIGH","MED","MED","HIGH"] <- 1
+#table24 landscape_nutrition = HIGH, thermoreg_index = MED, disturbance_index = HIGH
+damage_risk_cpt["LOW","LOW","HIGH","MED","HIGH"] <- 1
+damage_risk_cpt["LOW-MED","MED","HIGH","MED","HIGH"] <- 1
+damage_risk_cpt["LOW-MED","HIGH","HIGH","MED","HIGH"] <- 1
+#table25  landscape_nutrition = LOW, thermoreg_index = HIGH, disturbance_index = HIGH
+damage_risk_cpt["LOW-MED","LOW","LOW","HIGH","HIGH"] <- 1
+damage_risk_cpt["LOW-MED","MED","LOW","HIGH","HIGH"] <- 1
+damage_risk_cpt["LOW-MED","HIGH","LOW","HIGH","HIGH"] <- 1
+#table26 landscape_nutrition = MED, thermoreg_index = HIGH, disturbance_index = HIGH
+damage_risk_cpt["LOW-MED","LOW","MED","HIGH","HIGH"] <- 1
+damage_risk_cpt["LOW-MED","MED","MED","HIGH","HIGH"] <- 1
+damage_risk_cpt["MED","HIGH","MED","HIGH","HIGH"] <- 1
+#table27 landscape_nutrition = HIGH, thermoreg_index = HIGH, disturbance_index = HIGH
+damage_risk_cpt["LOW-MED","LOW","HIGH","HIGH","HIGH"] <- 1
+damage_risk_cpt["MED","MED","HIGH","HIGH","HIGH"] <- 1
+damage_risk_cpt["MED","HIGH","HIGH","HIGH","HIGH"] <- 1
+
+damage_risk_cpt
+```
+
+#### Create BBN structure
+
+```{r}
+# Step 1: Explicitly define the nodes in the network
+nodes <- c(
+  "disturb_index",
+  "urban_prox",
+  "road_density",
+  "connectivity",
+  "patch_nutritional_score",
+  "landscape_nutritional_score",
+  "NLI",
+  "lf_density",
+  "woodland_type",
+  "thermoreg_index",
+  "DAMS_MAX",
+  "damage_risk",
+  "NPI"
+)
+
+#empty graph
+e = empty.graph(nodes)
+
+arc.set = matrix(c("urban_prox", "disturb_index",
+                     "road_density", "disturb_index", 
+                     "connectivity", "disturb_index",
+                     "lf_density","landscape_nutrition",
+                     "landscape_nutritional_score","NLI",
+                     "patch_nutritional_score","NPI",
+                     "DAMS_MAX","thermoreg_index",
+                     "disturb_index","damage_risk",
+                     "NLI","damage_risk",
+                     "NPI","damage_risk",
+                     "thermoreg_index","damage_risk"),
+             ncol = 2, byrow = TRUE,
+             dimnames = list(NULL, c("from", "to")))
+
+arcs(e) <- arc.set
+
+model_string <- modelstring(e) 
+
+net<-model2network(model_string) 
+# You dont need to repeat the names of the nodes with parents (child nodes) 
+
+# Custom fitting network (matching up the nodes to their CPTs)
+dfit = custom.fit(net, dist = list(road_density=road_density_cpt, 
+                                   urban_prox=urban_prox_cpt,
+                                   connectivity=connectivity_cpt,
+                                   lf_density=lf_density_cpt,
+                                   DAMS_MAX=dams_cpt,
+                                   patch_nutritional_score=patch_nutritional_score_cpt,
+                                   landscape_nutritional_score=landscape_nutritional_score_cpt, 
+                                   disturb_index=disturb_index_cpt, 
+                                   NPI=NPI_cpt,
+                                   NLI=NLI_cpt,
+                                   thermoreg_index=thermoreg_cpt,
+                                   damage_risk=damage_risk_cpt))
+
+```
+
+#### Look at the BN
+
+```{r plot the network}
+#| echo: true
+#| warning: false
+#| message: false
+
+graphviz.plot(net)
+
+```
+
+#### Parameters
+
+```{r look at the dfit}
+#| echo: true
+#| warning: false
+#| message: false
+dfit
+```
+
+#### Set evidence
+
+```{r set evidence}
+#| echo: true
+#| warning: false
+#| message: false
+cpquery(dfit, c(patch_quality == "LOW"|DAMS_MAX == "HIGH"|woodland_type=="BROADLEAVED"), (damage_risk=="LOW"))
+
+```
+
+### Make predictions from BBN
+
+```{r}
+predict_dat <- df %>%st_drop_geometry() %>% #drop geometry
+   mutate(across(where(is.character), toupper)) %>% #convert to upper
+   select(-c("patch_ID","patch_area"))
+#Ensure variable names match those in BBN
+predict_dat<-predict_dat%>%rename(
+                              road_density=all_roads_1000,
+                              lf_density=lf_1000,
+                              urban_prox=urban_proximity,
+                              NLI=nli_edge_types_1000,
+                              NPI=npi_edge_types,
+                              DAMS_MAX=focal.dams.1000.max,
+                              connectivity=incoming_connect_sum)
+
+#Ensure factor levels are in correct order
+levels(predict_dat$road_density)<-c("LOW", "MED", "HIGH")
+levels(predict_dat$NLI)<-c("LOW", "MED", "HIGH")
+levels(predict_dat$NPI)<-c("LOW", "MED", "HIGH")
+levels(predict_dat$urban_prox)<-c("LOW", "MED", "HIGH")
+levels(predict_dat$road_density)<-c("LOW", "MED", "HIGH")
+levels(predict_dat$lf_density)<-c("LOW", "MED", "HIGH")
+levels(predict_dat$DAMS_MAX)<-c("LOW", "MED", "HIGH")
+
+#Predict deer damage from data
+predict_dat <- predict_dat
+pred = predict(dfit,node = "damage_risk",data = predict_dat,method = "bayes-lw")
+
+df$pred<-pred
+```
+
+### Draw maps
+
+```{r}
+#| echo: true
+#| warning: false
+#| message: false
+
+plot(predict_dat["pred"])
+
+#Make a plot for each of the 5 selected woodlands to show Matt and Becks
 ```
 
 ### Spare code
