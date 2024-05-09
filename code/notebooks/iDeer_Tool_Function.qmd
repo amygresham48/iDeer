@@ -699,6 +699,8 @@ connectivity_results <- list()
 
   # Crop the woodlands in the original 10km square to get the focal patches
   focal_woods <- st_filter(hab_patches_all, buffered_woods_10km, .predicate = st_intersects)
+  n_distinct(focal_woods$patch_ID)
+  #[1] 7884
 
   # Calculate connectivity for each focal woodland
   Connectivity_table <- NULL
@@ -750,6 +752,7 @@ pb <- progress_bar$new(
       Connectivity_table <- rbind(Connectivity_table, Conn_table_site)
     }
   
+  n_distinct(Connectivity_table$focal_patch)
 
   # Store results for this woodland
   connectivity_results[[paste("focal_wood", focal_woods$patch_ID[i])]] <- Connectivity_table
@@ -757,12 +760,34 @@ pb <- progress_bar$new(
 ```
 
 ```{r}
-#Filter Connectivity table for NAs
 
-#remove NA's from table
+#remove rows where focal_patch = source_patch
 Connectivity_table_filt <- Connectivity_table %>%
-  filter(!is.na(incoming_connect))
+  filter(focal_patch != source_patch)
+
+# Identify missing unique patch IDs
+# These patches have no source patches so will have been filtered out
+# We need to put them back in so we can give them an incoming_connect value of 0
+missing_patch_ids <- setdiff(
+     unique(Connectivity_table$focal_patch),
+     unique(Connectivity_table_filt$focal_patch)
+ )
+ 
+ print(missing_patch_ids)  # This will show which patch IDs are missing
+#[1] 132853 133946 141304 260769 358349 359726
+ 
+missing_patches <- Connectivity_table %>% filter(focal_patch %in% missing_patch_ids) %>%
+  # Replace NAs in 'incoming_connect' with 0
+  mutate(incoming_connect = coalesce(incoming_connect, 0))  # Replace NA with 0
+
+#Make rows for patches with no connectivity so we don't lose any patches
+Connectivity_table_filt <- rbind(Connectivity_table_filt, missing_patches)
+
+#Ensure no duplicate rows
 Connectivity_table_filt <- Connectivity_table_filt %>% distinct()
+
+#Now no patches should be missing
+n_distinct(Connectivity_table_filt$focal_patch)
 
 #sum incoming connectivity by focal patch
 incoming_connectivity_sum <- Connectivity_table_filt %>%
@@ -770,7 +795,12 @@ incoming_connectivity_sum <- Connectivity_table_filt %>%
   group_by(focal_patch) %>%
   dplyr::summarise(total_connect = sum(incoming_connect),
             n = n()) %>%
+  mutate(n = if_else(total_connect == 0, 0, n)) %>%  # Set 'n' to 0 when 'incoming_connect' is 0
   rename(patch_ID = focal_patch)
+
+#save incoming connectivity table
+
+write.csv(incoming_connectivity_sum, here("data/derived-data/Tool-extract-function-test/incoming_connectivity_sum.csv"))
 ```
 
 ### Ready the spatial data for the Bayesian Belief Network
@@ -950,11 +980,21 @@ df<-left_join(df,woodland_geometry, by=c("patch_ID"))
 df<-df%>%dplyr::select(-c("Shape_Leng","gridcode","ID"))
 df<-df%>%rename(lf_1000 = lf_1000_mosaic_all_tiles_corrected)
 df<- st_as_sf(df)
+
+saveRDS(df, here("data/derived-data/Tool-extract-function-test/bbn_test_df_5_patches.rds"))
 ```
 
 #### Convert numerical values to categorical (LOW, MED, HIGH)
 
 ```{r}
+
+df <- readRDS(here("data/derived-data/Tool-extract-function-test/bbn_test_df_5_patches.rds"))
+
+#NEED TO TWEAK THESE CATEGORIES
+#DO WE DO THIS BASED ON THE LOCALISED DATA FOR EACH WOODLAND?
+#OR USING THE RANGE OF THE WHOLE DATASETS?
+#USING LOCALISED DATA WOULD KEEP IT "RELATIVE" TO THE LOCAL LANDSCAPE??
+
 #Replace values in numerical columns with LOW, MED, HIGH
 
 #Linear features
