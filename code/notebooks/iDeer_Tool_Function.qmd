@@ -22,10 +22,11 @@ library(raster)
 library(terra)
 library(here)
 library(progress)
+library(bnlearn)
 here()
 ```
 
-### Load data
+### Load spatial data derived for England and Wales
 
 ```{r}
 bng <- 27700
@@ -34,13 +35,10 @@ bng <- 27700
 map <- raster(here("data/derived-data/2015-spatial-layers/edge_core_raster_all_tiles_EW.tif"))
 crs(map) <- bng
 
-#Load roads at 1km scale
-a_roads <- raster(here("data/derived-data/2015-spatial-layers/Ard_1000_mosaic_all_tiles_corrected.tif"))
-crs(a_roads) <- bng
-b_roads <- raster(here("data/derived-data/2015-spatial-layers/Brd_1000_mosaic_all_tiles_corrected.tif"))
-crs(b_roads) <- bng
-motorways <- raster(here("data/derived-data/2015-spatial-layers/motorway_1000_mosaic_all_tiles_corrected.tif"))
-crs(motorways) <- bng
+#Load main roads at 250m scale
+#Summed density of A roads, B roads and motorways
+all_roads <- raster(here("data/derived-data/2015-spatial-layers/all_roads_250_mosaic_all_tiles_corrected.tif"))
+crs(all_roads) <- bng
 
 #Load nearest urban
 nearest_urban <- raster(here("data/derived-data/2015-spatial-layers/nearest_urban_raster_2015_all_tiles_corrected.tif"))
@@ -86,8 +84,7 @@ sw_wood <- hab_patches_all %>% subset(patch_ID == 340972)
 nw_wood <- hab_patches_all %>% subset(patch_ID == 188539)
 #Oxford 
 ox_wood <- hab_patches_all %>% subset(patch_ID == 370647)
-#select all buffers together
-# Select the desired buffers
+#select all woodlands together
 woods <- hab_patches_all %>%
   filter(patch_ID %in% c("260977", "142765", "340972", "188539", "370647"))
 woods <- st_as_sf(woods)
@@ -109,6 +106,7 @@ st_crs(buffered_woods_10km) <- bng
 
 #Check points, woodlands buffers line up
 plot(st_geometry(buffered_woods_12km), col = NA)
+plot(st_geometry(buffered_woods_10km), col = "yellow", add = TRUE)
 plot(st_geometry(woods), col = "black", add = TRUE)
 #plot(st_geometry(wood_points), add = TRUE, col = "red")
 
@@ -350,8 +348,8 @@ write.csv(lf_extraction, here("data/derived-data/Tool-extract-function-test/line
 ```
 
 ```{r}
-#A ROAD DENSITY EXTRACTION ####
-extract_ard_raster <- function(buffered_woods_10km, raster_layer, woodlands) {
+#ROAD DENSITY EXTRACTION ####
+extract_road_raster <- function(buffered_woods_10km, raster_layer, woodlands) {
   
   # Initialize progress bar
 pb <- progress_bar$new(
@@ -373,17 +371,17 @@ for (i in seq_along(buffered_woods_10km$geometry)) {
   buffer_extent <- as(extent(st_bbox(buffer_geometry)), "Extent")
   
   # Crop raster to the current buffer extent
-  ard_cropped <- crop(a_roads, buffer_extent)
+  roads_cropped <- crop(all_roads, buffer_extent)
   
   #Convert to spatraster
-  ard_spatraster <- terra::rast(ard_cropped)
+  roads_spatraster <- terra::rast(roads_cropped)
   
   #Filter for woodland patches that intersect buffer
   
   woods_buffer <- st_filter(woodlands, buffered_woods_10km[i, ], .predicate = st_intersects)
   
     # Extract data for all woodland polygons within the current buffer
-    extraction <- terra::extract(ard_spatraster, vect(woods_buffer), fun = mean, na.rm = TRUE)
+    extraction <- terra::extract(roads_spatraster, vect(woods_buffer), fun = mean, na.rm = TRUE)
     
     #cbind to the original woods_buffer columns
     
@@ -394,134 +392,17 @@ for (i in seq_along(buffered_woods_10km$geometry)) {
   }
   
   # Combine all extracted data into a single data frame
-ard_extraction_results <- bind_rows(extraction_results)  # Combines all results into one data frame
+road_extraction_results <- bind_rows(extraction_results)  # Combines all results into one data frame
   
-  return(ard_extraction_results) # Return the combined data frame
+  return(road_extraction_results) # Return the combined data frame
 }
 
-ard_extraction <- extract_ard_raster(buffered_woods_10km, a_roads, hab_patches_all)
+road_extraction <- extract_road_raster(buffered_woods_10km, all_roads, hab_patches_all)
 
-ggplot(ard_extraction) +
-  geom_sf(aes(fill = Ard_1000_mosaic_all_tiles_corrected))
+ggplot(road_extraction) +
+  geom_sf(aes(fill = all_roads_250_mosaic_all_tiles_corrected))
 
-write.csv(ard_extraction, here("data/derived-data/Tool-extract-function-test/Aroads_extraction_1000.csv"))
-```
-
-```{r}
-#B ROAD DENSITY EXTRACTION ####
-extract_brd_raster <- function(buffered_woods_10km, raster_layer, woodlands) {
-  
-  # Initialize progress bar
-pb <- progress_bar$new(
-  format = "[:bar] :current/:total (:percent) in :elapsed, eta: :eta",
-  total = nrow(buffered_woods_10km),
-  clear = FALSE,   # Keep the progress bar on the screen
-  width = 60
-)
-  
-  # List to store extracted data
-  extraction_results <- list()
-  
-  # Loop through each buffered buffer and crop all rasters
-for (i in seq_along(buffered_woods_10km$geometry)) {
-  buffer_geometry <- buffered_woods_10km$geometry[i]
-      pb$tick()  # Update the progress bar
-
-  # Convert buffer geometry to a spatial object that raster can use
-  buffer_extent <- as(extent(st_bbox(buffer_geometry)), "Extent")
-  
-  # Crop raster to the current buffer extent
-  brd_cropped <- crop(b_roads, buffer_extent)
-  
-  #Convert to spatraster
-  brd_spatraster <- terra::rast(brd_cropped)
-  
-  #Filter for woodland patches that intersect buffer
-  
-  woods_buffer <- st_filter(woodlands, buffered_woods_10km[i, ], .predicate = st_intersects)
-  
-    # Extract data for all woodland polygons within the current buffer
-    extraction <- terra::extract(brd_spatraster, vect(woods_buffer), fun = mean, na.rm = TRUE)
-    
-    #cbind to the original woods_buffer columns
-    
-    extraction_cbind <- cbind(woods_buffer, extraction)
-    
-    # Store the extracted data in the results list
-    extraction_results[[paste("Buffer", i)]] <- extraction_cbind
-  }
-  
-  # Combine all extracted data into a single data frame
-brd_extraction_results <- bind_rows(extraction_results)  # Combines all results into one data frame
-  
-  return(brd_extraction_results) # Return the combined data frame
-}
-
-brd_extraction <- extract_brd_raster(buffered_woods_10km, b_roads, hab_patches_all)
-
-ggplot(brd_extraction) +
-  geom_sf(aes(fill = Brd_1000_mosaic_all_tiles_corrected))
-
-write.csv(brd_extraction, here("data/derived-data/Tool-extract-function-test/Broads_extraction_1000.csv"))
-```
-
-```{r}
-#MOTORWAY DENSITY EXTRACTION ####
-extract_motorways_raster <- function(buffered_woods_10km, raster_layer, woodlands) {
-  
-  # Initialize progress bar
-pb <- progress_bar$new(
-  format = "[:bar] :current/:total (:percent) in :elapsed, eta: :eta",
-  total = nrow(buffered_woods_10km),
-  clear = FALSE,   # Keep the progress bar on the screen
-  width = 60
-)
-  
-  # List to store extracted data
-  extraction_results <- list()
-  
-  # Loop through each buffered buffer and crop all rasters
-for (i in seq_along(buffered_woods_10km$geometry)) {
-  buffer_geometry <- buffered_woods_10km$geometry[i]
-      pb$tick()  # Update the progress bar
-
-  # Convert buffer geometry to a spatial object that raster can use
-  buffer_extent <- as(extent(st_bbox(buffer_geometry)), "Extent")
-  
-  # Crop raster to the current buffer extent
-  motorways_cropped <- crop(motorways, buffer_extent)
-  
-  #Convert to spatraster
-  motorways_spatraster <- terra::rast(motorways_cropped)
-  
-  #Filter for woodland patches that intersect buffer
-  
-  woods_buffer <- st_filter(woodlands, buffered_woods_10km[i, ], .predicate = st_intersects)
-  
-    # Extract data for all woodland polygons within the current buffer
-    extraction <- terra::extract(motorways_spatraster, vect(woods_buffer), fun = mean, na.rm = TRUE)
-    
-    #cbind to the original woods_buffer columns
-    
-    extraction_cbind <- cbind(woods_buffer, extraction)
-    
-    # Store the extracted data in the results list
-    extraction_results[[paste("Buffer", i)]] <- extraction_cbind
-  }
-  
-  # Combine all extracted data into a single data frame
-motorways_extraction_results <- bind_rows(extraction_results)  # Combines all results into one data frame
-  
-  return(motorways_extraction_results) # Return the combined data frame
-}
-
-motorways_extraction <- extract_motorways_raster(buffered_woods_10km, motorways, hab_patches_all)
-
-ggplot(motorways_extraction) +
-  geom_sf(aes(fill = motorway_1000_mosaic_all_tiles_corrected))
-
-
-write.csv(motorways_extraction, here("data/derived-data/Tool-extract-function-test/motorways_extraction_1000.csv"))
+write.csv(road_extraction, here("data/derived-data/Tool-extract-function-test/all_roads_extraction_250.csv"))
 ```
 
 ```{r}
@@ -558,7 +439,6 @@ write.csv(motorways_extraction, here("data/derived-data/Tool-extract-function-te
 }
 
 #Filter for woodland patches that intersect buffers
-#Try with 1 buffer to check it's working OK
 woods_buffers <- st_filter(hab_patches_all, buffered_woods_10km, .predicate = st_intersects)
 
 POLY=as(woods_buffers, "Spatial")
@@ -945,9 +825,9 @@ lc.edge.types.NLI<-st_drop_geometry(lc.edge.types.NLI)
 df <- left_join(ard_extraction, brd_extraction, by = c("patch_ID","gridcode","Shape_Leng","patch_area","ID"))
 df <- left_join(df, motorways_extraction, by=c("patch_ID","gridcode","Shape_Leng","patch_area","ID"))
 #Make new column for all main roads
-df$all_roads_1000 <- rowSums(df[,c("Ard_1000_mosaic_all_tiles_corrected", "Brd_1000_mosaic_all_tiles_corrected", "motorway_1000_mosaic_all_tiles_corrected")])
+df$all_roads_250 <- rowSums(df[,c("Ard_250_mosaic_all_tiles_corrected", "Brd_250_mosaic_all_tiles_corrected", "motorway_250_mosaic_all_tiles_corrected")])
 #Drop individual road columns
-df <- df%>%dplyr::select(-c("Ard_1000_mosaic_all_tiles_corrected", "Brd_1000_mosaic_all_tiles_corrected", "motorway_1000_mosaic_all_tiles_corrected"))
+df <- df%>%dplyr::select(-c("Ard_250_mosaic_all_tiles_corrected", "Brd_250_mosaic_all_tiles_corrected", "motorway_250_mosaic_all_tiles_corrected"))
 
 #Linear features####
 df <- left_join(df, lf_extraction, by=c("patch_ID","gridcode","Shape_Leng","patch_area","ID"))
@@ -993,76 +873,82 @@ saveRDS(df, here("data/derived-data/Tool-extract-function-test/bbn_test_df_5_pat
 
 df <- readRDS(here("data/derived-data/Tool-extract-function-test/bbn_test_df_5_patches.rds"))
 
-#NEED TO TWEAK THESE CATEGORIES
-
 #Look at distribution of values across national datasets ####
+#We need to decide at what point values change between categories- need to do this using whole datasets rather than localised cropped datasets.
 
 #Roads
-ard_vals <- raster::values(a_roads)
-brd_vals <- raster::values(a_roads)
-motorway_vals <- raster::values(motorways)
-
-ard_vals <- ard_vals[!is.na(ard_vals)]
-brd_vals <- ard_vals[!is.na(brd_vals)]
-motorway_vals <- motorway_vals[!is.na(motorway_vals)]
-
-hist(ard_vals)
-hist(brd_vals)
-hist(motorway_vals)
-hist(df$all_roads_1000)
-
-quantile(df$all_roads_1000, probs = c(0.25, 0.5, 0.75))
-df$all_roads_1000 <- ifelse(df$all_roads_1000 <=2500, "LOW",
-            ifelse(df$all_roads_1000 >2500 & df$all_roads_1000 <= 5000, "MED",
-            ifelse(df$all_roads_1000> 10000, "HIGH", NA)))
-
-
+road_vals <- raster::values(all_roads)
+road_vals <- road_vals[!is.na(road_vals)]
+hist(road_vals)
+df$all_roads_250 <- ifelse(df$all_roads_250 == 0, "LOW",
+            ifelse(df$all_roads_250 >0 & df$all_roads_250 <= 1000, "MED",
+            ifelse(df$all_roads_250> 1000, "HIGH", NA)))
+unique(df$all_roads_250)
 
 #Linear features
 
 lf_vals <-raster::values(lf)
 lf_vals <- lf_vals[!is.na(lf_vals)]
 hist(lf_vals)
-quantile(lf_vals)
 # Replace numeric values with categorical labels
-df$lf_1000 <- ifelse(df$lf_1000<= 2000, "LOW",
-            ifelse(df$lf_1000> 2000 & df$lf_250 <= 4000, "MED",
-            ifelse(df$lf_1000> 4000, "HIGH", NA)))
-
+df$lf_1000 <- ifelse(df$lf_1000<= 5000, "LOW",
+            ifelse(df$lf_1000> 5000 & df$lf_1000 <= 10000, "MED",
+            ifelse(df$lf_1000> 10000, "HIGH", NA)))
+unique(df$lf_1000)
 
 
 #nearest urban/suburban
-#Proximity, therefore "HIGH" means closer
+#Proximity, therefore "HIGH" means lower value (lower distance)
 hist(df$urban_proximity)
-df$urban_proximity <- ifelse(df$urban_proximity <= 250, "HIGH",
-                          ifelse(df$urban_proximity >250 & df$urban_proximity <= 500, "MED",
-                           ifelse(df$urban_proximity >500,"LOW",NA)))  
+df$urban_proximity <- ifelse(df$urban_proximity <= 500, "HIGH",
+                          ifelse(df$urban_proximity >500 & df$urban_proximity <= 1000, "MED",
+                           ifelse(df$urban_proximity >1000,"LOW",NA)))  
+unique(df$urban_proximity)
 
 #MAX DAMS
-quantile(df$focal.dams.250, probs=c(0.25,0.5,0.75))
-hist(df$focal.dams.250)
-df$focal.dams.250 <- ifelse(df$focal.dams.250 <=10,"LOW",
-                      ifelse(df$focal.dams.250 >10 & df$focal.dams.250 <= 15, "MED",
-                        ifelse(df$focal.dams.250 >15, "HIGH",NA)))
+hist(df$focal.dams.1000.max)
+df$focal.dams.1000.max <- ifelse(df$focal.dams.1000.max <=10,"LOW",
+                      ifelse(df$focal.dams.1000.max>10 & df$focal.dams.1000.max <= 15, "MED",
+                        ifelse(df$focal.dams.1000.max >15, "HIGH",NA)))
 
 #nutritional landscape composition score
-quantile(df$nli_edge_types_250)
-hist(df$nli_edge_types_250)
-df$nli_edge_types_250 <- ifelse(df$nli_edge_types_250 <= 0, "LOW",
-                          ifelse(df$nli_edge_types_250 >0 & df$nli_edge_types_250 <=5, "MED",
-                           ifelse(df$nli_edge_types_250 > 5, "HIGH",NA)))
+hist(df$nli_edge_types_1000)
+df$nli_edge_types_1000 <- ifelse(df$nli_edge_types_1000 <= 0, "LOW",
+                          ifelse(df$nli_edge_types_1000 >0 & df$nli_edge_types_1000 <=4, "MED",
+                           ifelse(df$nli_edge_types_1000 > 4, "HIGH",NA)))
 
-#total landscape edges
+#nutritional patch composition score
 
-quantile(df$total_edge_pix_b250)
-hist(df$total_edge_pix_b250)
-df$total_edge_pix_b250 <- ifelse(df$total_edge_pix_b250 <= 500, "LOW",
-                            ifelse(df$total_edge_pix_b250 > 372 & df$total_edge_pix_b250 <= 750, "MED",
-                              ifelse(df$total_edge_pix_b250 > 750, "HIGH",NA)))
+hist(df$npi_edge_types)
+
+df$npi_edge_types <- ifelse(df$npi_edge_types <= 5, "LOW",
+                          ifelse(df$npi_edge_types >5 & df$npi_edge_types <=10, "MED",
+                           ifelse(df$npi_edge_types > 10, "HIGH",NA)))
+unique(df$npi_edge_types)
+
+#connectivity
+hist(df$total_connect)
+quantile(df$total_connect)
+
+#log transform connectivity values, they are too big for easy interpretation
+
+df$total_connect_log <- log(df$total_connect)
+
+hist(df$total_connect_log)
+
+df$total_connect_log <- ifelse(df$total_connect_log <=10, "LOW",
+                          ifelse(df$total_connect_log >10 & df$total_connect_log  <=15, "MED",
+                           ifelse(df$total_connect_log  > 15, "HIGH",NA)))
+
+#remove original connectivity column
+
+df <- df%>%dplyr::select(-c("total_connect","n"))
 
 #Export
 
-write.csv(df, file = file.path(here("data/derived-data/nfi_2015_extracted_data_categorical.csv")))
+df_categorical <- df
+
+saveRDS(df_categorical, file = file.path(here("data/derived-data/Tool-extract-function-test/tool_test_extracted_data_categorical.rds")))
 
 ```
 
@@ -1174,7 +1060,7 @@ NLI_cpt <- array(
     lf_density = c("LOW","MED","HIGH")
   )
 )
-#order = landscape_quality_index, nutritional_comp, lf_density
+#order = NLI, landscape_nutritional_score, lf_density
 NLI_cpt["LOW","LOW","LOW"] <- 1
 NLI_cpt["MED","MED","LOW"] <- 1
 NLI_cpt["HIGH","HIGH","LOW"] <- 1
@@ -1348,7 +1234,6 @@ nodes <- c(
   "landscape_nutritional_score",
   "NLI",
   "lf_density",
-  "woodland_type",
   "thermoreg_index",
   "DAMS_MAX",
   "damage_risk",
@@ -1361,7 +1246,7 @@ e = empty.graph(nodes)
 arc.set = matrix(c("urban_prox", "disturb_index",
                      "road_density", "disturb_index", 
                      "connectivity", "disturb_index",
-                     "lf_density","landscape_nutrition",
+                     "lf_density","NLI",
                      "landscape_nutritional_score","NLI",
                      "patch_nutritional_score","NPI",
                      "DAMS_MAX","thermoreg_index",
@@ -1385,8 +1270,8 @@ dfit = custom.fit(net, dist = list(road_density=road_density_cpt,
                                    connectivity=connectivity_cpt,
                                    lf_density=lf_density_cpt,
                                    DAMS_MAX=dams_cpt,
-                                   patch_nutritional_score=patch_nutritional_score_cpt,
-                                   landscape_nutritional_score=landscape_nutritional_score_cpt, 
+                      patch_nutritional_score=patch_nutritional_score_cpt,
+                      landscape_nutritional_score=landscape_nutritional_score_cpt, 
                                    disturb_index=disturb_index_cpt, 
                                    NPI=NPI_cpt,
                                    NLI=NLI_cpt,
@@ -1421,37 +1306,39 @@ dfit
 #| echo: true
 #| warning: false
 #| message: false
-cpquery(dfit, c(patch_quality == "LOW"|DAMS_MAX == "HIGH"|woodland_type=="BROADLEAVED"), (damage_risk=="LOW"))
+cpquery(dfit, c(lf_density == "LOW"|DAMS_MAX == "HIGH"), (damage_risk=="LOW"))
 
 ```
 
 ### Make predictions from BBN
 
 ```{r}
-predict_dat <- df %>%st_drop_geometry() %>% #drop geometry
+predict_dat <- df_categorical %>%st_drop_geometry() %>% #drop geometry
    mutate(across(where(is.character), toupper)) %>% #convert to upper
-   select(-c("patch_ID","patch_area"))
+   dplyr::select(-c("patch_ID","patch_area"))
 #Ensure variable names match those in BBN
 predict_dat<-predict_dat%>%rename(
-                              road_density=all_roads_1000,
+                              road_density=all_roads_250,
                               lf_density=lf_1000,
                               urban_prox=urban_proximity,
-                              NLI=nli_edge_types_1000,
-                              NPI=npi_edge_types,
+                              landscape_nutritional_score=nli_edge_types_1000,
+                              patch_nutritional_score=npi_edge_types,
                               DAMS_MAX=focal.dams.1000.max,
-                              connectivity=incoming_connect_sum)
+                              connectivity=total_connect_log)
+
+#Ensure all columns are factors, not characters
+predict_dat <- predict_dat %>% mutate_all(as.factor)
 
 #Ensure factor levels are in correct order
 levels(predict_dat$road_density)<-c("LOW", "MED", "HIGH")
-levels(predict_dat$NLI)<-c("LOW", "MED", "HIGH")
-levels(predict_dat$NPI)<-c("LOW", "MED", "HIGH")
+levels(predict_dat$landscape_nutritional_score)<-c("LOW", "MED", "HIGH")
+levels(predict_dat$patch_nutritional_score)<-c("LOW", "MED", "HIGH")
 levels(predict_dat$urban_prox)<-c("LOW", "MED", "HIGH")
-levels(predict_dat$road_density)<-c("LOW", "MED", "HIGH")
 levels(predict_dat$lf_density)<-c("LOW", "MED", "HIGH")
 levels(predict_dat$DAMS_MAX)<-c("LOW", "MED", "HIGH")
+levels(predict_dat$connectivity)<-c("LOW", "MED", "HIGH")
 
 #Predict deer damage from data
-predict_dat <- predict_dat
 pred = predict(dfit,node = "damage_risk",data = predict_dat,method = "bayes-lw")
 
 df$pred<-pred
