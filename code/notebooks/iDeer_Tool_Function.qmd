@@ -87,6 +87,7 @@ ox_wood <- hab_patches_all %>% subset(patch_ID == 370647)
 #select all woodlands together
 woods <- hab_patches_all %>%
   filter(patch_ID %in% c("260977", "142765", "340972", "188539", "370647"))
+woods$Region <- c("Cumbria","North Wales","Suffolk","South Wales","Oxford")
 woods <- st_as_sf(woods)
 
 
@@ -987,6 +988,7 @@ disturb_index_cpt <- array(
   )
 )
 #order = disturb_index, road_density, urban_prox,connectivity
+
 #table1: urban_prox = LOW, connectivity = LOW
 disturb_index_cpt["LOW","LOW","LOW","LOW"] <- 1
 disturb_index_cpt["MED","MED","LOW","LOW"] <- 1
@@ -1326,6 +1328,14 @@ predict_dat<-predict_dat%>%rename(
                               DAMS_MAX=focal.dams.1000.max,
                               connectivity=total_connect_log)
 
+#Make empty columns for the latent (unobserved) variables
+
+predict_dat$NPI <- NA
+predict_dat$NLI <- NA
+predict_dat$disturb_index <- NA
+predict_dat$thermoreg_index <- NA
+predict_dat$damage_risk <- NA
+
 #Ensure all columns are factors, not characters
 predict_dat <- predict_dat %>% mutate_all(as.factor)
 
@@ -1337,11 +1347,35 @@ levels(predict_dat$urban_prox)<-c("LOW", "MED", "HIGH")
 levels(predict_dat$lf_density)<-c("LOW", "MED", "HIGH")
 levels(predict_dat$DAMS_MAX)<-c("LOW", "MED", "HIGH")
 levels(predict_dat$connectivity)<-c("LOW", "MED", "HIGH")
+levels(predict_dat$NPI)<-c("LOW", "MED", "HIGH")
+levels(predict_dat$NLI)<-c("LOW", "MED", "HIGH")
+levels(predict_dat$disturb_index)<-c("LOW", "MED", "HIGH")
+levels(predict_dat$thermoreg_index)<-c("LOW", "MED", "HIGH")
+levels(predict_dat$damage_risk)<-c("LOW","LOW-MED","MED","MED-HIGH","HIGH")
 
-#Predict deer damage from data
-pred = predict(dfit,node = "damage_risk",data = predict_dat,method = "bayes-lw")
+#Predict values for latent variables
+pred_nli = predict(dfit,node="NLI",data=predict_dat, method = "bayes-lw")
+pred_npi = predict(dfit,node="NPI",data=predict_dat, method = "bayes-lw")
+pred_thermoreg = predict(dfit,node="thermoreg_index",data=predict_dat, method = "bayes-lw")
+pred_disturb = predict(dfit,node="disturb_index",data=predict_dat, method = "bayes-lw")
 
-df$pred<-pred
+#fill the columns
+
+predict_dat$NLI <- pred_nli
+predict_dat$NPI <- pred_npi
+predict_dat$thermoreg_index <- pred_thermoreg
+predict_dat$disturb_index <- pred_disturb
+  
+#impute(dfit, data = predict_dat,method = "bayes-lw")
+
+#Predict damage
+pred_damage = predict(dfit,node = "damage_risk",data = predict_dat,method = "bayes-lw")
+
+predict_dat$damage_risk <- pred_damage
+
+#Add damage risk back into spatial dataset
+
+df_categorical$pred_damage <- pred_damage
 ```
 
 ### Draw maps
@@ -1351,9 +1385,35 @@ df$pred<-pred
 #| warning: false
 #| message: false
 
-plot(predict_dat["pred"])
+all_plotted <- plot(df_categorical["pred_damage"])
 
-#Make a plot for each of the 5 selected woodlands to show Matt and Becks
+# Initialize a list to store individual plots
+plots <- list()
+
+# Loop through each area in 'buffered_woodland_12km'
+for (i in 1:nrow(buffered_woods_12km)) {
+  # Extract the i-th area
+  area <- buffered_woods_12km[i, ]
+  
+  # Crop 'df_categorical' to the extent of 'area'
+  cropped_data <- st_intersection(df_categorical, area)
+  
+  # Create a plot for this cropped data
+  plot_title <- paste(buffered_woods_12km$Region[i])
+  plot <- ggplot() +
+    geom_sf(data = cropped_data, aes(fill = pred_damage)) +
+    ggtitle(plot_title) +
+    theme_minimal()  # You can customize the theme and other aspects
+  
+  # Store the plot in the list
+  plots[[i]] <- plot
+}
+
+plots[[1]]
+plots[[2]]
+plots[[3]]
+plots[[4]]
+plots[[5]]
 ```
 
 ### Spare code
