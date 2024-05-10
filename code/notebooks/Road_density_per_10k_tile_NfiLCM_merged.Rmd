@@ -17,11 +17,7 @@ library(sp)
 library(tidyr)
 library(progress)
 
-#Set project directory
-project_dir <- here()
-
-# Set the output directory
-output_dir <- here(project_dir, "outputs")
+here()
 
 bng <- 27700
 ```
@@ -497,6 +493,15 @@ crs(Brd_1000_mosaic) <- bng
 
 writeRaster(Brd_1000_mosaic, here(output_dir, "Brd_1000_mosaic_all_tiles_corrected.tif"), overwrite = TRUE)
 ```
+
+```{r}
+#Add all road rasters together to get main road density raster
+
+all_roads_250 <- a_roads + b_roads + motorways
+
+writeRaster(all_roads_250, here("data/derived-data/2015-spatial-layers/all_roads_250_mosaic_all_tiles_corrected.tif"))
+```
+
 
 #END ####
 
