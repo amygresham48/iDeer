@@ -3,9 +3,9 @@ title: "iDeer Tool Function"
 format: html
 editor: visual
 
-#User selects point on map
-#10km landscape around it
-#Cut all raster to 10km, buffer by 2km for spatial processes (12km total)
+#User selects woodland
+#Metrics are calculated for the focal woodland and all woodlands in surrounding 10km landscape
+#Cut all rasters to 10km, buffer by 2km for spatial processes (12km total)
 #Extract the metrics (roads, urban, connectivity etc)
 #Run the BBN
 #Loop this process for the 5 different landscapes
@@ -468,7 +468,7 @@ write.csv(respoly, here("data/derived-data/Tool-extract-function-test/landscapem
 
 ```{r}
 #WOODLAND PIXEL EXTRACTION ####
-#This will tell us the type of woodland each polygon is, and the amount of different edges inside each one.
+#This will tell us the type of woodland pixels inside each woodland patch (BL, CONIF, MIXED BL, MIXED CONIF and edge/core pixels)
 #This will be our patch quality indicator.
 
 extract_pixel_frequencies <- function(woodland_polygons, land_cover_raster, polygon_id_col = "id") {
@@ -642,7 +642,7 @@ pb <- progress_bar$new(
 
 ```{r}
 
-#remove rows where focal_patch = source_patch
+#Remove rows where focal_patch = source_patch
 Connectivity_table_filt <- Connectivity_table %>%
   filter(focal_patch != source_patch)
 
@@ -1282,7 +1282,7 @@ dfit = custom.fit(net, dist = list(road_density=road_density_cpt,
 
 ```
 
-#### Look at the BN
+#### Plot BN structure
 
 ```{r plot the network}
 #| echo: true
@@ -1293,7 +1293,7 @@ graphviz.plot(net)
 
 ```
 
-#### Parameters
+#### Check Parameters
 
 ```{r look at the dfit}
 #| echo: true
@@ -1308,7 +1308,7 @@ dfit
 #| echo: true
 #| warning: false
 #| message: false
-cpquery(dfit, c(lf_density == "LOW"|DAMS_MAX == "HIGH"), (damage_risk=="LOW"))
+cpquery(dfit, c(lf_density == "LOW"|DAMS_MAX == "HIGH"|landscape_nutritional_score == "HIGH"|connectivity=="LOW"|urban_prox=="LOW"|road_density == "HIGH"|DAMS_MAX=="HIGH"), (damage_risk=="HIGH"))
 
 ```
 
@@ -1360,14 +1360,11 @@ pred_thermoreg = predict(dfit,node="thermoreg_index",data=predict_dat, method = 
 pred_disturb = predict(dfit,node="disturb_index",data=predict_dat, method = "bayes-lw")
 
 #fill the columns
-
 predict_dat$NLI <- pred_nli
 predict_dat$NPI <- pred_npi
 predict_dat$thermoreg_index <- pred_thermoreg
 predict_dat$disturb_index <- pred_disturb
   
-#impute(dfit, data = predict_dat,method = "bayes-lw")
-
 #Predict damage
 pred_damage = predict(dfit,node = "damage_risk",data = predict_dat,method = "bayes-lw")
 
@@ -1409,11 +1406,38 @@ for (i in 1:nrow(buffered_woods_12km)) {
   plots[[i]] <- plot
 }
 
-plots[[1]]
-plots[[2]]
-plots[[3]]
-plots[[4]]
-plots[[5]]
+# Display each plot
+for (plot in plots) {
+  print(plot)  # This will print each plot individually
+}
+
+
+# Save each plot to a separate PDF file with 300 dpi resolution
+
+# Define the target directory
+output_dir <- here("output", "figures")
+
+# Define plot parameters
+dpi <- 300  # Resolution in dots per inch
+width <- 6  # Width of the PDF in inches
+height <- 6  # Height of the PDF in inches
+
+for (i in 1:length(plots)) {
+  plot <- plots[[i]]  # Get the plot from the list
+  filename <- paste0("plot_area_", i, ".pdf")  # Create a unique filename
+  
+  # Save the plot as a 300 dpi PDF
+  ggsave(
+    filename = filename, 
+    plot = plot, 
+    device = "pdf",  # Specify the file format
+    width = width, 
+    height = height, 
+    dpi = dpi  # Set the resolution
+  )
+}
+
+
 ```
 
 ### Spare code
