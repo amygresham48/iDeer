@@ -988,29 +988,48 @@ saveRDS(df, here("data/derived-data/Tool-extract-function-test/bbn_test_df_5_pat
 
 ```{r}
 
+#Replace values in numerical columns with LOW, MED, HIGH
+
+
 df <- readRDS(here("data/derived-data/Tool-extract-function-test/bbn_test_df_5_patches.rds"))
 
 #NEED TO TWEAK THESE CATEGORIES
-#DO WE DO THIS BASED ON THE LOCALISED DATA FOR EACH WOODLAND?
-#OR USING THE RANGE OF THE WHOLE DATASETS?
-#USING LOCALISED DATA WOULD KEEP IT "RELATIVE" TO THE LOCAL LANDSCAPE??
 
-#Replace values in numerical columns with LOW, MED, HIGH
+#Look at distribution of values across national datasets ####
+
+#Roads
+ard_vals <- raster::values(a_roads)
+brd_vals <- raster::values(a_roads)
+motorway_vals <- raster::values(motorways)
+
+ard_vals <- ard_vals[!is.na(ard_vals)]
+brd_vals <- ard_vals[!is.na(brd_vals)]
+motorway_vals <- motorway_vals[!is.na(motorway_vals)]
+
+hist(ard_vals)
+hist(brd_vals)
+hist(motorway_vals)
+hist(df$all_roads_1000)
+
+quantile(df$all_roads_1000, probs = c(0.25, 0.5, 0.75))
+df$all_roads_1000 <- ifelse(df$all_roads_1000 <=2500, "LOW",
+            ifelse(df$all_roads_1000 >2500 & df$all_roads_1000 <= 5000, "MED",
+            ifelse(df$all_roads_1000> 10000, "HIGH", NA)))
+
+
 
 #Linear features
-quantile(df$lf_1000, probs = c(0.25, 0.5,0.75))
-hist(df$lf_1000)
+
+lf_vals <-raster::values(lf)
+lf_vals <- lf_vals[!is.na(lf_vals)]
+hist(lf_vals)
+quantile(lf_vals)
 # Replace numeric values with categorical labels
 df$lf_1000 <- ifelse(df$lf_1000<= 2000, "LOW",
             ifelse(df$lf_1000> 2000 & df$lf_250 <= 4000, "MED",
             ifelse(df$lf_1000> 4000, "HIGH", NA)))
 
-#Roads
-quantile(df$all_roads_1000, probs = c(0.25, 0.5, 0.75))
-hist(df$all_roads_1000)
-df$all_roads_1000 <- ifelse(df$all_roads_1000 == 0, "LOW",
-            ifelse(df$all_roads_1000 >0 & df$all_roads_1000 <= 2000, "MED",
-            ifelse(df$all_roads_1000> 2000, "HIGH", NA)))
+
 
 #nearest urban/suburban
 #Proximity, therefore "HIGH" means closer
