@@ -1387,6 +1387,13 @@ all_plotted <- plot(df_categorical["pred_damage"])
 # Initialize a list to store individual plots
 plots <- list()
 
+library(RColorBrewer)
+#Get last 5 colours from YIOrRd color palette
+# Define the palette name
+palette_name <- "YlOrRd"
+#color_palette <- RColorBrewer::brewer.pal(n = 9, name = palette_name)[3:7]
+color_palette <- c("yellow","#FED976","#FD8D3C", "#FC4E2A", "#E31A1C")
+
 # Loop through each area in 'buffered_woodland_12km'
 for (i in 1:nrow(buffered_woods_12km)) {
   # Extract the i-th area
@@ -1400,6 +1407,7 @@ for (i in 1:nrow(buffered_woods_12km)) {
   plot <- ggplot() +
     geom_sf(data = cropped_data, aes(fill = pred_damage)) +
     ggtitle(plot_title) +
+   scale_fill_manual(values = color_palette, limits = levels(df_categorical$pred_damage)) +  # Color scale from yellow to red
     theme_minimal()  # You can customize the theme and other aspects
   
   # Store the plot in the list
