@@ -31,17 +31,19 @@ CPT <- CPT%>%rename(NPI = Nutritional_Pixel_Index,
                     NLI = Nutritional_Landscape_Index,
                     Damage_Index = Deer_damage_Index)
 
-ggplot(CPT, aes(x = NPI, y = Damage_Index, col = NLI, group = NLI)) +  # Set aesthetics
+jpeg(here("output/figures/BBN_CPT_plot.jpeg"), width = 4500, height = 3500, units = "px", res = 500)
+ggplot(CPT, aes(x = NPI, y = Damage_Index, col = NLI, group = NLI)) +  
   geom_line() +
   geom_point() + 
-  facet_grid(rows = vars(Thermoreg_Index), cols = vars(Disturbance_Index)) +  # Set facets
-  theme_bw() +  # Use a clean theme
-  scale_color_viridis_c(breaks = c(1, 2, 3)) + # Use viridis color scale with specified breaks
-  labs(x = "Patch quality", col = "Landscape quality")+
-  # Create a simple secondary axis for the facets (use the appropriate scale_x function)
+  facet_grid(rows = vars(Thermoreg_Index), cols = vars(Disturbance_Index)) +  
+  theme_bw() +  
+  scale_color_viridis_c(breaks = c(1, 2, 3)) + 
+  labs(x = "Patch quality", col = "Landscape quality") +
   scale_y_continuous(sec.axis = sec_axis(~ . , name = "Thermoreg_Index", breaks = NULL, labels = NULL)) +
-  scale_x_continuous(sec.axis = sec_axis(~ . , name = "Disturbance_Index", breaks = NULL, labels = NULL))
-
+  scale_x_continuous(sec.axis = sec_axis(~ . , name = "Disturbance_Index", breaks = NULL, labels = NULL), 
+                     lim = c(1, 3), 
+                     breaks = seq(1, 3, 1))
+dev.off()
 
 
 #Have a look at disturbance CPT ####
