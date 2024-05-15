@@ -1432,7 +1432,7 @@ height <- 6  # Height of the PDF in inches
 
 for (i in 1:length(plots)) {
   plot <- plots[[i]]  # Get the plot from the list
-  filename <- paste0("plot_area_", i, ".pdf")  # Create a unique filename
+  filename <- file.path(output_dir, paste0("plot_area_", i, ".pdf"))
   
   # Save the plot as a 300 dpi PDF
   ggsave(
