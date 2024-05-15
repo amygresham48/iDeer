@@ -36,7 +36,7 @@ ggplot(CPT, aes(x = NPI, y = Damage_Index, col = NLI, group = NLI)) +  # Set aes
   geom_point() + 
   facet_grid(rows = vars(Thermoreg_Index), cols = vars(Disturbance_Index)) +  # Set facets
   theme_bw() +  # Use a clean theme
-  scale_color_viridis_c() + # Use viridis color scale
+  scale_color_viridis_c(breaks = c(1, 2, 3)) + # Use viridis color scale with specified breaks
   labs(x = "Patch quality", col = "Landscape quality")+
   # Create a simple secondary axis for the facets (use the appropriate scale_x function)
   scale_y_continuous(sec.axis = sec_axis(~ . , name = "Thermoreg_Index", breaks = NULL, labels = NULL)) +
