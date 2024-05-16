@@ -82,8 +82,14 @@ woods.r <- projectRaster(woods.r, map)
 #Draw a random polygon within the wood.r raster
 #This simulates a user drawing a polygon showing their land
 
-#############
+# Choose a random polygon
+random_polygon <- hab_patches_all[sample(1:nrow(hab_patches_all), 1), ]
 
+# Generate random points inside the polygon
+n_points <- 10  # Adjust as needed
+random_points <- st_sample(random_polygon, n_points, type = "random")
+
+random_polygon <- st_voronoi(random_points)
 
 ```
 
