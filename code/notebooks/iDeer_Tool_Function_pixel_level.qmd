@@ -79,24 +79,10 @@ woods.r <- projectRaster(woods.r, map)
 
 ```{r}
 
-#Choose five woodlands within the DIA priority areas to extract data for
-#This is simulating the user selecting a woodland of interest
+#Draw a random polygon within the wood.r raster
+#This simulates a user drawing a polygon showing their land
 
-#Suffolk
-suffolk_wood <- hab_patches_all %>% subset(patch_ID == 260977)
-#Cumbria
-cumbria_wood <- hab_patches_all %>% subset(patch_ID == 142765)
-#South Wales 
-sw_wood <- hab_patches_all %>% subset(patch_ID == 340972)
-#North Wales
-nw_wood <- hab_patches_all %>% subset(patch_ID == 188539)
-#Oxford 
-ox_wood <- hab_patches_all %>% subset(patch_ID == 370647)
-#select all woodlands together
-woods <- hab_patches_all %>%
-  filter(patch_ID %in% c("260977", "142765", "340972", "188539", "370647"))
-woods$Region <- c("Cumbria","North Wales","Suffolk","South Wales","Oxford")
-woods <- st_as_sf(woods)
+#############
 
 
 ```
