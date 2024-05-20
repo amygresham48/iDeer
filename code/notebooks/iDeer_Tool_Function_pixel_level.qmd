@@ -58,7 +58,7 @@ uk10ew <- st_read(here("data/derived-data/10k_tiles_EW.shp"))
 #This is the focal.max.dams.1000.tif layer that has been cropped and masked to the 10km BNG England-Wales tiles using ArcGIS
 dams <- raster(here("data/derived-data/2015-spatial-layers/Max_DAMS/max_dams_1kEW.tif"))
 crs(dams) <- bng
-
+#ggggrrr
 
 #Read in woodland polygon dataset
 #Combined NFI 2015 and LCM 2015 woodlands
