@@ -77,19 +77,28 @@ woods.r <- projectRaster(woods.r, map)
 
 ### Choose woodlands
 
+NEED TO CHANGE THIS TO BE ABLE TO DRAW A POLYGON INSIDE WOODLANDS - USER CAN SELECT THEIR LAND PARCEL
+
 ```{r}
 
-#Draw a random polygon within the wood.r raster
-#This simulates a user drawing a polygon showing their land
+#Choose five woodlands within the DIA priority areas to extract data for
+#This is simulating the user selecting a woodland of interest
 
-# Choose a random polygon
-random_polygon <- hab_patches_all[sample(1:nrow(hab_patches_all), 1), ]
-
-# Generate random points inside the polygon
-n_points <- 10  # Adjust as needed
-random_points <- st_sample(random_polygon, n_points, type = "random")
-
-random_polygon <- st_voronoi(random_points)
+#Suffolk
+suffolk_wood <- hab_patches_all %>% subset(patch_ID == 260977)
+#Cumbria
+cumbria_wood <- hab_patches_all %>% subset(patch_ID == 142765)
+#South Wales 
+sw_wood <- hab_patches_all %>% subset(patch_ID == 340972)
+#North Wales
+nw_wood <- hab_patches_all %>% subset(patch_ID == 188539)
+#Oxford 
+ox_wood <- hab_patches_all %>% subset(patch_ID == 370647)
+#select all woodlands together
+woods <- hab_patches_all %>%
+  filter(patch_ID %in% c("260977", "142765", "340972", "188539", "370647"))
+woods$Region <- c("Cumbria","North Wales","Suffolk","South Wales","Oxford")
+woods <- st_as_sf(woods)
 
 ```
 
@@ -131,47 +140,36 @@ pb <- progress_bar$new(
   # List to store extracted data
   extraction_results <- list()
   
-  # Loop through each buffered buffer and crop all rasters
-for (i in seq_along(buffered_woods_10km$geometry)) {
-  buffer_geometry <- buffered_woods_10km$geometry[i]
-      pb$tick()  # Update the progress bar
+  # Loop through each buffer and crop all rasters
+  for (i in seq_along(buffered_woods_10km$geometry)) {
+    buffer_geometry <- buffered_woods_10km$geometry[i]
+    pb$tick()  # Update the progress bar
 
-  # Convert buffer geometry to a spatial object that raster can use
-  buffer_extent <- as(extent(st_bbox(buffer_geometry)), "Extent")
-  
-  # Crop raster to the current buffer extent
-  nearest_urban_cropped <- crop(nearest_urban, buffer_extent)
-  
-  #Convert to spatraster
-  nearest_urban_spatraster <- terra::rast(nearest_urban_cropped)
-  
-  #Filter for woodland patches that intersect buffer
-  
-  woods_buffer <- st_filter(woodlands, buffered_woods_10km[i, ], .predicate = st_intersects)
-  
-    # Extract data for all woodland polygons within the current buffer
-    extraction <- terra::extract(nearest_urban_spatraster, vect(woods_buffer), fun = mean, na.rm = TRUE)
+    # Convert buffer geometry to a spatial object that raster can use
+    buffer_extent <- as(extent(st_bbox(buffer_geometry)), "Extent")
     
-    #cbind to the original woods_buffer columns
+    # Crop raster to the current buffer extent
+    nearest_urban_cropped <- crop(raster_layer, buffer_extent)
     
-    extraction_cbind <- cbind(woods_buffer, extraction)
+    # Filter for woodland patches that intersect buffer
+    woods_buffer <- st_filter(woodlands, buffered_woods_10km[i, ], .predicate = st_intersects)
+
+    # Convert woods_buffer to a spatial object that raster can use for masking
+    woods_buffer_sp <- as(woods_buffer, "Spatial")
+
+    # Mask the cropped raster with the woodland polygons
+    nearest_urban_masked <- mask(nearest_urban_cropped, woods_buffer_sp)
     
-    # Store the extracted data in the results list
-    extraction_results[[paste("Buffer", i)]] <- extraction_cbind
+    # Store the masked raster in the results list
+    extraction_results[[i]] <- nearest_urban_masked
   }
   
-  # Combine all extracted data into a single data frame
-  nearest_urban_extraction_results <- bind_rows(extraction_results)  # Combines all results into one data frame
-  
-  return(nearest_urban_extraction_results) # Return the combined data frame
+  return(extraction_results)
 }
 
 nearest_urban_extraction <- extract_urban_rasters(buffered_woods_10km, nearest_urban, hab_patches_all)
 
-ggplot(nearest_urban_extraction) +
-  geom_sf(aes(fill = nearest_urban_raster_2015_all_tiles_corrected))
-
-write.csv(nearest_urban_extraction, here("data/derived-data/Tool-extract-function-test/nearest_urban_extraction.csv"))
+saveRDS(nearest_urban_extraction, here("data/derived-data/Tool-extract-function-test/nearest_urban_extraction_raster.rds"))
 ```
 
 ```{r}
@@ -200,36 +198,26 @@ for (i in seq_along(buffered_woods_10km$geometry)) {
   # Crop raster to the current buffer extent
   nearest_suburban_cropped <- crop(nearest_suburb, buffer_extent)
   
-  #Convert to spatraster
-  nearest_suburban_spatraster <- terra::rast(nearest_suburban_cropped)
-  
   #Filter for woodland patches that intersect buffer
   
   woods_buffer <- st_filter(woodlands, buffered_woods_10km[i, ], .predicate = st_intersects)
   
-    # Extract data for all woodland polygons within the current buffer
-    extraction <- terra::extract(nearest_suburban_spatraster, vect(woods_buffer), fun = mean, na.rm = TRUE)
+    # Convert woods_buffer to a spatial object that raster can use for masking
+    woods_buffer_sp <- as(woods_buffer, "Spatial")
+
+    # Mask the cropped raster with the woodland polygons
+    nearest_suburban_masked <- mask(nearest_suburban_cropped, woods_buffer_sp)
     
-    #cbind to the original woods_buffer columns
-    
-    extraction_cbind <- cbind(woods_buffer, extraction)
-    
-    # Store the extracted data in the results list
-    extraction_results[[paste("Buffer", i)]] <- extraction_cbind
+    # Store the masked raster in the results list
+    extraction_results[[i]] <- nearest_suburban_masked
   }
   
-  # Combine all extracted data into a single data frame
-  nearest_suburban_extraction_results <- bind_rows(extraction_results)  # Combines all results into one data frame
-  
-  return(nearest_suburban_extraction_results) # Return the combined data frame
+  return(extraction_results)
 }
 
 nearest_suburban_extraction <- extract_suburban_rasters(buffered_woods_10km, nearest_suburban, hab_patches_all)
 
-ggplot(nearest_suburban_extraction) +
-  geom_sf(aes(fill = nearest_suburban_raster_2015_all_tiles_corrected))
-
-write.csv(nearest_suburban_extraction, here("data/derived-data/Tool-extract-function-test/nearest_suburban_extraction.csv"))
+saveRDS(nearest_suburban_extraction, here("data/derived-data/Tool-extract-function-test/nearest_suburban_extraction_raster.rds"))
 ```
 
 ```{r}
@@ -258,36 +246,26 @@ for (i in seq_along(buffered_woods_10km$geometry)) {
   # Crop raster to the current buffer extent
   dams_cropped <- crop(dams, buffer_extent)
   
-  #Convert to spatraster
-  dams_spatraster <- terra::rast(dams_cropped)
-  
   #Filter for woodland patches that intersect buffer
   
   woods_buffer <- st_filter(woodlands, buffered_woods_10km[i, ], .predicate = st_intersects)
   
-    # Extract data for all woodland polygons within the current buffer
-    extraction <- terra::extract(dams_spatraster, vect(woods_buffer), fun = mean, na.rm = TRUE)
+        # Convert woods_buffer to a spatial object that raster can use for masking
+    woods_buffer_sp <- as(woods_buffer, "Spatial")
+
+    # Mask the cropped raster with the woodland polygons
+    dams_masked <- mask(dams_cropped, woods_buffer_sp)
     
-    #cbind to the original woods_buffer columns
-    
-    extraction_cbind <- cbind(woods_buffer, extraction)
-    
-    # Store the extracted data in the results list
-    extraction_results[[paste("Buffer", i)]] <- extraction_cbind
+    # Store the masked raster in the results list
+    extraction_results[[i]] <- dams_masked
   }
   
-  # Combine all extracted data into a single data frame
- dams_extraction_results <- bind_rows(extraction_results)  # Combines all results into one data frame
-  
-  return(dams_extraction_results) # Return the combined data frame
+  return(extraction_results)
 }
 
 dams_extraction <- extract_dams_raster(buffered_woods_10km, dams, hab_patches_all)
 
-ggplot(dams_extraction) +
-  geom_sf(aes(fill = focal.dams.1000.max))
-
-write.csv(dams_extraction, here("data/derived-data/Tool-extract-function-test/DAMS_MAX_extraction_1000.csv"))
+saveRDS(dams_extraction, here("data/derived-data/Tool-extract-function-test/DAMS_MAX_extraction_1000_raster.rds"))
 ```
 
 ```{r}
@@ -316,36 +294,26 @@ for (i in seq_along(buffered_woods_10km$geometry)) {
   # Crop raster to the current buffer extent
   lf_cropped <- crop(lf, buffer_extent)
   
-  #Convert to spatraster
-  lf_spatraster <- terra::rast(lf_cropped)
-  
   #Filter for woodland patches that intersect buffer
   
   woods_buffer <- st_filter(woodlands, buffered_woods_10km[i, ], .predicate = st_intersects)
   
-    # Extract data for all woodland polygons within the current buffer
-    extraction <- terra::extract(lf_spatraster, vect(woods_buffer), fun = mean, na.rm = TRUE)
+        # Convert woods_buffer to a spatial object that raster can use for masking
+    woods_buffer_sp <- as(woods_buffer, "Spatial")
+
+    # Mask the cropped raster with the woodland polygons
+    lf_masked <- mask(lf_cropped, woods_buffer_sp)
     
-    #cbind to the original woods_buffer columns
-    
-    extraction_cbind <- cbind(woods_buffer, extraction)
-    
-    # Store the extracted data in the results list
-    extraction_results[[paste("Buffer", i)]] <- extraction_cbind
+    # Store the masked raster in the results list
+    extraction_results[[i]] <- lf_masked
   }
   
-  # Combine all extracted data into a single data frame
-lf_extraction_results <- bind_rows(extraction_results)  # Combines all results into one data frame
-  
-  return(lf_extraction_results) # Return the combined data frame
+  return(extraction_results)
 }
 
 lf_extraction <- extract_lf_raster(buffered_woods_10km, lf, hab_patches_all)
 
-ggplot(lf_extraction) +
-  geom_sf(aes(fill = lf_1000_mosaic_all_tiles_corrected))
-
-write.csv(lf_extraction, here("data/derived-data/Tool-extract-function-test/linear_feature_extraction_1000.csv"))
+saveRDS(lf_extraction, here("data/derived-data/Tool-extract-function-test/linear_feature_extraction_1000_raster.rds"))
 ```
 
 ```{r}
@@ -353,66 +321,61 @@ write.csv(lf_extraction, here("data/derived-data/Tool-extract-function-test/line
 extract_road_raster <- function(buffered_woods_10km, raster_layer, woodlands) {
   
   # Initialize progress bar
-pb <- progress_bar$new(
-  format = "[:bar] :current/:total (:percent) in :elapsed, eta: :eta",
-  total = nrow(buffered_woods_10km),
-  clear = FALSE,   # Keep the progress bar on the screen
-  width = 60
-)
+  pb <- progress_bar$new(
+    format = "[:bar] :current/:total (:percent) in :elapsed, eta: :eta",
+    total = nrow(buffered_woods_10km),
+    clear = FALSE,   # Keep the progress bar on the screen
+    width = 60
+  )
   
   # List to store extracted data
   extraction_results <- list()
   
   # Loop through each buffered buffer and crop all rasters
-for (i in seq_along(buffered_woods_10km$geometry)) {
-  buffer_geometry <- buffered_woods_10km$geometry[i]
-      pb$tick()  # Update the progress bar
+  for (i in seq_along(buffered_woods_10km$geometry)) {
+    buffer_geometry <- buffered_woods_10km$geometry[i]
+    pb$tick()  # Update the progress bar
 
-  # Convert buffer geometry to a spatial object that raster can use
-  buffer_extent <- as(extent(st_bbox(buffer_geometry)), "Extent")
-  
-  # Crop raster to the current buffer extent
-  roads_cropped <- crop(all_roads, buffer_extent)
-  
-  #Convert to spatraster
-  roads_spatraster <- terra::rast(roads_cropped)
-  
-  #Filter for woodland patches that intersect buffer
-  
-  woods_buffer <- st_filter(woodlands, buffered_woods_10km[i, ], .predicate = st_intersects)
-  
-    # Extract data for all woodland polygons within the current buffer
-    extraction <- terra::extract(roads_spatraster, vect(woods_buffer), fun = mean, na.rm = TRUE)
+    # Convert buffer geometry to a spatial object that raster can use
+    buffer_extent <- as(extent(st_bbox(buffer_geometry)), "Extent")
     
-    #cbind to the original woods_buffer columns
+    # Extract raster cell indices (pixel IDs) and values
+    cell_indices <- cellsFromExtent(raster_layer, extent(buffer_extent))
+    pixel_values <- extract(raster_layer, cell_indices)
     
-    extraction_cbind <- cbind(woods_buffer, extraction)
+    # Create a data frame with the extracted values and cell indices
+    vals <- data.frame(pixel_ID = cell_indices, pixel_class = pixel_values)
     
-    # Store the extracted data in the results list
-    extraction_results[[paste("Buffer", i)]] <- extraction_cbind
+    # Add patch ID
+    vals$patch_ID <- buffered_woods_10km$buffer_ID[i]
+    
+    # Filter out NA values
+    vals <- vals[!is.na(vals$pixel_class), ]
+    
+    # Append to the results list
+    extraction_results[[i]] <- vals
   }
   
-  # Combine all extracted data into a single data frame
-road_extraction_results <- bind_rows(extraction_results)  # Combines all results into one data frame
+  # Combine all results into a single dataframe
+  result_df <- bind_rows(extraction_results)
   
-  return(road_extraction_results) # Return the combined data frame
+  return(result_df)
 }
 
+# Use the function and save the results
 road_extraction <- extract_road_raster(buffered_woods_10km, all_roads, hab_patches_all)
 
-ggplot(road_extraction) +
-  geom_sf(aes(fill = all_roads_250_mosaic_all_tiles_corrected))
+write.csv(road_extraction, here("data/derived-data/Tool-extract-function-test/road_density_extraction_1000.csv"))
 
-write.csv(road_extraction, here("data/derived-data/Tool-extract-function-test/all_roads_extraction_250.csv"))
+#saveRDS(road_extraction, here("data/derived-data/Tool-extract-function-test/all_roads_extraction_250_raster.rds"))
 ```
 
 ```{r}
 #LAND COVER EXTRACTION FOR 1km AROUND WOODLANDS ####
-#Function written by Becks
 
-  polyFragStats <- function(POLY, veg) {
+polyFragStats <- function(POLY, veg, buffer_width = 1000) {
   # Create a buffer around the polygon
-  buffer_poly <- buffer(POLY, width = 1000, dissolve = TRUE)
+  buffer_poly <- buffer(POLY, width = buffer_width, dissolve = TRUE)
   
   # Cut out the original polygon from the buffer
   buffer_area <- erase(buffer_poly, POLY)
@@ -423,27 +386,28 @@ write.csv(road_extraction, here("data/derived-data/Tool-extract-function-test/al
   # Mask the cropped land cover map
   fmask <- mask(fcrop, buffer_area)
   
-  # Extract class statistics
-  res <- raster::extract(fmask, buffer_area, method = "simple")
+  # Extract raster cell indices (pixel IDs) and values
+  cell_indices <- cellsFromExtent(veg, extent(buffer_area))
+  pixel_values <- extract(veg, cell_indices)
   
-  # Convert the results to a data frame and calculate statistics
-  res <- as.data.frame(table(res))
-  res$patch_ID <- POLY$patch_ID
+  # Create a data frame with the extracted values and cell indices
+  vals <- data.frame(pixel_ID = cell_indices, pixel_class = pixel_values)
   
-  res <- res %>%
-    mutate(total_pix = as.numeric(sum(Freq)),
-           class = res) %>%
-    dplyr::select(patch_ID, class, Freq, total_pix) %>%
-    mutate(perc_cov = Freq * 100 / total_pix, buff_area = area(buffer_area))
+  # Add patch ID
+  vals$patch_ID <- POLY$patch_ID
   
-  return(res)
+  # Filter out NA values
+  vals <- vals[!is.na(vals$pixel_class), ]
+  
+  return(vals)
 }
 
-#Filter for woodland patches that intersect buffers
+# Filter for woodland patches that intersect buffers
 woods_buffers <- st_filter(hab_patches_all, buffered_woods_10km, .predicate = st_intersects)
 
-POLY=as(woods_buffers, "Spatial")
-veg = map
+# Convert to spatial object
+POLY <- as(woods_buffers[1:50,], "Spatial")
+veg <- map
 
 # Initialize progress bar
 pb <- progress_bar$new(
@@ -453,88 +417,84 @@ pb <- progress_bar$new(
   width = 60
 )
 
+# Process each polygon and collect results
 respoly <- ldply(1:length(POLY), function(i) {  # for each polygon
   pb$tick()  # Update the progress bar
-  out <- polyFragStats(POLY[i,],  veg=veg) # compute fragstats metrics 
+  out <- polyFragStats(POLY[i,], veg = veg)  # compute metrics
   out$buffer_size <- "b1000"
   return(out)
-})  
+})
 
-respoly
-
-write.csv(respoly, here("data/derived-data/Tool-extract-function-test/landscapemetrics_1000.csv"))
+write.csv(respoly, here("data/derived-data/Tool-extract-function-test/landscapemetrics_1000_pixelID.csv"))
 
 ```
 
 ```{r}
 #WOODLAND PIXEL EXTRACTION ####
-#This will tell us the type of woodland pixels inside each woodland patch (BL, CONIF, MIXED BL, MIXED CONIF and edge/core pixels)
-#This will be our patch quality indicator.
 
+# Updated function
 extract_pixel_frequencies <- function(woodland_polygons, land_cover_raster, polygon_id_col = "id") {
-
+  
   # Initialize an empty list to store results
   results_list <- list()
   
-   # Initialize a progress bar
+  # Initialize a progress bar
   pb <- progress_bar$new(
     format = "[:bar] :current/:total (:percent) in :elapsed, eta: :eta",
     total = nrow(woodland_polygons),
     clear = FALSE,
     width = 60
   )
+  
+  # Loop through each woodland polygon
+  for (i in seq_along(woodland_polygons$geometry)) {
+    polygon_geometry <- woodland_polygons$geometry[i]
+    pb$tick()  # Update the progress bar
 
-  # Loop over each woodland polygon to extract raster values
-  for (i in 1:nrow(woodland_polygons)) {
-    # Update the progress bar
-    pb$tick()  # This indicates the progress as you loop through the polygons
+    # Convert polygon geometry to a spatial object that raster can use
+    polygon_extent <- as(extent(st_bbox(polygon_geometry)), "Extent")
     
-    # Get the current polygon
-    polygon <- woodland_polygons[i, ]
-
-    # Convert to 'Spatial' for compatibility with 'raster' operations
-    polygon_sp <- as(polygon, "Spatial")
-
-    # Crop the raster to the polygon's extent and mask to the polygon
-    raster_cropped <- crop(land_cover_raster, polygon_sp)
-    raster_masked <- mask(raster_cropped, polygon_sp)
-
+    # Crop raster to the current polygon extent
+    lcm_cropped <- crop(land_cover_raster, polygon_extent)
+    
+    # Mask the cropped raster with the woodland polygon
+    lcm_masked <- mask(lcm_cropped, as(woodland_polygons[i, ], "Spatial"))
+    
     # Extract raster values within the polygon
-    pixel_values <- extract(raster_masked, polygon_sp)
-
-    # Flatten the list of extracted values (in case there are multiple parts)
-    pixel_values <- unlist(pixel_values)
-
-    # Count the frequency of each unique raster pixel value
-    value_counts <- as.data.frame(table(pixel_values))
-    value_counts$pixel_values <- as.character(value_counts$pixel_values)
-    value_counts$pixel_values <- as.numeric(value_counts$pixel_values)
-
-    # Add additional information (like polygon ID)
-    value_counts <- value_counts %>%
-      mutate(polygon_id = polygon[[polygon_id_col]],  # Use specified column for ID
-             percentage = Freq / sum(Freq) * 100)  # Calculate percentage coverage
-
-    # Store the results
-    results_list[[i]] <- value_counts
+    cell_indices <- cellsFromExtent(land_cover_raster, extent(lcm_masked))
+    pixel_values <- extract(land_cover_raster, cell_indices)
+    
+    # Create a data frame with the extracted values and cell indices
+    vals <- data.frame(pixel_ID = cell_indices, pixel_class = pixel_values)
+    
+    # Add patch ID
+    vals$patch_ID <- woodland_polygons[[polygon_id_col]][i]
+    
+    # Filter out NA values
+    vals <- vals[!is.na(vals$pixel_class), ]
+    
+    # Append to the results list
+    results_list[[i]] <- vals
   }
-
-  # Combine all results into a single data frame
-  final_results <- bind_rows(results_list)
-
-  return(final_results)
+  
+  # Combine all results into a single dataframe
+  result_df <- bind_rows(results_list)
+  
+  return(result_df)
 }
 
-#Filter for woodland patches that intersect buffers
+# Filter for woodland patches that intersect buffers
 woods_buffers <- st_filter(hab_patches_all, buffered_woods_10km, .predicate = st_intersects)
+woods_buffers <- woods_buffers[1:50,]
 
+# Use the function and save the results
 pixel_frequencies <- extract_pixel_frequencies(woods_buffers, map, polygon_id_col = "patch_ID")
 #Round all values to 3 decimal place
 #pixel_freq <- pixel_frequencies
 #pixel_freq$extracted_values_flat<-as.numeric(pixel_freq$extracted_values_flat)
 #pixel_freq <- pixel_freq%>%mutate_if(is.numeric, ~ round(., 3))
 
-write.csv(pixel_frequencies, here("data/derived-data/Tool-extract-function-test/woodland_patch_pixel_types.csv"))
+write.csv(pixel_frequencies, here("data/derived-data/Tool-extract-function-test/woodland_patch_pixelID_types.csv"))
 ```
 
 ### Calculate connectivity for every woodland inside the 10km buffers
@@ -739,7 +699,7 @@ lc.edge.types.NLI <- left_join(woods_buffers, weighted_average_score_buffer, by 
 
 ```
 
-#### Calculate Nutritional Patch Composition
+#### Assign pixel quality values
 
 ```{r}
 #CALCULATE NUTRITIONAL PATCH QUALITY ####
