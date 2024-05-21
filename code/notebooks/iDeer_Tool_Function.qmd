@@ -691,6 +691,8 @@ write.csv(incoming_connectivity_sum, here("data/derived-data/Tool-extract-functi
 ```{r}
 #CALCULATE NUTRITIONAL LANDSCAPE QUALITY ####
 
+respoly<-read.csv(here("data/derived-data/Tool-extract-function-test/landscapemetrics_1000.csv"))
+
 lcm <- respoly
 #Filter out zeros, water, rock and sediment
 #lcm <- lcm %>% filter(!class %in% c(0,12,13,14,15,16,17,18))
@@ -703,12 +705,22 @@ lcm <- respoly
 #Water scores added in to prevent loss of woodland edge pixels
 #Water edge pixels receive one point higher than regular woodland
 #Still an edge so will be highly nutritious
-edge.val.types <- read.csv(file.path(here("data/raw-data/Expert_derived_quality_ranks_edge_types_with_water.csv")))
-edge.val.types$class <- as.factor(edge.val.types$class)
+edge.val.types <- read.csv(file.path(here("data/raw-data/Expert_Qnaire/Expert_derived_quality_ranks_edge_types_with_water.csv")))
+edge.val.types <- edge.val.types%>%rename(lc_class=class)
+
+#Check edge.val.types$class and pcm$class match in format
+unique(edge.val.types$lc_class)
+class(edge.val.types$lc_class)
+edge.val.types <- edge.val.types%>%arrange(lc_class)
+unique(edge.val.types$class)
+
+class(lcm$lc_class)
+lcm <-lcm%>%arrange(lc_class)
+unique(lcm$lc_class)
 
 #Stitch the quality scores into the lcm dataset
 
-lc.edge.types <- lcm %>% left_join(edge.val.types, by = "class") %>%
+lc.edge.types <- lcm %>% left_join(edge.val.types, by = "lc_class") %>%
                                           filter(!is.na(Land.cover))
 
 #Calculate Nutritional Landscape Index (NLI) for separate edges and lc ####
