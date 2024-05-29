@@ -25,6 +25,7 @@ library(progress)
 library(bnlearn)
 library(RColorBrewer)
 library(rasterVis)
+library(ggmap)
 
 here()
 ```
@@ -1415,6 +1416,10 @@ saveRDS(df_categorical, file = file.path(here("data/derived-data/Tool-extract-fu
 #| warning: false
 #| message: false
 
+#Get satellite imagery
+
+qmap('L69 3GP', zoom = 16, maptype = 'satellite')
+
 df_categorical<-readRDS(file = file.path(here("data/derived-data/Tool-extract-function-test/predicted_data_categorical_pixel_level.rds")))
 
 # Make sf object
@@ -1456,7 +1461,7 @@ plot_title<- buffered_woods_12km$Region[i]
 
 plot <- ggplot(cropped_df) +
   geom_raster(aes(x = x, y = y, fill = value)) +
-  scale_fill_manual(values = color_palette, name = "Damage Level") +
+  scale_fill_manual(values = color_palette, name = "Deer Impact Risk") +
   theme_minimal() +
   coord_equal() +
   labs(title = plot_title,
