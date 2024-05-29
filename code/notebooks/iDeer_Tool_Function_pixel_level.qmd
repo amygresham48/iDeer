@@ -23,6 +23,9 @@ library(terra)
 library(here)
 library(progress)
 library(bnlearn)
+library(RColorBrewer)
+library(rasterVis)
+
 here()
 ```
 
@@ -109,7 +112,7 @@ NEED TO CHANGE THIS TO BE ABLE TO DRAW A POLYGON INSIDE WOODLANDS SO THAT USER C
 #select all woodlands together
 woods <- wood_polys %>%
   filter(patch_ID %in% c("213709", "377707", "455598", "188539", "858585"))
-woods$Region <- c("Cumbria","North Wales","Suffolk","843485","Oxford")
+woods$Region <- c("North West","Cumbria","North Wales","Suffolk","Oxford")
 woods <- st_as_sf(woods)
 
 ```
@@ -126,9 +129,19 @@ buffered_woods_12km <- st_as_sf(st_buffer(woods, dist = 12000))  # dist = 10km i
 st_crs(buffered_woods_12km) <- bng
 st_crs(buffered_woods_10km) <- bng
 
+region_colors <- c("Cumbria" = "red","North Wales" = "blue",
+                   "Suffolk"="magenta","North West"="yellow","Oxford"="orange")
+buffered_woods_10km$color <- region_colors[buffered_woods_10km$Region]
+
+# Plot the first geometry with no color
+plot(st_geometry(buffered_woods_12km), col = NA, main = "Buffered Woods")
+
+# Plot the second geometry with colors based on regions
+plot(st_geometry(buffered_woods_10km), col = buffered_woods_10km$color, add = TRUE)
+
 #Check points, woodlands buffers line up
 plot(st_geometry(buffered_woods_12km), col = NA)
-plot(st_geometry(buffered_woods_10km), col = "yellow", add = TRUE)
+plot(st_geometry(buffered_woods_10km), col = buffered_woods_10km$color, add = TRUE)
 plot(st_geometry(woods), col = "black", add = TRUE)
 #plot(st_geometry(wood_points), add = TRUE, col = "red")
 
@@ -958,6 +971,11 @@ df <- df%>%dplyr::select(-c("total_connect"))
 
 df_categorical <- df
 
+#Remove NAs from pixel-level measured variables
+#NEED TO FIX THIS?? Why am I getting NAs?
+
+df_categorical <- na.omit(df_categorical)
+
 saveRDS(df_categorical, file = file.path(here("data/derived-data/Tool-extract-function-test/tool_test_extracted_data_categorical_pixel_level.rds")))
 
 ```
@@ -1325,7 +1343,7 @@ cpquery(dfit, c(lf_density == "LOW"|DAMS_MAX == "HIGH"|landscape_nutritional_sco
 
 ```{r}
 predict_dat <- df_categorical %>%st_drop_geometry() %>% #drop geometry
-   mutate(across(where(is.character), toupper)) %>% #convert to upper
+   mutate(across(where(is.character), toupper)) %>% #convert characters to upper case
    dplyr::select(-c("patch_ID","class","Land.cover","scale","pixel_ID","x","y"))
 #Ensure variable names match those in BBN
 predict_dat<-predict_dat%>%rename(
@@ -1362,6 +1380,9 @@ levels(predict_dat$disturb_index)<-c("LOW", "MED", "HIGH")
 levels(predict_dat$thermoreg_index)<-c("LOW", "MED", "HIGH")
 levels(predict_dat$damage_risk)<-c("LOW","LOW-MED","MED","MED-HIGH","HIGH")
 
+#Ensure predict_data is a data.frame
+predict_dat <- as.data.frame(predict_dat)
+
 #Predict values for latent variables
 pred_nli = predict(dfit,node="NLI",data=predict_dat, method = "bayes-lw")
 pred_npi = predict(dfit,node="NPI",data=predict_dat, method = "bayes-lw")
@@ -1382,6 +1403,9 @@ predict_dat$damage_risk <- pred_damage
 #Add damage risk back into spatial dataset
 
 df_categorical$pred_damage <- pred_damage
+
+#save
+saveRDS(df_categorical, file = file.path(here("data/derived-data/Tool-extract-function-test/predicted_data_categorical_pixel_level.rds")))
 ```
 
 ### Draw maps
@@ -1391,48 +1415,62 @@ df_categorical$pred_damage <- pred_damage
 #| warning: false
 #| message: false
 
-all_plotted <- plot(df_categorical["pred_damage"])
+df_categorical<-readRDS(file = file.path(here("data/derived-data/Tool-extract-function-test/predicted_data_categorical_pixel_level.rds")))
+
+# Make sf object
+df_sf <- st_as_sf(df_categorical, coords = c("x", "y"), crs = st_crs(bng))
+
+#Rasterize
+# Define the value mapping for pred_damage
+damage_values <- c("LOW" = 1, "LOW-MED" = 2, "MED" = 3, "MED-HIGH" = 4, "HIGH" = 5)
+df_sf$value <- damage_values[df_sf$pred_damage]
+
+raster_data <- stars::st_rasterize(df_sf %>% dplyr::select(value,geometry))
+
+# Get last 5 colours from YIOrRd color palette
+color_palette <- c("yellow", "#FED976", "#FD8D3C", "#FC4E2A", "#E31A1C")
 
 # Initialize a list to store individual plots
 plots <- list()
 
-library(RColorBrewer)
-#Get last 5 colours from YIOrRd color palette
-# Define the palette name
-palette_name <- "YlOrRd"
-#color_palette <- RColorBrewer::brewer.pal(n = 9, name = palette_name)[3:7]
-color_palette <- c("yellow","#FED976","#FD8D3C", "#FC4E2A", "#E31A1C")
-
-# Loop through each area in 'buffered_woodland_12km'
+# Loop through each area in 'buffered_woods_10km'
 for (i in 1:nrow(buffered_woods_12km)) {
   # Extract the i-th area
   area <- buffered_woods_12km[i, ]
   
-  # Crop 'df_categorical' to the extent of 'area'
-  cropped_data <- st_intersection(df_categorical, area)
+cropped_data <- st_crop(raster_data, area)
   
-  # Create a plot for this cropped data
-  plot_title <- paste(buffered_woods_12km$Region[i])
-  plot <- ggplot() +
-    geom_sf(data = cropped_data, aes(fill = pred_damage)) +
-    ggtitle(plot_title) +
-   scale_fill_manual(values = color_palette, limits = levels(df_categorical$pred_damage)) +  # Color scale from yellow to red
-    theme_minimal()  # You can customize the theme and other aspects
+  # Convert the cropped data to a data frame for ggplot2
+cropped_df <- as.data.frame(cropped_data, xy = TRUE)
   
+  # Create a factor for the damage categories
+cropped_df$value <- factor(cropped_df$value, 
+                           levels = damage_values,
+                           labels = names(damage_values))
+#Replace NAs with 0
+cropped_df <- cropped_df %>%
+  filter(!is.na(value))
+
+# Plot using ggplot2
+plot_title<- buffered_woods_12km$Region[i]
+
+plot <- ggplot(cropped_df) +
+  geom_raster(aes(x = x, y = y, fill = value)) +
+  scale_fill_manual(values = color_palette, name = "Damage Level") +
+  theme_minimal() +
+  coord_equal() +
+  labs(title = plot_title,
+       x = "Longitude",
+       y = "Latitude")
+
   # Store the plot in the list
   plots[[i]] <- plot
 }
 
-# Display each plot
-for (plot in plots) {
-  print(plot)  # This will print each plot individually
-}
-
-
 # Save each plot to a separate PDF file with 300 dpi resolution
 
 # Define the target directory
-output_dir <- here("output", "figures")
+output_dir <- here("output/figures")
 
 # Define plot parameters
 dpi <- 300  # Resolution in dots per inch
@@ -1441,7 +1479,7 @@ height <- 6  # Height of the PDF in inches
 
 for (i in 1:length(plots)) {
   plot <- plots[[i]]  # Get the plot from the list
-  filename <- file.path(output_dir, paste0("plot_area_", i, ".pdf"))
+  filename <- file.path(output_dir, paste0("25m_res_map_", i, ".pdf"))
   
   # Save the plot as a 300 dpi PDF
   ggsave(
