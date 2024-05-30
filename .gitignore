@@ -3,6 +3,7 @@
 .Rapp.history
 data/*
 output/*
+.RDataTmp*
 code/package citations
 # Session Data files
 .RData
