@@ -112,15 +112,15 @@ NEED TO CHANGE THIS TO BE ABLE TO DRAW A POLYGON INSIDE WOODLANDS SO THAT USER C
 #ox_wood <- hab_patches_all %>% subset(patch_ID == 370647)
 
 #select all woodlands together
-woods <- wood_polys %>%
-  filter(patch_ID %in% c("213709", "377707", "455598", "188539", "858585"))
-woods$Region <- c("North West","Cumbria","North Wales","Suffolk","Oxford")
-woods <- st_as_sf(woods)
+#woods <- wood_polys %>%
+#  filter(patch_ID %in% c("213709", "377707", "455598", "188539", "858585"))
+#woods$Region <- c("North West","Cumbria","North Wales","Suffolk","Oxford")
+#woods <- st_as_sf(woods)
 
 #Just do one wood for now
 
 woods <- wood_polys %>% filter(patch_ID %in% c("455598"))
-woods$Region <- c("North Wales")
+woods$Region <- c("Suffolk")
 woods <- st_as_sf(woods)
 
 
@@ -952,7 +952,7 @@ hist(edge.val.types$Forage_Q)
 
 df$Forage_Q <- ifelse(df$Forage_Q <= 5, "LOW",
                           ifelse(df$Forage_Q >5 & df$Forage_Q <=10, "MED",
-                           ifelse(df$Forage_Q> 10, "HIGH",NA)))
+                           ifelse(df$Forage_Q>10, "HIGH",NA)))
 
 #connectivity
 hist(df$total_connect)
@@ -1506,60 +1506,98 @@ for (i in 1:length(plots)) {
 
 ```
 
-### Spare code
-
 ```{r}
-# Generate random points within each woodland
-#This would simulate the user picking a point on a map rather than a polygon
-#random_points_list <- lapply(woods$geometry, generate_random_point)  
-#random_points <- as.data.frame(random_points_list)
-#random_points <- random_points %>%
-#  pivot_longer(cols = everything(), values_to = "geometry") #tidy object
-#random_points <- random_points %>% dplyr::select(-name)
-# Create an sf object with the random points and patch IDs
-#wood_metadata <- st_drop_geometry(woods)
-#wood_points <- cbind(wood_metadata, random_points)
-#wood_points <- st_as_sf(wood_points)
+
+#Adding the predicted damage data to an interactive satellite image ####
+library(leaflet)
+
+# Load the data
+df_categorical <- readRDS(file = file.path(here("data/derived-data/Tool-extract-function-test/predicted_data_categorical_pixel_level.rds")))
+
+# Make sf object
+df_sf <- st_as_sf(df_categorical, coords = c("x", "y"), crs = st_crs(bng))
+df_sf <- st_transform(df_sf, crs = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs")
+
+# Define the value mapping for pred_damage
+damage_values <- c("LOW" = 1, "LOW-MED" = 2, "MED" = 3, "MED-HIGH" = 4, "HIGH" = 5)
+df_sf$value <- damage_values[df_sf$pred_damage]
+
+#Convert to sp object
+df_sp <- df_sf %>% as("Spatial")
+
+#raster template
+raster_temp <- raster(extent=extent(map), res=res(map))
+
+#Convert to raster
+r <- rasterize(df_sp, field=value)
+
+# Extract coordinates and create a new data frame
+coords <- st_coordinates(df_sf)
+df_map <- df_sf %>%
+  mutate(lat = coords[,2],
+         lon = coords[,1]) %>%
+  st_drop_geometry() %>%
+  dplyr::select(lat, lon, pred_damage)
+
+# Define the value mapping for pred_damage
+damage_values <- c("LOW" = 1, "LOW-MED" = 2, "MED" = 3, "MED-HIGH" = 4, "HIGH" = 5)
+df_map$value <- damage_values[df_map$pred_damage]
+df_map<-df_map%>%dplyr::select(lat,lon,value)
+
+r <- rasterFromXYZ(df_map)
+
+# Define the resolution and extent of the raster
+resolution <- 0.25 # Adjust as necessary
+ext <- extent(min(df_map$lon), max(df_map$lon), min(df_map$lat), max(df_map$lat))
+
+# Create an empty raster
+r <- raster(ext, res = resolution, crs = CRS("+proj=longlat +datum=WGS84"))
+
+# Rasterize the data
+rasterized <- rasterize(df_map[, c("lon", "lat")], r, field = df_map$value, fun = mean)
+
+
+# Set up the colors
+val <- 1:5
+pal <- colorNumeric(c("yellow", "#FED976", "#FD8D3C", "#FC4E2A", "#E31A1C"), val, na.color = "transparent")
+
+# Made the map
+leaflet() %>% addProviderTiles(providers$Esri.WorldImagery) %>%
+  addRasterImage(r, colors = pal, opacity = 0.5) %>%
+  addLegend(pal = pal, values = val, title = "Deer damage risk")
+
+
+
+#Get world imagery
+m = leaflet() %>% addTiles()
+
+#Transform buffers to leaflet projection
+
+buffers <- st_transform(buffered_woods_7km, crs = '+proj=longlat +datum=WGS84')
+wood_coords <- st_transform(woods, "+proj=longlat +ellps=WGS84 +datum=WGS84")
+#Get latitude and longitude for woodland polygon
+coords <- as.data.frame(st_coordinates(wood_coords$geometry))
+latlon <- data.frame(lon = coords$X[1], lat = coords$Y[1])
+
+#Standard basemap
+
+leaflet() %>%
+  addTiles() %>% 
+  setView(lng = latlon$lon[1], lat = latlon$lat[1], zoom = 14) %>% 
+  addPolygons(data = wood_coords, color = "blue", stroke = 1, opacity = 0.8)
+
+#ESRI world imagery basemap
+
+leaflet() %>%
+  addProviderTiles(providers$Esri.WorldImagery) %>% #satellite map
+  setView(lng = latlon$lon[1], lat = latlon$lat[1], zoom = 14) %>% 
+  addPolygons(data = wood_coords, color = "blue", stroke = 1, opacity = 0.8)%>%
+  addPolygons(data = df_sf, color=)
+  
+#Plot sf object
+
+
+
 ```
 
-```{r}
-# Cropped rasters list to store results
-
-#Should we set a centre point for each woodland and crop around that to make a square?
-#At the moment it is buffering to the edge of the woodland, making an irregular shaped buffer.
-
-buffered_cropped_rasters <- list()
-
-# Loop through each buffered buffer and crop all rasters
-for (i in seq_along(buffered_woods_7km$geometry)) {
-  buffer_geometry <- buffered_woods_7km$geometry[i]
-  
-  # Convert buffer geometry to a spatial object that raster can use
-  buffer_extent <- as(extent(st_bbox(buffer_geometry)), "Extent")
-  
-  # Crop each raster to the current buffer extent
-  map_cropped <- crop(map, buffer_extent)
-  a_roads_cropped <- crop(a_roads, buffer_extent)
-  b_roads_cropped <- crop(b_roads, buffer_extent)
-  motorways_cropped <- crop(motorways, buffer_extent)
-  nearest_urban_cropped <- crop(nearest_urban, buffer_extent)
-  nearest_suburb_cropped <- crop(nearest_suburb, buffer_extent)
-  lf_cropped <- crop(lf, buffer_extent)
-  dams_cropped <- crop(dams, buffer_extent)
-  
-  # Store the cropped rasters in the list, using the buffer name as the key
-  buffered_cropped_rasters[[paste("buffer", buffered_woods_7km$patch_ID[i])]] <- list(
-    map = map_cropped,
-    a_roads = a_roads_cropped,
-    b_roads = b_roads_cropped,
-    motorways = motorways_cropped,
-    nearest_urban = nearest_urban_cropped,
-    nearest_suburb = nearest_suburb_cropped,
-    lf = lf_cropped,
-    dams = dams_cropped
-  )
-}
-
-plot(buffered_cropped_rasters[[1]]$map)
-plot(buffered_woods_7km$geometry[1,], add=TRUE, border="blue", lwd=2, col=NA)
-```
+#END \####
