@@ -1524,7 +1524,7 @@ val <- 1:5
 pal <- c("yellow", "#FED976", "#FD8D3C", "#FC4E2A", "#E31A1C")
 
 #Convert to raster
-r <- df_sf %>% select(geometry, value) %>% stars::st_rasterize()
+r <- df_sf %>% dplyr::select(geometry, value) %>% stars::st_rasterize()
 
 # Convert the raster to a data frame for ggplot
 r_df <- as.data.frame(r, xy = TRUE)
@@ -1560,51 +1560,35 @@ rounded_raster <- round(raster_layer)
 #Project for leaflet map
 rounded_raster <- projectRasterForLeaflet(rounded_raster, method="ngb")
 
+# Create a color palette for the raster
+color_fact <- colorFactor(
+  palette = c("yellow", "#FED976", "#FD8D3C", "#FC4E2A", "#E31A1C"),
+  domain = damage_values,
+na.color = "transparent"  # Set the color for NA values to transparent
 
-# Create the leaflet map
+)
+
+# Create a reversed mapping for labels
+damage_labels <- names(damage_values)
+names(damage_labels) <- damage_values
+
+# Create the Leaflet map
 leaflet() %>%
   addProviderTiles(providers$Esri.WorldImagery) %>%
-  addRasterImage(rounded_raster, colors = color_pal, opacity = 0.9, project=FALSE) %>%
-  addLegend(pal = color_pal, values = val, title = "Deer damage risk")#, 
-            labFormat = labelFormat(transform = function(x) {
-              damage_labels <- names(damage_values)
-              names(damage_labels) <- val
-              damage_labels[as.character(x)]
-            })
+  addRasterImage(rounded_raster, colors = color_fact, opacity = 0.9, project = FALSE) %>%
+  addLegend(
+    pal = color_fact,
+    values = damage_values,  # Use the correct domain of values
+    title = "Deer damage risk",
+    labFormat = labelFormat(
+      transform = function(x) {
+        # Use the label mapping to get the labels
+        damage_labels[as.character(x)]
+      }
+    )
+  )
 
-extent_points <- rasterToPoints(rounded_raster)
-unplotted_values <- extract(rounded_raster, extent_points)
-
-#Get world imagery
-m = leaflet() %>% addTiles()
-
-#Transform buffers to leaflet projection
-
-buffers <- st_transform(buffered_woods_7km, crs = '+proj=longlat +datum=WGS84')
-wood_coords <- st_transform(woods, "+proj=longlat +ellps=WGS84 +datum=WGS84")
-#Get latitude and longitude for woodland polygon
-coords <- as.data.frame(st_coordinates(wood_coords$geometry))
-latlon <- data.frame(lon = coords$X[1], lat = coords$Y[1])
-
-#Standard basemap
-
-leaflet() %>%
-  addTiles() %>% 
-  setView(lng = latlon$lon[1], lat = latlon$lat[1], zoom = 14) %>% 
-  addPolygons(data = wood_coords, color = "blue", stroke = 1, opacity = 0.8)
-
-#ESRI world imagery basemap
-
-leaflet() %>%
-  addProviderTiles(providers$Esri.WorldImagery) %>% #satellite map
-  setView(lng = latlon$lon[1], lat = latlon$lat[1], zoom = 14) %>% 
-  addPolygons(data = wood_coords, color = "blue", stroke = 1, opacity = 0.8)%>%
-  addPolygons(data = df_sf, color=)
   
-#Plot sf object
-
-
-
 ```
 
 #END \####
