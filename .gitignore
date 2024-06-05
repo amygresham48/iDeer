@@ -4,6 +4,7 @@
 data/*
 output/*
 .RDataTmp*
+figure-html*
 code/package citations
 # Session Data files
 .RData
