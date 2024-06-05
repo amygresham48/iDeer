@@ -14,8 +14,7 @@ library(fasterize)
 library(terra)
 library(here)
 
-input_dir <- here("iDeer_spatial_data","inputs")
-output_dir <- here("iDeer_spatial_data","outputs")
+here()
 
 bng = 27700 #coordinate system EPSG code (British National Grid = epsg:27700)
 ```
@@ -23,21 +22,20 @@ bng = 27700 #coordinate system EPSG code (British National Grid = epsg:27700)
 
 ```{r}
 #Read in CEH lcm
-lcm2015.rast <- raster::raster(here(file.path = input_dir,"lcm-2015-tif","lcm2015gb25m.tif"))
+lcm2015.rast <- raster::raster(here(file.path = "data/raw-data/lcm2015gb25m.tif"))
 lcm2015.rast <- setMinMax(lcm2015.rast)
 crs(lcm2015.rast) <- bng
 
 #Import DAMS raster as exposure metric (layer from Becks) 50m res
-DAMS <- raster::raster(here(file.path = input_dir,"DAMS","dams.tif"))
+#DAMS <- raster::raster(here(file.path = input_dir,"DAMS","dams.tif"))
+DAMS_resam <- raster::raster(here(file.path = "data/raw-data/DAMS/DAMS_resample25.tif"))
 crs(DAMS) <- bng
 ```
 
 ```{r}
 #Use land cover map as reference, resample DAMS to 25m resolution
-#DAMS_resam <- raster::disaggregate(DAMS, fact=2, lcm2015.rast, method = "bilinear", "DAMS_resample25.tif")# takes too long!
 
-DAMS_resam <- raster::resample(DAMS, lcm2015.rast, method = "bilinear") # error: Error in x$.self$finalize() : attempt to apply non-function
-
+#DAMS_resam <- raster::resample(DAMS, lcm2015.rast, method = "bilinear") # error: Error in x$.self$finalize() : attempt to apply non-function
 
 #Replace all NA's in DAMS layer with 0
 #DAMS_resam_no_na <- DAMS_resam
@@ -45,22 +43,24 @@ DAMS_resam <- raster::resample(DAMS, lcm2015.rast, method = "bilinear") # error:
 #DAMS_resam_no_na[is.na(DAMS_resam_no_na)] = 0
 
 #Reclass LCM so all habitats we want are 1 and everything else is 0
+#0 = woodlands
+#Urban areas included in "open habitats"
 
 reclass <- data.frame(is = c(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,
-                             18,19,20,21), becomes = c(0,0,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,1,0,0))
+                             18,19,20,21), becomes = c(0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1))
 
 lcm_mask <- reclassify(lcm2015.rast, reclass)
 
 #Multiply DAMs and binary LCM together - any habitats we don't want will be set to 0 DAMS
 
 DAMS_open_raster <- DAMS_resam*lcm_mask
-writeRaster(DAMS_open_raster, here(output_dir,"DAMS","DAMS_OPEN_raster.tif"))
+writeRaster(DAMS_open_raster, here("data/derived-data/2015-spatial-layers/DAMS_OPEN_raster.tif"),overwrite=TRUE)
 ```
 
 #focal statistics, moving window
 ```{r}
 
-DAMS_open_raster <- raster(here(output_dir, "DAMS","DAMS_OPEN_raster.tif"))
+DAMS_open_raster <- raster(here("data/derived-data/2015-spatial-layers/DAMS_OPEN_raster.tif"))
 crs(DAMS_open_raster) <- bng
 
 #uk10k <- sf::st_read("C:/Users/ij926050/Dropbox/BEAST_R/Inputs/LUES_GIS/10km_grid/10km_grid/gbng/10km_grid_region.shp")
@@ -75,7 +75,7 @@ Focal500= raster::focal(DAMS_open_raster, w=circle.buff, fun=max, na.rm=F, "foca
 
 circle.buff = raster::focalWeight (DAMS_open_raster, d=1000, type="circle",fillNA=T )#Create buffer
 circle.buff[circle.buff > 0] <- 1   # replacing weights by 1
-Focal1000= raster::focal(DAMS_open_raster, w=circle.buff, fun=max, na.rm=F, "focal.dams.1000.max.tif", overwrite=T)#do focal window analysis with weights matrix
+Focal1000= raster::focal(DAMS_open_raster, w=circle.buff, fun=max, na.rm=F, "focal.dams.1000.max.non_wood.tif", overwrite=T)#do focal window analysis with weights matrix
 
 circle.buff = raster::focalWeight (DAMS_open_raster, d=250, type="circle",fillNA=T )#Create buffer
 circle.buff[circle.buff > 0] <- 1   # replacing weights by 1
