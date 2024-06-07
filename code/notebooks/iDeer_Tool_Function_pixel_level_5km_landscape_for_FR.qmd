@@ -44,6 +44,10 @@ crs(map) <- bng
 all_roads <- raster(here("data/all_roads_250_mosaic_all_tiles_corrected.tif"))
 crs(all_roads) <- bng
 
+#Load nearest main road raster
+#Nearest A road, B road or motorway
+nearest_road <- raster(here("data/nearest_road_raster_2015_all_tiles_corrected.tif"))
+
 #Load nearest urban
 nearest_urban <- raster(here("data/nearest_urban_raster_2015_all_tiles_corrected.tif"))
 crs(nearest_urban) <- bng
