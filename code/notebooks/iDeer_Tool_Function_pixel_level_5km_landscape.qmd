@@ -59,14 +59,8 @@ crs(nearest_suburb) <- bng
 lf <- raster(here("data/derived-data/2015-spatial-layers/linear_features/lf_1000_mosaic_all_tiles_corrected.tif"))
 crs(lf) <- bng
 
-#Load 10k England-Wales tiles
-
-uk10ew <- st_read(here("data/derived-data/10k_tiles_EW.shp"))
-
-#Load MAX DAMS at 1km scale
-#This is the focal.max.dams.1000.tif layer that has been cropped and masked to the 10km BNG England-Wales tiles using ArcGIS
-dams <- raster(here("data/derived-data/2015-spatial-layers/Max_DAMS/max_dams_1kEW.tif"))
-crs(dams) <- bng
+#Load MAX DAMS calculated at 1km scale
+dams <- raster(here("data/derived-data/2015-spatial-layers/Max_DAMS/focal.dams.1000.max.non_wood_EW.tif"))
 
 #Read in woodland polygon dataset
 #Combined NFI 2015 and LCM 2015 woodlands
@@ -289,10 +283,10 @@ write.csv(nearest_suburban_extraction, here("data/derived-data/Tool-extract-func
 ```
 
 ```{r}
-#MAX DAMS EXTRACTION ####
-#At patch level, as this is just the maximum DAMS in the surrounding landscape
-#The pixel level dams extraction is not lining up with the rest of the extractions - pixel IDs don't match
-extract_dams_raster <- function(buffered_woods_5km, raster_layer, woodlands) {
+#MAX DAMS EXTRACTION AT PIXEL LEVEL ####
+#The pixel_IDs in this code are not matching up to the pixel_IDs in the other extractions???
+
+extract_dams_raster <- function(buffered_woods_5km, raster_layer, land_cover_raster) {
   
   # Initialize progress bar
 pb <- progress_bar$new(
@@ -301,10 +295,8 @@ pb <- progress_bar$new(
   clear = FALSE,   # Keep the progress bar on the screen
   width = 60
 )
-  
   # List to store extracted data
   extraction_results <- list()
-  
   # Loop through each buffered buffer and crop all rasters
 for (i in seq_along(buffered_woods_5km$geometry)) {
   buffer_geometry <- buffered_woods_5km$geometry[i]
@@ -313,43 +305,47 @@ for (i in seq_along(buffered_woods_5km$geometry)) {
   # Convert buffer geometry to a spatial object that raster can use
   buffer_extent <- as(extent(st_bbox(buffer_geometry)), "Extent")
   
-  # Crop raster to the current buffer extent
-  dams_cropped <- crop(dams, buffer_extent)
-  
-  #Convert to spatraster
-  dams_spatraster <- terra::rast(dams_cropped)
-  
-  #Filter for woodland patches that intersect buffer
-  
-  woods_buffer <- st_filter(woodlands, buffered_woods_5km[i, ], .predicate = st_intersects)
-  
-    # Extract the average maximum dams for all woodland polygons within the current buffer
-    extraction <- terra::extract(dams_spatraster, vect(woods_buffer), fun = mean, na.rm = TRUE)
+ # Get the cell numbers within the extent
+pixel_ID <- cellsFromExtent(land_cover_raster, buffer_extent)
+
+# Get the coordinates for these cells
+cell_coords <- as.data.frame(xyFromCell(land_cover_raster, pixel_ID))
+
+#Extract pixel values
+pixel_values <- extract(raster_layer, cell_coords)
+
+    # Create a data frame with the extracted values and cell indices
+    vals <- data.frame(max_dams = pixel_values, 
+                       patch_ID = buffered_woods_5km$patch_ID[i],
+                       pixel_ID = pixel_ID,
+                       x = cell_coords$x,
+                       y = cell_coords$y)
     
-    #cbind to the original woods_buffer columns
+    # Filter out NA values
+    vals <- vals[!is.na(vals$max_dams), ]
     
-    extraction_cbind <- cbind(woods_buffer, extraction)
-    
-    # Store the extracted data in the results list
-    extraction_results[[paste("Buffer", i)]] <- extraction_cbind
+    # Append to the results list
+    extraction_results[[i]] <- vals
   }
   
-  # Combine all extracted data into a single data frame
- dams_extraction_results <- bind_rows(extraction_results)
+  # Combine all results into a single dataframe
+  result_df <- bind_rows(extraction_results)
   
-  return(dams_extraction_results) # Return the combined data frame
+  return(result_df)
 }
 
-
 dams_extraction <- extract_dams_raster(
-  buffered_woods_5km=buffered_woods_5km, 
-  raster_layer=dams, 
-  woodlands=woods_buffers)
+buffered_woods_5km=buffered_woods_5km, 
+raster_layer=dams,
+land_cover_raster=map)
 
-#ggplot(dams_extraction) +
-  #geom_sf(aes(fill = focal.dams.1000.max))
 
-write.csv(dams_extraction, here("data/derived-data/Tool-extract-function-test/DAMS_MAX_extraction_1000_patch_level_5km.csv"))
+write.csv(dams_extraction, here("data/derived-data/Tool-extract-function-test/dams_extraction_pixelIDs_1000_5km.csv"))
+
+#check pixels match up with other layers
+dams_pixels <- dams_extraction$pixel_ID
+urban_pixels <- nearest_urban_extraction$pixel_ID
+matching_pixels <- intersect(dams_pixels, urban_pixels)
 ```
 
 ```{r}
@@ -930,11 +926,21 @@ incoming_connectivity_sum<-incoming_connectivity_sum %>%
 df <- left_join(df, incoming_connectivity_sum, by=c("patch_ID")) 
 
 #MAX DAMS ####
-dams_scores <- dams_extraction%>%rename(max.dams.1000=max_dams_1kEW)%>%
-  dplyr::select(c("patch_ID","max.dams.1000"))%>%
+dams_scores <- dams_extraction%>%rename(max.dams.1000=max_dams)%>%
+  dplyr::select(-c("patch_ID"))%>%
   st_drop_geometry()
 
-df <- left_join(df, dams_scores, by=c("patch_ID")) 
+df <- left_join(df, dams_scores, by=c("pixel_ID","x","y"))
+
+# Plot raster using the color palette with custom labels
+ggplot(df) +
+  geom_raster(aes(x = x, y = y, fill = max.dams.1000)) +
+  theme_minimal() +
+  labs(title = "Predicted Damage Raster",
+       fill = "Damage Level") +
+  guides(fill = guide_legend(override.aes = list(alpha = 1))) # Ensure all levels are shown in the legend
+
+#df <- left_join(df, dams_scores, by=c("patch_ID")) 
 
 #Roads
 roads<-road_extraction%>%dplyr::select(-c("patch_ID"))
@@ -949,6 +955,12 @@ df <- left_join(df, nearest_suburban_extraction, by=c("pixel_ID","x","y"))
 
 df <- left_join(df, nearest_urban_extraction, by=c("pixel_ID","x","y"))
 
+# Plot raster using the color palette with custom labels
+ggplot(df) +
+  geom_raster(aes(x = x, y = y, fill = all_roads_250)) +
+  theme_minimal() +
+  guides(fill = guide_legend(override.aes = list(alpha = 1))) # Ensure all levels are shown in the legend
+
 #Make column for nearest urban and suburban using minimum value
 df$urban_proximity <- pmin(df$nearest_suburban, df$nearest_urban)
 #Drop individual columns
@@ -958,6 +970,10 @@ df <- df%>%dplyr::select(-c("nearest_suburban","nearest_urban"))
 lf_extraction <- lf_extraction%>%dplyr::select(-c("patch_ID"))
 df <- left_join(df, lf_extraction,  by=c("pixel_ID","x","y"))
 
+#Remove the NAs
+
+df <- na.omit(df)
+
 saveRDS(df, here("data/derived-data/Tool-extract-function-test/bbn_test_df_5_patches_pixel_level_5km.rds"))
 ```
 
@@ -966,6 +982,7 @@ saveRDS(df, here("data/derived-data/Tool-extract-function-test/bbn_test_df_5_pat
 ```{r}
 
 #Replace values in numerical columns with LOW, MED, HIGH
+#This is based on logic from google spreadsheet "BN thresholds" 
 
 df <- readRDS(here("data/derived-data/Tool-extract-function-test/bbn_test_df_5_patches_pixel_level_5km.rds"))
 
@@ -973,7 +990,7 @@ df <- readRDS(here("data/derived-data/Tool-extract-function-test/bbn_test_df_5_p
 #We need to decide at what point values change between categories- need to do this using whole datasets rather than localised cropped datasets.
 
 #Roads
-hist(all_roads$all_roads_250_mosaic_all_tiles_corrected)
+#hist(all_roads$all_roads_250_mosaic_all_tiles_corrected)
 df$all_roads_250 <- ifelse(is.na(df$all_roads_250), NA,
                            ifelse(df$all_roads_250 <= 0, "LOW",
                            ifelse(df$all_roads_250 > 0 & df$all_roads_250 <= 100, "MED",
@@ -981,7 +998,7 @@ df$all_roads_250 <- ifelse(is.na(df$all_roads_250), NA,
 unique(df$all_roads_250)
 
 #Linear features
-hist(lf$lf_1000_mosaic_all_tiles_corrected)
+#hist(lf$lf_1000_mosaic_all_tiles_corrected)
 # Replace numeric values with categorical labels
 df$lf <- ifelse(df$lf<= 2500, "LOW",
             ifelse(df$lf> 2500 & df$lf <= 5000, "MED",
@@ -992,42 +1009,42 @@ unique(df$lf)
 #nearest urban/suburban
 #Proximity, therefore "HIGH" means lower value (lower distance)
 #These thresholds are based on deer biology rather than the spead of data
-hist(nearest_urban$nearest_urban_raster_2015_all_tiles_corrected)
-hist(nearest_suburb$nearest_suburban_raster_2015_all_tiles_corrected)
+#hist(nearest_urban$nearest_urban_raster_2015_all_tiles_corrected)
+#hist(nearest_suburb$nearest_suburban_raster_2015_all_tiles_corrected)
 df$urban_proximity <- ifelse(df$urban_proximity <= 500, "HIGH",
                           ifelse(df$urban_proximity >500 & df$urban_proximity <= 1000, "MED",
                            ifelse(df$urban_proximity >1000,"LOW",NA)))  
 unique(df$urban_proximity)
 
 #MAX DAMS
-hist(dams$max_dams_1kEW)
+#hist(dams$max.dams.1000)
 df$max.dams.1000 <- ifelse(df$max.dams.1000 <=15,"LOW",
                       ifelse(df$max.dams.1000>15 & df$max.dams.1000 <= 20, "MED",
                         ifelse(df$max.dams.1000 >20, "HIGH",NA)))
 
 #nutritional landscape composition score
-hist(edge.val.types$Forage_Q)
+#hist(edge.val.types$Forage_Q)
 df$nli_edge_types_1000 <- ifelse(df$nli_edge_types_1000 <= 0, "LOW",
                           ifelse(df$nli_edge_types_1000 >0 & df$nli_edge_types_1000 <=5, "MED",
                            ifelse(df$nli_edge_types_1000 > 5, "HIGH",NA)))
 
 #nutritional patch composition score
 
-hist(edge.val.types$Forage_Q)
+#hist(edge.val.types$Forage_Q)
 
 df$Forage_Q <- ifelse(df$Forage_Q <= 5, "LOW",
                           ifelse(df$Forage_Q >5 & df$Forage_Q <=10, "MED",
                            ifelse(df$Forage_Q>10, "HIGH",NA)))
 
 #connectivity
-hist(df$total_connect)
-quantile(df$total_connect)
+#hist(df$total_connect)
+#quantile(df$total_connect)
 
 #log transform connectivity values, they are too big for easy interpretation
 
 df$total_connect_log <- log(df$total_connect)
 
-hist(df$total_connect_log)
+#hist(df$total_connect_log)
 quantile(df$total_connect_log)
 
 df$total_connect_log <- ifelse(df$total_connect_log <=10, "LOW",
@@ -1644,7 +1661,7 @@ leaflet() %>%
   addLegend(
     pal = color_fact,
     values = damage_values,  # Use the correct domain of values
-    title = "Deer damage risk",
+    title = "Deer impact risk",
     labFormat = labelFormat(
       transform = function(x) {
         # Use the label mapping to get the labels
