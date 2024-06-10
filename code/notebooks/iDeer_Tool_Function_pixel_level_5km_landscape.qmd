@@ -441,14 +441,14 @@ cell_coords <- as.data.frame(xyFromCell(land_cover_raster, pixel_ID))
 pixel_values <- extract(raster_layer, cell_coords)
 
     # Create a data frame with the extracted values and cell indices
-    vals <- data.frame(nearest_suburban = pixel_values, 
+    vals <- data.frame(nearest_road = pixel_values, 
                        patch_ID = buffered_woods_5km$patch_ID[i],
                        pixel_ID = pixel_ID,
                        x = cell_coords$x,
                        y = cell_coords$y)
     
     # Filter out NA values
-    vals <- vals[!is.na(vals$nearest_suburban), ]
+    vals <- vals[!is.na(vals$nearest_road), ]
     
     # Append to the results list
     extraction_results[[i]] <- vals
@@ -460,7 +460,7 @@ pixel_values <- extract(raster_layer, cell_coords)
   return(result_df)
 }
 
-nearest_suburban_extraction <- nearest_road_rasters(buffered_woods_5km=buffered_woods_5km, 
+nearest_road_extraction <- nearest_road_rasters(buffered_woods_5km=buffered_woods_5km, 
 raster_layer=nearest_road,
 land_cover_raster=map)
 
@@ -942,10 +942,14 @@ ggplot(df) +
 
 #df <- left_join(df, dams_scores, by=c("patch_ID")) 
 
-#Roads
-roads<-road_extraction%>%dplyr::select(-c("patch_ID"))
-df <- left_join(df, roads, by=c("pixel_ID","x","y"))
-df <- df %>% rename(all_roads_250=roads)
+#Road density
+#roads<-road_extraction%>%dplyr::select(-c("patch_ID"))
+#df <- left_join(df, roads, by=c("pixel_ID","x","y"))
+#df <- df %>% rename(all_roads_250=roads)
+
+#Nearest road
+nearest_road_data <- nearest_road_extraction%>%dplyr::select(-c("patch_ID"))
+df <- left_join(df, nearest_road_data, by=c("pixel_ID","x","y"))
 
 #Nearest urban and suburban ####
 nearest_suburban_extraction<- nearest_suburban_extraction%>%dplyr::select(-c("patch_ID"))
@@ -991,11 +995,17 @@ df <- readRDS(here("data/derived-data/Tool-extract-function-test/bbn_test_df_5_p
 
 #Roads
 #hist(all_roads$all_roads_250_mosaic_all_tiles_corrected)
-df$all_roads_250 <- ifelse(is.na(df$all_roads_250), NA,
-                           ifelse(df$all_roads_250 <= 0, "LOW",
-                           ifelse(df$all_roads_250 > 0 & df$all_roads_250 <= 100, "MED",
-                           ifelse(df$all_roads_250 > 100, "HIGH", NA))))
-unique(df$all_roads_250)
+#df$all_roads_250 <- ifelse(is.na(df$all_roads_250), NA,
+#                           ifelse(df$all_roads_250 <= 0, "LOW",
+#                           ifelse(df$all_roads_250 > 0 & df$all_roads_250 <= 100, "MED",
+#                           ifelse(df$all_roads_250 > 100, "HIGH", NA))))
+#unique(df$all_roads_250)
+
+#Nearest roads
+df$nearest_road <- ifelse(is.na(df$nearest_road), NA,
+                           ifelse(df$nearest_road <= 100, "LOW",
+                           ifelse(df$nearest_road > 100 & df$nearest_road <= 500, "MED",
+                           ifelse(df$nearest_road > 500, "HIGH", NA))))
 
 #Linear features
 #hist(lf$lf_1000_mosaic_all_tiles_corrected)
@@ -1076,7 +1086,7 @@ saveRDS(df_categorical, file = file.path(here("data/derived-data/Tool-extract-fu
 #CPTS for measured nodes ####
 urban_prox_cpt<-matrix(c(0.333333,0.333333,0.333333), ncol=3, dimnames = list(NULL, c("LOW", "MED","HIGH")))
 
-road_density_cpt<-matrix(c(0.333333,0.333333,0.333333), ncol=3, dimnames = list(NULL, c("LOW", "MED","HIGH")))
+nearest_road_cpt<-matrix(c(0.333333,0.333333,0.333333), ncol=3, dimnames = list(NULL, c("LOW", "MED","HIGH")))
 
 connectivity_cpt<-matrix(c(0.333333,0.333333,0.333333),ncol = 3,dimnames = list(NULL, c("LOW", "MED","HIGH")))
 
@@ -1097,7 +1107,7 @@ disturb_index_cpt <- array(
   dim = c(3, 3, 3, 3),  # Shape of the array (3x3x3)
   dimnames = list(
     disturb_index = c("LOW", "MED", "HIGH"),
-    road_density = c("LOW", "MED", "HIGH"),
+    nearest_road = c("LOW", "MED", "HIGH"),
     urban_prox = c("LOW","MED","HIGH"),
     connectivity = c("LOW", "MED", "HIGH")
   )
@@ -1345,7 +1355,7 @@ damage_risk_cpt
 nodes <- c(
   "disturb_index",
   "urban_prox",
-  "road_density",
+  "nearest_road",
   "connectivity",
   "pixel_nutritional_score",
   "landscape_nutritional_score",
@@ -1361,7 +1371,7 @@ nodes <- c(
 e = empty.graph(nodes)
 
 arc.set = matrix(c("urban_prox", "disturb_index",
-                     "road_density", "disturb_index", 
+                     "nearest_road", "disturb_index", 
                      "connectivity", "disturb_index",
                      "lf_density","NLI",
                      "landscape_nutritional_score","NLI",
@@ -1382,7 +1392,7 @@ net<-model2network(model_string)
 # You dont need to repeat the names of the nodes with parents (child nodes) 
 
 # Custom fitting network (matching up the nodes to their CPTs)
-dfit = custom.fit(net, dist = list(road_density=road_density_cpt, 
+dfit = custom.fit(net, dist = list(nearest_road=nearest_road_cpt, 
                                    urban_prox=urban_prox_cpt,
                                    connectivity=connectivity_cpt,
                                    lf_density=lf_density_cpt,
@@ -1435,7 +1445,7 @@ predict_dat <- df_categorical %>%st_drop_geometry() %>% #drop geometry
    dplyr::select(-c("patch_ID","class","Land.cover","scale","pixel_ID","x","y"))
 #Ensure variable names match those in BBN
 predict_dat<-predict_dat%>%rename(
-                              road_density=all_roads_250,
+                              nearest_road=nearest_road,
                               lf_density=lf,
                               urban_prox=urban_proximity,
                               landscape_nutritional_score=nli_edge_types_1000,
@@ -1455,7 +1465,7 @@ predict_dat$damage_risk <- NA
 predict_dat <- predict_dat %>% mutate_all(as.factor)
 
 #Ensure factor levels are in correct order
-levels(predict_dat$road_density)<-c("LOW", "MED", "HIGH")
+levels(predict_dat$nearest_road)<-c("LOW", "MED", "HIGH")
 levels(predict_dat$landscape_nutritional_score)<-c("LOW", "MED", "HIGH")
 levels(predict_dat$pixel_nutritional_score)<-c("LOW", "MED", "HIGH")
 levels(predict_dat$urban_prox)<-c("LOW", "MED", "HIGH")
