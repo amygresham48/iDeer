@@ -83,9 +83,29 @@ Focal250= raster::focal(DAMS_open_raster, w=circle.buff, fun=max, na.rm=F,"focal
 
 
 ```
+
 ```{r}
-x=raster::raster("C:/Users/ij926050/OneDrive - University of Reading/Amy_Becks_GIS/Spatial_layers_for_Chloe/Output_rasters/DAMS/focal.dams.500.tif")
+x=raster::raster(here("data/derived-data/2015-spatial-layers/Max_DAMS/focal.dams.1000.max.non_wood.tif"))
+
+#Load NFI/LCM2015 master map
+map <- raster(here("data/derived-data/2015-spatial-layers/edge_core_raster_all_tiles_EW.tif"))
+
+#Load 10k England-Wales tiles
+uk10ew <- st_read(here("data/derived-data/10k_tiles_EW.shp"))
+
 plot(x)
+y=projectRaster(x,crs=bng)
+
+#This maps the max dams score of all habitats except woodland.
+#project to lcm 
+dams <- projectRaster(x,map)
+#crop and mask to 10k_tiles_EW
+dams <- crop(dams, uk10ew)
+dams <- mask(dams, uk10ew)
+
+#save layer
+
+writeRaster(dams,here("data/derived-data/2015-spatial-layers/Max_DAMS/focal.dams.1000.max.non_wood_EW.tif"))
 
 ```
 
