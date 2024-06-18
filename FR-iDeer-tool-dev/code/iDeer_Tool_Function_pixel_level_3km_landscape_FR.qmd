@@ -70,6 +70,12 @@ hab_patches_all <- hab_patches_all %>%
   rename(patch_ID = Id) %>%
   rename(patch_area = Shape_Area)
 
+lcm_polys <- st_read(here("data/derived-data/nfi_lcm_2015_overlaid.shp"))
+#Select for woodland polys only
+wood_polys <- lcm_polys %>% filter(gridcode %in% c("1","2","22","23")) %>%
+  rename(patch_ID = Id,
+         class = gridcode)
+
 
 ```
 
