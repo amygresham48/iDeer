@@ -747,7 +747,7 @@ lcm <- respoly
 #Water scores retained to prevent loss of woodland edge pixels
 #Water edge pixels receive one point higher than regular woodland
 #Still an edge so will be highly nutritious
-edge.val.types <- read.csv(file.path(here("data/Expert_derived_quality_ranks_edge_types_with_water.csv")))
+edge.val.types <- read.csv(file.path(here("Expert_derived_quality_ranks_edge_types_with_water.csv")))
 edge.val.types <- edge.val.types%>%dplyr::select(-"X")
 
 #Stitch the quality scores into the lcm dataset
@@ -799,7 +799,7 @@ unique(woods$class)
 #Water scores added in to prevent loss of woodland edge pixels
 #Water edge pixels receive one point higher than regular woodland
 #Still an edge so will be highly nutritious
-edge.val.types <- read.csv(file.path(here("data/Expert_derived_quality_ranks_edge_types_with_water.csv")))
+edge.val.types <- read.csv(file.path(here("Expert_derived_quality_ranks_edge_types_with_water.csv")))
 edge.val.types <- edge.val.types%>%dplyr::select(-"X")
 
 #Check edge.val.types$class and woods$class match in format
