@@ -36,32 +36,32 @@ here()
 bng <- 27700
 
 #Load NFI/LCM2015 master map
-map <- raster(here("data/derived-data/2015-spatial-layers/edge_core_raster_all_tiles_EW.tif"))
+map <- raster(here("edge_core_raster_all_tiles_EW.tif"))
 crs(map) <- bng
 
 #Load nearest road
 #Nearest A road, B road or motorway
-nearest_road <- raster(here("data/derived-data/2015-spatial-layers/nearest_road_raster_2015_all_tiles_corrected.tif"))
+nearest_road <- raster(here("nearest_road_raster_2015_all_tiles_corrected.tif"))
 crs(nearest_road) <- bng
 
 #Load nearest urban
-nearest_urban <- raster(here("data/derived-data/2015-spatial-layers/nearest_urban_raster_2015_all_tiles_corrected.tif"))
+nearest_urban <- raster(here("nearest_urban_raster_2015_all_tiles_corrected.tif"))
 crs(nearest_urban) <- bng
-nearest_suburb <- raster(here("data/derived-data/2015-spatial-layers/nearest_suburban_raster_2015_all_tiles_corrected.tif"))
+nearest_suburb <- raster(here("nearest_suburban_raster_2015_all_tiles_corrected.tif"))
 crs(nearest_suburb) <- bng
 
 #Load linear features at 1km scale
-lf <- raster(here("data/derived-data/2015-spatial-layers/linear_features/lf_1000_mosaic_all_tiles_corrected.tif"))
+lf <- raster(here("lf_1000_mosaic_all_tiles_corrected.tif"))
 crs(lf) <- bng
 
 #Load MAX DAMS calculated at 1km scale
-dams <- raster(here("data/derived-data/2015-spatial-layers/Max_DAMS/focal.dams.1000.max.non_wood_EW.tif"))
+dams <- raster(here("focal.dams.1000.max.non_wood_EW.tif"))
 
 #Read in woodland polygon dataset
 #Combined NFI 2015 and LCM 2015 woodlands
 #These polygons will be used to calculate the connectivity, they are unified
 #All touching polygons have become unified
-hab_patches_all <- st_read(here("data/derived-data/nfi_lcm_overlaid_shapefile_woods_export.shp"))
+hab_patches_all <- st_read(here("nfi_lcm_overlaid_shapefile_woods_export.shp"))
 st_crs(hab_patches_all) <- bng
 
 head(hab_patches_all)
@@ -69,18 +69,6 @@ head(hab_patches_all)
 hab_patches_all <- hab_patches_all %>%
   rename(patch_ID = Id) %>%
   rename(patch_area = Shape_Area)
-
-#Non-unified lcm polygons
-#This layer is made from nfi_lcm_2015_overlaid.tif
-#nfi_lcm_mosaic <- raster(here("data/derived-data/nfi_lcm_2015_overlaid.tif"))
-#Made in ArcGIS
-#Raster to polygon of all land cover classes
-
-lcm_polys <- st_read(here("data/derived-data/nfi_lcm_2015_overlaid.shp"))
-#Select for woodland polys only
-wood_polys <- lcm_polys %>% filter(gridcode %in% c("1","2","22","23")) %>%
-  rename(patch_ID = Id,
-         class = gridcode)
 
 
 ```
@@ -125,9 +113,9 @@ woods <- st_as_sf(woods)
 
 ```{r}
 #Buffer all woods by 3km
-buffered_woods_3km <- st_as_sf(st_buffer(woods, dist = 5000))  # dist = 3km in meters
+buffered_woods_3km <- st_as_sf(st_buffer(woods, dist = 3000))  # dist = 3km in meters
 #Buffer all woods by 5km (3km landscape + 3km edge buffer)
-buffered_woods_5km <- st_as_sf(st_buffer(woods, dist = 7000))  # dist = 5km in meters
+buffered_woods_5km <- st_as_sf(st_buffer(woods, dist = 5000))  # dist = 5km in meters
 
 #ensure crs of buffers is BNG
 st_crs(buffered_woods_5km) <- bng
@@ -215,7 +203,7 @@ nearest_urban_extraction <- extract_urban_rasters(buffered_woods_3km=buffered_wo
 raster_layer=nearest_urban,
 land_cover_raster=map)
 
-write.csv(nearest_urban_extraction, here("data/derived-data/Tool-extract-function-test/nearest_urban_extraction_pixelIDs_3km.csv"))
+write.csv(nearest_urban_extraction, here("nearest_urban_extraction_pixelIDs_3km.csv"))
 ```
 
 ```{r}
@@ -274,7 +262,7 @@ nearest_suburban_extraction <- extract_suburban_rasters(buffered_woods_3km=buffe
 raster_layer=nearest_suburb,
 land_cover_raster=map)
 
-write.csv(nearest_suburban_extraction, here("data/derived-data/Tool-extract-function-test/nearest_suburban_extraction_pixelIDs_3km.csv"))
+write.csv(nearest_suburban_extraction, here("nearest_suburban_extraction_pixelIDs_3km.csv"))
 ```
 
 ```{r}
@@ -334,7 +322,7 @@ raster_layer=dams,
 land_cover_raster=map)
 
 
-write.csv(dams_extraction, here("data/derived-data/Tool-extract-function-test/dams_extraction_pixelIDs_1000_3km.csv"))
+write.csv(dams_extraction, here("dams_extraction_pixelIDs_1000_3km.csv"))
 
 #check pixels match up with other layers
 dams_pixels <- dams_extraction$pixel_ID
@@ -398,7 +386,7 @@ lf_extraction <- extract_lf_raster(buffered_woods_3km=buffered_woods_3km,
 raster_layer=lf,
 land_cover_raster=map)
 
-write.csv(lf_extraction, here("data/derived-data/Tool-extract-function-test/linear_feature_extraction_pixelIDs_1000_3km.csv"))
+write.csv(lf_extraction, here("linear_feature_extraction_pixelIDs_1000_3km.csv"))
 ```
 
 ```{r}
@@ -458,7 +446,7 @@ nearest_road_extraction <- nearest_road_rasters(buffered_woods_3km=buffered_wood
 raster_layer=nearest_road,
 land_cover_raster=map)
 
-write.csv(nearest_suburban_extraction, here("data/derived-data/Tool-extract-function-test/nearest_road_extraction_pixelIDs_3km.csv"))
+write.csv(nearest_suburban_extraction, here("nearest_road_extraction_pixelIDs_3km.csv"))
 ```
 
 ```{r}
@@ -522,7 +510,7 @@ respoly <- ldply(1:length(POLY), function(i) {  # for each polygon
 
 respoly
 
-write.csv(respoly, here("data/derived-data/Tool-extract-function-test/landscapemetrics_1000_3km.csv"))
+write.csv(respoly, here("landscapemetrics_1000_3km.csv"))
 
 ```
 
@@ -594,7 +582,7 @@ woodpix <- ldply(1:length(POLY), function(i) {  # for each polygon
   return(out)
 })
 
-write.csv(woodpix, here("data/derived-data/Tool-extract-function-test/woodland_type_pixelIDs_3km.csv"))
+write.csv(woodpix, here("woodland_type_pixelIDs_3km.csv"))
 ```
 
 ### Calculate connectivity for every woodland inside the 3km buffers
@@ -741,7 +729,7 @@ incoming_connectivity_sum <- Connectivity_table_filt %>%
 
 #save incoming connectivity table
 
-write.csv(incoming_connectivity_sum, here("data/derived-data/Tool-extract-function-test/incoming_connectivity_sum_3km.csv"))
+write.csv(incoming_connectivity_sum, here("incoming_connectivity_sum_3km.csv"))
 ```
 
 ### Ready the spatial data for the Bayesian Belief Network
@@ -751,7 +739,7 @@ write.csv(incoming_connectivity_sum, here("data/derived-data/Tool-extract-functi
 ```{r}
 #CALCULATE NUTRITIONAL LANDSCAPE QUALITY ####
 
-respoly<-read.csv(here("data/derived-data/Tool-extract-function-test/landscapemetrics_1000_3km.csv"))
+respoly<-read.csv(here("landscapemetrics_1000_3km.csv"))
 lcm <- respoly
 #lcm <- lcm%>%rename(class = lc_class)
 #Load landscape nutritional scores for raster categories
@@ -759,7 +747,7 @@ lcm <- respoly
 #Water scores retained to prevent loss of woodland edge pixels
 #Water edge pixels receive one point higher than regular woodland
 #Still an edge so will be highly nutritious
-edge.val.types <- read.csv(file.path(here("data/raw-data/Expert_Qnaire/Expert_derived_quality_ranks_edge_types_with_water.csv")))
+edge.val.types <- read.csv(file.path(here("data/Expert_derived_quality_ranks_edge_types_with_water.csv")))
 edge.val.types <- edge.val.types%>%dplyr::select(-"X")
 
 #Stitch the quality scores into the lcm dataset
@@ -801,7 +789,7 @@ weighted_average_score_buffer <- weighted_average_score_buffer %>%
 
 ```{r}
 
-woodpix <- read.csv(here("data/derived-data/Tool-extract-function-test/woodland_type_pixelIDs_3km.csv"))
+woodpix <- read.csv(here("woodland_type_pixelIDs_3km.csv"))
 woods <- woodpix
 woods <- woods%>%rename(class = lc_class)
 unique(woods$class)
@@ -811,7 +799,7 @@ unique(woods$class)
 #Water scores added in to prevent loss of woodland edge pixels
 #Water edge pixels receive one point higher than regular woodland
 #Still an edge so will be highly nutritious
-edge.val.types <- read.csv(file.path(here("data/raw-data/Expert_Qnaire/Expert_derived_quality_ranks_edge_types_with_water.csv")))
+edge.val.types <- read.csv(file.path(here("data/Expert_derived_quality_ranks_edge_types_with_water.csv")))
 edge.val.types <- edge.val.types%>%dplyr::select(-"X")
 
 #Check edge.val.types$class and woods$class match in format
@@ -910,7 +898,7 @@ df <- left_join(df, lf_extraction,  by=c("pixel_ID","x","y"))
 
 df <- na.omit(df)
 
-saveRDS(df, here("data/derived-data/Tool-extract-function-test/bbn_test_df_5_patches_pixel_level_3km.rds"))
+saveRDS(df, here("bbn_test_df_5_patches_pixel_level_3km.rds"))
 ```
 
 #### Convert numerical values to categorical (LOW, MED, HIGH)
@@ -920,7 +908,7 @@ saveRDS(df, here("data/derived-data/Tool-extract-function-test/bbn_test_df_5_pat
 #Replace values in numerical columns with LOW, MED, HIGH
 #This is based on logic from google spreadsheet "BN thresholds" 
 
-df <- readRDS(here("data/derived-data/Tool-extract-function-test/bbn_test_df_5_patches_pixel_level_3km.rds"))
+df <- readRDS(here("bbn_test_df_5_patches_pixel_level_3km.rds"))
 
 #Look at distribution of values across national datasets ####
 #We need to decide at what point values change between categories- need to do this using whole datasets rather than localised cropped datasets.
@@ -1007,7 +995,7 @@ df_categorical <- df
 
 df_categorical <- na.omit(df_categorical)
 
-saveRDS(df_categorical, file = file.path(here("data/derived-data/Tool-extract-function-test/tool_test_extracted_data_categorical_pixel_level_3km.rds")))
+saveRDS(df_categorical, file = file.path(here("tool_test_extracted_data_categorical_pixel_level_3km.rds")))
 
 ```
 
@@ -1437,7 +1425,7 @@ predict_dat$damage_risk <- pred_damage
 df_categorical$pred_damage <- pred_damage
 
 #save
-saveRDS(df_categorical, file = file.path(here("data/derived-data/Tool-extract-function-test/predicted_data_categorical_pixel_level_3km.rds")))
+saveRDS(df_categorical, file = file.path(here("predicted_data_categorical_pixel_level_3km.rds")))
 ```
 
 ### Draw maps
@@ -1448,7 +1436,7 @@ saveRDS(df_categorical, file = file.path(here("data/derived-data/Tool-extract-fu
 #| message: false
 
 
-df_categorical <- readRDS(file = file.path(here("data/derived-data/Tool-extract-function-test/predicted_data_categorical_pixel_level_3km.rds")))
+df_categorical <- readRDS(file = file.path(here("predicted_data_categorical_pixel_level_3km.rds")))
 
 # Make sf object
 df_sf <- st_as_sf(df_categorical, coords = c("x", "y"), crs = st_crs(bng))
@@ -1535,7 +1523,7 @@ for (i in 1:length(plots)) {
 library(leaflet)
 
 # Load the data
-df_categorical <- readRDS(file = file.path(here("data/derived-data/Tool-extract-function-test/predicted_data_categorical_pixel_level_3km.rds")))
+df_categorical <- readRDS(file = file.path(here("predicted_data_categorical_pixel_level_3km.rds")))
 
 # Make sf object
 df_sf <- st_as_sf(df_categorical, coords = c("x", "y"), crs = st_crs(bng))
@@ -1579,7 +1567,6 @@ color_pal <- colorNumeric(palette = pal, domain = val, na.color = "transparent")
 
 # Convert the stars object to a RasterLayer
 raster_layer <- as(r, "Raster")
-rounded_raster <- raster::as.factor(rounded_raster)
 
 #Round all values to an integer
 rounded_raster <- round(raster_layer)
