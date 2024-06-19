@@ -596,8 +596,8 @@ write.csv(woodpix, here("woodland_type_pixelIDs_3km.csv"))
 ```{r}
 #### SET CONNECTIVITY PARAMETERS ####
 # connectivity parametetrs - % of dispersers reaching a set distance #
-percentage_dispersers <- 0.05 ### 5%
-dispersal_distance <- 434 #Gets curve up to 1000m on x axis
+percentage_dispersers <- 0.05 ### 5% - 95% of individuals will go to woodlands within dispersal_distance
+dispersal_distance <- 400 
 dispersal_contribution <-
   -((log(1 / percentage_dispersers)) / dispersal_distance)
 
@@ -769,7 +769,7 @@ lc.edge.types <- lcm %>% left_join(edge.val.types, by = "class") %>% mutate(Fora
 lc.edge.types <- lc.edge.types %>%
   mutate(weighted_score = perc_cov * Forage_Q)
 
-# Sum the weighted scores for each SQUID section
+# Sum the weighted scores
 weighted_sum_by_section_buffer <- lc.edge.types %>%
   group_by(patch_ID) %>%
   summarise(total_weighted_score = sum(weighted_score),
