@@ -43,8 +43,8 @@ crs(map) <- bng
 
 #Load main roads at 250m scale
 #Summed density of A roads, B roads and motorways
-all_roads <- raster(here("data/derived-data/2015-spatial-layers/all_roads_250_mosaic_all_tiles_corrected.tif"))
-crs(all_roads) <- bng
+#all_roads <- raster(here("data/derived-data/2015-spatial-layers/all_roads_250_mosaic_all_tiles_corrected.tif"))
+#crs(all_roads) <- bng
 
 #Load nearest road
 #Nearest A road, B road or motorway
@@ -166,64 +166,16 @@ plot(landscape_5km)
 
 ```
 
-### Extract raster variables for all woodlands in 10km buffer
+### Extract raster variables for all woodlands in 5km buffer
 
 Produce dataframes with pixel ID's from land cover map. This will allow calculation of pixel-level deer damage risk. Need to ensure there is a "patch_ID" column so that the connectivity values can be assigned to pixels within each patch (calculated at patch-level).
 
 ```{r}
 #NEAREST URBAN EXTRACTION ####
 
-extract_urban_rasters <- function(buffered_woods_5km, raster_layer, land_cover_raster) {
-  
-  # Initialize progress bar
-pb <- progress_bar$new(
-  format = "[:bar] :current/:total (:percent) in :elapsed, eta: :eta",
-  total = nrow(buffered_woods_5km),
-  clear = FALSE,   # Keep the progress bar on the screen
-  width = 60
-)
-  
-  # List to store extracted data
-  extraction_results <- list()
-  
-  # Loop through each buffered buffer and crop all rasters
-for (i in seq_along(buffered_woods_5km$geometry)) {
-  buffer_geometry <- buffered_woods_5km$geometry[i]
-      pb$tick()  # Update the progress bar
+source(here("code/functions/extract_urban_raster_function.R"))
 
-  # Convert buffer geometry to a spatial object that raster can use
-  buffer_extent <- as(extent(st_bbox(buffer_geometry)), "Extent")
-  
- # Get the cell numbers within the extent
-pixel_ID <- cellsFromExtent(land_cover_raster, buffer_extent)
-
-# Get the coordinates for these cells
-cell_coords <- as.data.frame(xyFromCell(land_cover_raster, pixel_ID))
-
-#Extract pixel values
-pixel_values <- extract(raster_layer, cell_coords)
-
-    # Create a data frame with the extracted values and cell indices
-    vals <- data.frame(nearest_urban = pixel_values, 
-                       patch_ID = buffered_woods_5km$patch_ID[i],
-                       pixel_ID = pixel_ID,
-                       x = cell_coords$x,
-                       y = cell_coords$y)
-    
-    # Filter out NA values
-    vals <- vals[!is.na(vals$nearest_urban), ]
-    
-    # Append to the results list
-    extraction_results[[i]] <- vals
-  }
-  
-  # Combine all results into a single dataframe
-  result_df <- bind_rows(extraction_results)
-  
-  return(result_df)
-}
-
-nearest_urban_extraction <- extract_urban_rasters(buffered_woods_5km=buffered_woods_5km, 
+nearest_urban_extraction <- extract_urban_rasters(fivekm_buffer=buffered_woods_5km, 
 raster_layer=nearest_urban,
 land_cover_raster=map)
 
@@ -240,58 +192,10 @@ ggplot(nearest_urban_extraction) +
 ```
 
 ```{r}
-#NEAREST SUBURBAN EXTRACTION ####
-extract_suburban_rasters <- function(buffered_woods_5km, raster_layer, land_cover_raster) {
-  
-  # Initialize progress bar
-pb <- progress_bar$new(
-  format = "[:bar] :current/:total (:percent) in :elapsed, eta: :eta",
-  total = nrow(buffered_woods_5km),
-  clear = FALSE,   # Keep the progress bar on the screen
-  width = 60
-)
-  
-  # List to store extracted data
-  extraction_results <- list()
-  
-  # Loop through each buffered buffer and crop all rasters
-for (i in seq_along(buffered_woods_5km$geometry)) {
-  buffer_geometry <- buffered_woods_5km$geometry[i]
-      pb$tick()  # Update the progress bar
 
-  # Convert buffer geometry to a spatial object that raster can use
-  buffer_extent <- as(extent(st_bbox(buffer_geometry)), "Extent")
-  
- # Get the cell numbers within the extent
-pixel_ID <- cellsFromExtent(land_cover_raster, buffer_extent)
+source(here("code/functions/extract_suburban_raster_function.R"))
 
-# Get the coordinates for these cells
-cell_coords <- as.data.frame(xyFromCell(land_cover_raster, pixel_ID))
-
-#Extract pixel values
-pixel_values <- extract(raster_layer, cell_coords)
-
-    # Create a data frame with the extracted values and cell indices
-    vals <- data.frame(nearest_suburban = pixel_values, 
-                       patch_ID = buffered_woods_5km$patch_ID[i],
-                       pixel_ID = pixel_ID,
-                       x = cell_coords$x,
-                       y = cell_coords$y)
-    
-    # Filter out NA values
-    vals <- vals[!is.na(vals$nearest_suburban), ]
-    
-    # Append to the results list
-    extraction_results[[i]] <- vals
-  }
-  
-  # Combine all results into a single dataframe
-  result_df <- bind_rows(extraction_results)
-  
-  return(result_df)
-}
-
-nearest_suburban_extraction <- extract_suburban_rasters(buffered_woods_5km=buffered_woods_5km, 
+nearest_suburban_extraction <- extract_suburban_rasters(fivekm_buffer=buffered_woods_5km, 
 raster_layer=nearest_suburb,
 land_cover_raster=map)
 
@@ -310,66 +214,19 @@ ggplot(nearest_suburban_extraction) +
 ```{r}
 #MAX DAMS EXTRACTION AT PIXEL LEVEL ####
 
-extract_dams_raster <- function(buffered_woods_5km, raster_layer, land_cover_raster) {
-  
-  # Initialize progress bar
-pb <- progress_bar$new(
-  format = "[:bar] :current/:total (:percent) in :elapsed, eta: :eta",
-  total = nrow(buffered_woods_5km),
-  clear = FALSE,   # Keep the progress bar on the screen
-  width = 60
-)
-  # List to store extracted data
-  extraction_results <- list()
-  # Loop through each buffered buffer and crop all rasters
-for (i in seq_along(buffered_woods_5km$geometry)) {
-  buffer_geometry <- buffered_woods_5km$geometry[i]
-      pb$tick()  # Update the progress bar
+#Call function to extract values from pixels in dams raster
+#The extracted output contains the following columns:
+#max_dams = maximum dams value within 1km of that pixel
+#pixel_ID = obtained from full land cover map
+#x = x coordinate of pixel
+#y = y coordinate of pixel
+source(here("code/functions/extract_dams_raster_function.R"))
 
-  # Convert buffer geometry to a spatial object that raster can use
-  buffer_extent <- as(extent(st_bbox(buffer_geometry)), "Extent")
-  
- # Get the cell numbers within the extent
-pixel_ID <- cellsFromExtent(land_cover_raster, buffer_extent)
-
-# Get the coordinates for these cells
-cell_coords <- as.data.frame(xyFromCell(land_cover_raster, pixel_ID))
-
-#Extract pixel values
-pixel_values <- extract(raster_layer, cell_coords)
-
-    # Create a data frame with the extracted values and cell indices
-    vals <- data.frame(max_dams = pixel_values, 
-                       patch_ID = buffered_woods_5km$patch_ID[i],
-                       pixel_ID = pixel_ID,
-                       x = cell_coords$x,
-                       y = cell_coords$y)
-    
-    # Filter out NA values
-    vals <- vals[!is.na(vals$max_dams), ]
-    
-    # Append to the results list
-    extraction_results[[i]] <- vals
-  }
-  
-  # Combine all results into a single dataframe
-  result_df <- bind_rows(extraction_results)
-  
-  return(result_df)
-}
-
-dams_extraction <- extract_dams_raster(
-buffered_woods_5km=buffered_woods_5km, 
+dams_extraction <- extract_dams_raster(fivekm_buffer=buffered_woods_5km, 
 raster_layer=dams,
 land_cover_raster=map)
 
-
 write.csv(dams_extraction, here("data/derived-data/Tool-extract-function-test/dams_extraction_pixelIDs_1000_5km.csv"))
-
-#check pixels match up with other layers
-dams_pixels <- dams_extraction$pixel_ID
-urban_pixels <- nearest_urban_extraction$pixel_ID
-matching_pixels <- intersect(dams_pixels, urban_pixels)
 
 #Plot
 ggplot(dams_extraction) +
@@ -378,60 +235,20 @@ ggplot(dams_extraction) +
   theme_minimal() +
   guides(fill = guide_colorbar(barwidth = 1, barheight = 10)) +  # Customize the colorbar appearance
   labs(title = "Max Dams within 1km",
-       fill = "Max DAMS")  # Adjust the legend title to be more descriptive
+       fill = "Max DAMS")  
 ```
 
 ```{r}
-#LINEAR FEATURES EXTRACTION AT PIXEL LEVEL ####
-extract_lf_raster <- function(buffered_woods_5km, raster_layer, land_cover_raster) {
-  
-  # Initialize progress bar
-pb <- progress_bar$new(
-  format = "[:bar] :current/:total (:percent) in :elapsed, eta: :eta",
-  total = nrow(buffered_woods_5km),
-  clear = FALSE,   # Keep the progress bar on the screen
-  width = 60
-)
-  
-  # List to store extracted data
-  extraction_results <- list()
-  
-  # Loop through each buffered buffer and crop all rasters
-for (i in seq_along(buffered_woods_5km$geometry)) {
-  buffer_geometry <- buffered_woods_5km$geometry[i]
-      pb$tick()  # Update the progress bar
 
-  # Convert buffer geometry to a spatial object that raster can use
-  buffer_extent <- as(extent(st_bbox(buffer_geometry)), "Extent")
-  
-   # Get the cell numbers within the extent
-pixel_ID <- cellsFromExtent(land_cover_raster, buffer_extent)
+#LINEAR FEATURE DENSITY WITHIN 1KM EXTRACTION AT PIXEL LEVEL ####
 
-# Get the coordinates for these cells
-cell_coords <- as.data.frame(xyFromCell(land_cover_raster, pixel_ID))
-
-#Extract pixel values
-pixel_values <- extract(raster_layer, cell_coords)
-
-    # Create a data frame with the extracted values and cell indices
-    vals <- data.frame(lf = pixel_values, 
-                       patch_ID = buffered_woods_5km$patch_ID[i],
-                       pixel_ID = pixel_ID,
-                       x = cell_coords$x,
-                       y = cell_coords$y)
-    
-    # Filter out NA values
-    vals <- vals[!is.na(vals$lf), ]
-    
-    # Append to the results list
-    extraction_results[[i]] <- vals
-  }
-  
-  # Combine all results into a single dataframe
-  result_df <- bind_rows(extraction_results)
-  
-  return(result_df)
-}
+#Call function to extract values from pixels in linear feature raster
+#The extracted output contains the following columns:
+#lf = total length of linear features within 1km of that pixel
+#pixel_ID = obtained from full land cover map
+#x = x coordinate of pixel
+#y = y coordinate of pixel
+source(here("code/functions/extract_linear_feature_density_raster_function.R"))
 
 lf_extraction <- extract_lf_raster(buffered_woods_5km=buffered_woods_5km, 
 raster_layer=lf,
@@ -452,55 +269,14 @@ ggplot(lf_extraction) +
 ```{r}
 #NEAREST ROAD EXTRACTION AT PIXEL LEVEL ####
 
-nearest_road_rasters <- function(buffered_woods_5km, raster_layer, land_cover_raster) {
-  
-  # Initialize progress bar
-pb <- progress_bar$new(
-  format = "[:bar] :current/:total (:percent) in :elapsed, eta: :eta",
-  total = nrow(buffered_woods_5km),
-  clear = FALSE,   # Keep the progress bar on the screen
-  width = 60
-)
-  
-  # List to store extracted data
-  extraction_results <- list()
-  
-  # Loop through each buffered buffer and crop all rasters
-for (i in seq_along(buffered_woods_5km$geometry)) {
-  buffer_geometry <- buffered_woods_5km$geometry[i]
-      pb$tick()  # Update the progress bar
-
-  # Convert buffer geometry to a spatial object that raster can use
-  buffer_extent <- as(extent(st_bbox(buffer_geometry)), "Extent")
-  
- # Get the cell numbers within the extent
-pixel_ID <- cellsFromExtent(land_cover_raster, buffer_extent)
-
-# Get the coordinates for these cells
-cell_coords <- as.data.frame(xyFromCell(land_cover_raster, pixel_ID))
-
-#Extract pixel values
-pixel_values <- extract(raster_layer, cell_coords)
-
-    # Create a data frame with the extracted values and cell indices
-    vals <- data.frame(nearest_road = pixel_values, 
-                       patch_ID = buffered_woods_5km$patch_ID[i],
-                       pixel_ID = pixel_ID,
-                       x = cell_coords$x,
-                       y = cell_coords$y)
-    
-    # Filter out NA values
-    vals <- vals[!is.na(vals$nearest_road), ]
-    
-    # Append to the results list
-    extraction_results[[i]] <- vals
-  }
-  
-  # Combine all results into a single dataframe
-  result_df <- bind_rows(extraction_results)
-  
-  return(result_df)
-}
+#Call function to extract values from pixels in nearest road raster
+#This raster layer includes A roads, B roads and motorways only (not minor roads)
+#The extracted output contains the following columns:
+#nearest_road = distance to the main road nearest to that pixel.
+#pixel_ID = obtained from full land cover map
+#x = x coordinate of pixel
+#y = y coordinate of pixel
+source(here("code/functions/extract_nearest_road_raster_function.R"))
 
 nearest_road_extraction <- nearest_road_rasters(buffered_woods_5km=buffered_woods_5km, 
 raster_layer=nearest_road,
@@ -515,8 +291,10 @@ ggplot(nearest_road_extraction) +
   theme_minimal() +
   guides(fill = guide_colorbar(barwidth = 1, barheight = 10)) +  # Customize the colorbar appearance
   labs(title = "Nearest road",
-       fill = "Distance (m)")  # Adjust the legend title to be more descriptive
+       fill = "Distance (m)")  
 ```
+
+#### Land cover extraction at 1km around woodland pixels
 
 ```{r}
 #LAND COVER EXTRACTION AT 1KM AROUND WOODLAND PIXELS ####
@@ -551,17 +329,8 @@ plot(Focal1000)
 
 #Extract the mean forage quality values ####
 
-# Filter for woodland patches that intersect buffers
-woods_buffers <- st_filter(wood_polys, buffered_woods_5km, .predicate = st_intersects)
+# Use woodland patches that intersect 5km buffer
 plot(woods_buffers$geometry)
-
-# Initialize progress bar
-pb <- progress_bar$new(
-  format = "[:bar] :current/:total (:percent) in :elapsed, eta: :eta",
-  total = length(woods_buffers),
-  clear = FALSE,
-  width = 60
-)
 
 # Crop land cover map by the 5km buffer
 fcrop <- crop(Focal1000, buffered_woods_5km)
@@ -583,8 +352,6 @@ km5_extent <- as(extent(st_bbox(buffered_woods_5km)), "Extent")
   # Extract pixel values
   pixel_values <- extract(fmask, cell_coords)
   
-  # Ensure that there are pixel values before proceeding
-  if (length(pixel_values) > 0) {
     # Create a data frame with the extracted values and cell indices
     lc_quality_df <- data.frame(pixel_ID = pixel_ID,
                        lc_forage_q = pixel_values,
@@ -594,16 +361,7 @@ km5_extent <- as(extent(st_bbox(buffered_woods_5km)), "Extent")
     
     # Filter out NA values
     lc_quality_df <- lc_quality_df[!is.na(lc_quality_df$lc_forage_q), ]
-  } else {
-    # If no values, create an empty data frame with the same structure
-    lc_quality_df <- data.frame(pixel_ID = integer(0),
-                       class = integer(0),
-                       patch_ID = integer(0),
-                       x = numeric(0),
-                       y = numeric(0))
-  }
 
-  
 write.csv(lc_quality_df, here("data/derived-data/Tool-extract-function-test/landscapemetrics_1000_pixelIDs.csv"))
 
 #Plot
@@ -613,25 +371,17 @@ ggplot(lc_quality_df) +
   theme_minimal() +
   guides(fill = guide_colorbar(barwidth = 1, barheight = 10)) +  # Customize the colorbar appearance
   labs(title = "Mean forage quality within 1km",
-       fill = "Mean forage quality")  # Adjust the legend title to be more descriptive
-
+       fill = "Mean forage quality")
 ```
+
+#### Woodland pixel extraction
 
 ```{r}
 #WOODLAND PIXEL EXTRACTION ####
 #Do this at the pixel level
 
-# Filter for woodland patches that intersect buffers
-woods_buffers <- st_filter(wood_polys, buffered_woods_5km, .predicate = st_intersects)
+# Use woodland patches that intersect 5km buffer
 plot(woods_buffers$geometry)
-
-# Initialize progress bar
-pb <- progress_bar$new(
-  format = "[:bar] :current/:total (:percent) in :elapsed, eta: :eta",
-  total = length(woods_buffers),
-  clear = FALSE,
-  width = 60
-)
 
 # Crop land cover map by the 5km buffer
 fcrop <- crop(map, buffered_woods_5km)
@@ -653,37 +403,26 @@ km5_extent <- as(extent(st_bbox(buffered_woods_5km)), "Extent")
   # Extract pixel values
   pixel_values <- extract(fmask, cell_coords)
   
-  # Ensure that there are pixel values before proceeding
-  if (length(pixel_values) > 0) {
     # Create a data frame with the extracted values and cell indices
-    vals <- data.frame(pixel_ID = pixel_ID,
+    woodpix <- data.frame(pixel_ID = pixel_ID,
                        class = pixel_values,
                        patch_ID = woods_buffers$patch_ID[j],
                        x = cell_coords$x,
                        y = cell_coords$y)
     
     # Filter out NA values
-    vals <- vals[!is.na(vals$class), ]
-  } else {
-    # If no values, create an empty data frame with the same structure
-    vals <- data.frame(pixel_ID = integer(0),
-                       class = integer(0),
-                       patch_ID = integer(0),
-                       x = numeric(0),
-                       y = numeric(0))
-  }
-
-  
-write.csv(vals, here("data/derived-data/Tool-extract-function-test/woodland_type_pixelIDs_5km.csv"))
+    woodpix <- woodpix[!is.na(woodpix$class), ]
+ 
+write.csv(woodpix, here("data/derived-data/Tool-extract-function-test/woodland_type_pixelIDs_5km.csv"))
 
 #Plot
-ggplot(vals) +
+ggplot(woodpix) +
   geom_tile(aes(x = x, y = y, fill = class)) +
   scale_fill_viridis_c(option = "plasma") +  # Apply a continuous viridis color scale
   theme_minimal() +
   guides(fill = guide_colorbar(barwidth = 1, barheight = 10)) +  # Customize the colorbar appearance
   labs(title = "Land cover",
-       fill = "Pixel class")  # Adjust the legend title to be more descriptive
+       fill = "Pixel class")  
 ```
 
 ### Assign woodland pixel quality values
@@ -692,8 +431,7 @@ ggplot(vals) +
 woodpix <- read.csv(here("data/derived-data/Tool-extract-function-test/woodland_type_pixelIDs_5km.csv"))
 woodpix <- woodpix%>%dplyr::select(-c("X"))
 
-woods <- woodpix
-unique(woods$class)
+unique(woodpix$class)
 
 #Load landscape nutritional scores for raster categories
 #Edge forage quality scores sum of woodland score + adjacent land cover score
@@ -709,19 +447,19 @@ class(edge.val.types$class)
 edge.val.types <- edge.val.types%>%arrange(class)
 unique(edge.val.types$class)
 
-class(woods$class)
-woods <- woods%>%arrange(class)
-unique(woods$class)
-pcm <-woods%>%arrange(class)
+class(woodpix$class)
+woods <- woodpix%>%arrange(class)
+unique(woodpix$class)
+pcm <-woodpix%>%arrange(class)
 unique(pcm$class)
 
 # Round to 3 decimal places
-woods$class <- round(woods$class, 3)
+woodpix$class <- round(woodpix$class, 3)
 edge.val.types$class <- round(edge.val.types$class, 3)
 
 #Stitch the quality scores into the lcm dataset
 
-wood.edge.types <- woods %>% left_join(edge.val.types, by = c("class")) #%>%
+wood.edge.types <- woodpix %>% left_join(edge.val.types, by = c("class")) #%>%
                                           #filter(!is.na(Land.cover))
 
 #Replace "NA" in Forage_Q column with 0
@@ -776,37 +514,26 @@ plot(st_geometry(woods[1,]),add=TRUE)
 
 ```{r}
 
-#Connectivity function ####
+#Connectivity for loop ####
 
 connectivity_results <- list()
 
   # Use the 7km buffer as the source patches area
   source_woods <- st_filter(hab_patches_all, buffered_woods_7km, .predicate = st_intersects)
 
-  # Crop the woodlands in the original 5km square to get the focal patches
+  # Filter the woodlands in the original 5km square to get the focal patches
   focal_woods <- st_filter(hab_patches_all, buffered_woods_5km, .predicate = st_intersects)
   n_distinct(focal_woods$patch_ID)
 
   # Calculate connectivity for each focal woodland
   Connectivity_table <- NULL
   
-  # Initialize progress bar
-pb <- progress_bar$new(
-  format = "[:bar] :current/:total (:percent) in :elapsed, eta: :eta",
-  total = nrow(focal_woods),
-  clear = FALSE,   # Keep the progress bar on the screen
-  width = 60
-)
-
   # Loop through each focal woodland to calculate connectivity
   for (j in 1:nrow(focal_woods)) {
     
     # Focal patch in the 10km square
     focal_patch <- focal_woods[j, ]
-    
-    #update progress bar
-    pb$tick
-    
+  
     # Buffer 1000m around the focal patch
     focal_patch_buffer <- st_buffer(focal_patch, buffer_cutoff)
     
@@ -919,8 +646,7 @@ plot(connect_raster_5km)
   extraction_results <- list()
   
   # Loop through each buffered buffer and crop all rasters
-for (i in seq_along(buffered_woods_5km$geometry)) {
-  buffer_geometry <- buffered_woods_5km$geometry[i]
+  buffer_geometry <- buffered_woods_5km$geometry
       pb$tick()  # Update the progress bar
 
   # Convert buffer geometry to a spatial object that raster can use
@@ -936,18 +662,16 @@ cell_coords <- as.data.frame(xyFromCell(map, pixel_ID))
 pixel_values <- extract(connect_raster_5km, cell_coords)
 
     # Create a data frame with the extracted values and cell indices
-    vals <- data.frame(total_connect = pixel_values, 
-                       patch_ID = buffered_woods_5km$patch_ID[i],
+    connect.vals <- data.frame(total_connect = pixel_values, 
                        pixel_ID = pixel_ID,
                        x = cell_coords$x,
                        y = cell_coords$y)
     
     # Filter out NA values
-    vals <- vals[!is.na(vals$total_connect), ]
+    connect.vals <- connect.vals[!is.na(connect.vals$total_connect), ]
     
     # Append to the results list
-    extraction_results[[i]] <- vals
-  }
+    extraction_results <- connect.vals
   
   # Combine all results into a single dataframe
   connect_df <- bind_rows(extraction_results)
@@ -970,10 +694,10 @@ ggplot(connect_df) +
 #Check pixel_ID cols match
 
 # Extract pixel_ID columns from both dataframes
-pixel_IDs_lc_df <- lc_quality_df$pixel_ID
-pixel_IDs_woodpix <- wood.edge.types$pixel_ID
+#pixel_IDs_lc_df <- lc_quality_df$pixel_ID
+#pixel_IDs_woodpix <- wood.edge.types$pixel_ID
 # To find specific differences, you can use set operations
-not_shared <- setdiff(pixel_IDs_woodpix, pixel_IDs_lc_df)
+#not_shared <- setdiff(pixel_IDs_woodpix, pixel_IDs_lc_df)
 
 #lc_quality_df <-lc_quality_df%>%dplyr::select(-c("patch_ID"))
 #wood.edge.types<-wood.edge.types%>%dplyr::select(-c("patch_ID"))
@@ -990,25 +714,14 @@ df <- left_join(df, connect_df, by=c("pixel_ID","x","y"))
 
 #MAX DAMS ####
 dams_scores <- dams_extraction%>%rename(max.dams.1000=max_dams)%>%
-  dplyr::select(-c("patch_ID"))%>%
   st_drop_geometry()
 
 df <- left_join(df, dams_scores, by=c("pixel_ID","x","y"))
 
-#df <- left_join(df, dams_scores, by=c("patch_ID")) 
-
-#Road density
-#roads<-road_extraction%>%dplyr::select(-c("patch_ID"))
-#df <- left_join(df, roads, by=c("pixel_ID","x","y"))
-#df <- df %>% rename(all_roads_250=roads)
-
 #Nearest road
-nearest_road_data <- nearest_road_extraction%>%dplyr::select(-c("patch_ID"))
 df <- left_join(df, nearest_road_data, by=c("pixel_ID","x","y"))
 
 #Nearest urban and suburban ####
-#nearest_suburban_extraction<- nearest_suburban_extraction%>%dplyr::select(-c("patch_ID"))
-#nearest_urban_extraction<- nearest_urban_extraction%>%dplyr::select(-c("patch_ID"))
 
 df <- left_join(df, nearest_suburban_extraction, by=c("pixel_ID","x","y"))
 
@@ -1020,7 +733,6 @@ df$urban_proximity <- pmin(df$nearest_suburban, df$nearest_urban)
 df <- df%>%dplyr::select(-c("nearest_suburban","nearest_urban"))
 
 #Linear features####
-#lf_extraction <- lf_extraction%>%dplyr::select(-c("patch_ID"))
 df <- left_join(df, lf_extraction,  by=c("pixel_ID","x","y"))
 
 #Remove the NAs
@@ -1097,8 +809,6 @@ ggplot(df) +
   guides(fill = guide_colorbar(barwidth = 1, barheight = 10)) +  # Customize the colorbar appearance
   labs(title = "Max DAMS within 1km",
        fill = "Max DAMS")  # Adjust the legend title to be more descriptive
-
-df <- df%>%dplyr::select(-c("patch_ID","patch_ID.x","patch_ID.y",))
 
 saveRDS(df, here("data/derived-data/Tool-extract-function-test/bbn_test_df_5_patches_pixel_level_5km.rds"))
 ```
@@ -1277,7 +987,7 @@ disturb_index_cpt
 ```
 
 ```{r}
-#CPT for Nutritional Pixel Index ####
+#CPT for Nutritional Pixel Index for woodland pixels ####
 
 NPI_cpt <- array(
   0,  # Default probability for each cell
@@ -1655,13 +1365,9 @@ raster_data <- stars::st_rasterize(df_sf %>% dplyr::select(value, geometry))
 # Get last 5 colours from YIOrRd color palette
 color_palette <- c("LOW" = "yellow", "LOW-MED" = "#FED976", "MED" = "#FD8D3C", "MED-HIGH" = "#FC4E2A", "HIGH" = "#E31A1C")
 
-# Initialize a list to store individual plots
-plots <- list()
 
-# Loop through each area in 'buffered_woods_5km'
-for (i in 1:nrow(buffered_woods_7km)) {
   # Extract the i-th area
-  area <- buffered_woods_7km[i, ]
+  area <- buffered_woods_7km$geometry
   
   cropped_data <- st_crop(raster_data, area)
   
@@ -1676,9 +1382,9 @@ for (i in 1:nrow(buffered_woods_7km)) {
     filter(!is.na(value))
   
   # Plot using ggplot2
-  plot_title <- buffered_woods_7km$Region[i]
+  plot_title <- buffered_woods_7km$Region
   
-  plot <- ggplot(cropped_df) +
+  plot <-ggplot(cropped_df) +
     geom_raster(aes(x = x, y = y, fill = value)) +
     scale_fill_manual(
       values = color_palette, 
@@ -1693,10 +1399,6 @@ for (i in 1:nrow(buffered_woods_7km)) {
       x = "Longitude",
       y = "Latitude"
     )
-  
-  # Store the plot in the list
-  plots[[i]] <- plot
-}
 
 # Save each plot to a separate PDF file with 300 dpi resolution
 output_dir <- here("output/figures")
@@ -1704,20 +1406,16 @@ dpi <- 300  # Resolution in dots per inch
 width <- 6  # Width of the PDF in inches
 height <- 6  # Height of the PDF in inches
 
-for (i in 1:length(plots)) {
-  plot <- plots[[i]]  # Get the plot from the list
-  filename <- file.path(output_dir, paste0("25m_res_map_5km", i, ".pdf"))
-  
   # Save the plot as a 300 dpi PDF
   ggsave(
-    filename = filename, 
+    filename = "DI_risk", 
     plot = plot, 
     device = "pdf",  # Specify the file format
     width = width, 
     height = height, 
     dpi = dpi  # Set the resolution
   )
-}
+
 
 ```
 
