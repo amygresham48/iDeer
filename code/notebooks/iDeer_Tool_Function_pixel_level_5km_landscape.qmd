@@ -49,7 +49,7 @@ crs(map) <- bng
 #Load nearest road
 #Nearest A road, B road or motorway
 nearest_road <- raster(here("data/derived-data/2015-spatial-layers/nearest_road_raster_2015_all_tiles_corrected.tif"))
-crs(all_roads) <- bng
+crs(nearest_road) <- bng
 
 #Load nearest urban
 nearest_urban <- raster(here("data/derived-data/2015-spatial-layers/nearest_urban_raster_2015_all_tiles_corrected.tif"))
@@ -355,7 +355,6 @@ km5_extent <- as(extent(st_bbox(buffered_woods_5km)), "Extent")
     # Create a data frame with the extracted values and cell indices
     lc_quality_df <- data.frame(pixel_ID = pixel_ID,
                        lc_forage_q = pixel_values,
-                       patch_ID = woods_buffers$patch_ID[j],
                        x = cell_coords$x,
                        y = cell_coords$y)
     
@@ -406,7 +405,6 @@ km5_extent <- as(extent(st_bbox(buffered_woods_5km)), "Extent")
     # Create a data frame with the extracted values and cell indices
     woodpix <- data.frame(pixel_ID = pixel_ID,
                        class = pixel_values,
-                       patch_ID = woods_buffers$patch_ID[j],
                        x = cell_coords$x,
                        y = cell_coords$y)
     
@@ -506,7 +504,7 @@ ggplot(data = test, aes(x = distance, y = contribution, group = 1)) +
   geom_vline(xintercept = buffer_cutoff, color = "red")
 
 #See how buffer size looks
-focal_patch_buffer <- st_buffer(woods[1,], buffer_cutoff)
+#focal_patch_buffer <- st_buffer(woods[1,], buffer_cutoff)
 plot(st_geometry(focal_patch_buffer))
 plot(st_geometry(woods[1,]),add=TRUE)
 
@@ -647,7 +645,6 @@ plot(connect_raster_5km)
   
   # Loop through each buffered buffer and crop all rasters
   buffer_geometry <- buffered_woods_5km$geometry
-      pb$tick()  # Update the progress bar
 
   # Convert buffer geometry to a spatial object that raster can use
   buffer_extent <- as(extent(st_bbox(buffer_geometry)), "Extent")
@@ -719,7 +716,7 @@ dams_scores <- dams_extraction%>%rename(max.dams.1000=max_dams)%>%
 df <- left_join(df, dams_scores, by=c("pixel_ID","x","y"))
 
 #Nearest road
-df <- left_join(df, nearest_road_data, by=c("pixel_ID","x","y"))
+df <- left_join(df, nearest_road_extraction, by=c("pixel_ID","x","y"))
 
 #Nearest urban and suburban ####
 
@@ -962,7 +959,7 @@ disturb_index_cpt["LOW","LOW","LOW","MED"] <- 1
 disturb_index_cpt["MED","MED","LOW","MED"] <- 1
 disturb_index_cpt["MED","HIGH","LOW","MED"] <- 1
 #table5: urban_prox = MED, connectivity = MED
-disturb_index_cpt["LOW","LOW","MED","MED"] <- 1
+disturb_index_cpt["MED","LOW","MED","MED"] <- 1
 disturb_index_cpt["MED","MED","MED","MED"] <- 1
 disturb_index_cpt["HIGH","HIGH","MED","MED"] <- 1
 #table6: urban_prox = HIGH, connectivity = MED
@@ -1704,7 +1701,6 @@ thermoreg_plot <- ggplot(r_df) +
        fill = "Thermoregulation Index") +
   guides(fill = guide_legend(override.aes = list(alpha = 1))) # Ensure all levels are shown in the legend
 
-
 # Save the plot as a 300 dpi PDF
   ggsave(
     filename = file.path(output_dir,"thermoreg_plot.pdf"), 
@@ -1713,6 +1709,11 @@ thermoreg_plot <- ggplot(r_df) +
     width = width, 
     height = height, 
     dpi = dpi)  # Set the resolution
+  
+  disturb_plot
+  nli_plot
+  npi_plot
+  thermoreg_plot
   
 ```
 
