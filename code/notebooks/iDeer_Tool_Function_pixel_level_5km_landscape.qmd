@@ -26,6 +26,7 @@ library(bnlearn)
 library(RColorBrewer)
 library(rasterVis)
 library(ggmap)
+library(gRain)
 
 here()
 
@@ -505,8 +506,8 @@ ggplot(data = test, aes(x = distance, y = contribution, group = 1)) +
 
 #See how buffer size looks
 #focal_patch_buffer <- st_buffer(woods[1,], buffer_cutoff)
-plot(st_geometry(focal_patch_buffer))
-plot(st_geometry(woods[1,]),add=TRUE)
+#plot(st_geometry(focal_patch_buffer))
+#plot(st_geometry(woods[1,]),add=TRUE)
 
 ```
 
@@ -995,8 +996,22 @@ NPI_cpt <- array(
   )
 )
 
+#NPI_cpt["LOW","LOW"] <- 1
+#NPI_cpt["MED","MED"] <- 1
+#NPI_cpt["HIGH","HIGH"] <- 1
+
+#The probability of the NPI matching the pixel nutritional score is 100%
+#As this is the only parent variable, and NPI is a latent index variable.
 NPI_cpt["LOW","LOW"] <- 1
+NPI_cpt["MED","LOW"] <- 0
+NPI_cpt["HIGH","LOW"] <- 0
+
+NPI_cpt["LOW","MED"] <- 0
 NPI_cpt["MED","MED"] <- 1
+NPI_cpt["HIGH","MED"] <- 0
+
+NPI_cpt["LOW","HIGH"] <- 0
+NPI_cpt["MED","HIGH"] <- 0
 NPI_cpt["HIGH","HIGH"] <- 1
 
 NPI_cpt
@@ -1040,9 +1055,20 @@ thermoreg_cpt <- array(
     DAMS_MAX = c("LOW", "MED", "HIGH")
   )
 )
+
+#The probability of the thermoreg_index matching the DAMS_MAX category is 100%, as the index is a latent variable and is unmeasured.
+
 #order = DAMS_MAX, thermoreg_index
 thermoreg_cpt["LOW","LOW"] <- 1
+thermoreg_cpt["MED","LOW"] <- 0
+thermoreg_cpt["HIGH","LOW"] <- 0
+
+thermoreg_cpt["LOW","MED"] <- 0
 thermoreg_cpt["MED","MED"] <- 1
+thermoreg_cpt["HIGH","MED"] <- 0
+
+thermoreg_cpt["LOW","HIGH"] <- 0
+thermoreg_cpt["MED","HIGH"] <- 0
 thermoreg_cpt["HIGH","HIGH"] <- 1
 
 thermoreg_cpt
@@ -1311,10 +1337,10 @@ levels(predict_dat$damage_risk)<-c("LOW","LOW-MED","MED","MED-HIGH","HIGH")
 predict_dat <- as.data.frame(predict_dat)
 
 #Predict values for latent variables
-pred_nli = predict(dfit,node="NLI",data=predict_dat, method = "bayes-lw",from=c("landscape_nutritional_score","lf_density"))
-pred_npi = predict(dfit,node="NPI",data=predict_dat, method = "bayes-lw", from = "pixel_nutritional_score")
-pred_thermoreg = predict(dfit,node="thermoreg_index",data=predict_dat, method = "bayes-lw", from="DAMS_MAX")
-pred_disturb = predict(dfit,node="disturb_index",data=predict_dat, method = "bayes-lw",from=c("nearest_road","urban_prox","connectivity"))
+pred_nli = predict(dfit,node="NLI",data=predict_dat, method = "exact",from=c("landscape_nutritional_score","lf_density"))
+pred_npi = predict(dfit,node="NPI",data=predict_dat, method = "exact", from = "pixel_nutritional_score")
+pred_thermoreg = predict(dfit,node="thermoreg_index",data=predict_dat, method = "exact", from="DAMS_MAX")
+pred_disturb = predict(dfit,node="disturb_index",data=predict_dat, method = "exact",from=c("nearest_road","urban_prox","connectivity"))
 
 #fill the columns
 predict_dat$NLI <- pred_nli
@@ -1323,7 +1349,8 @@ predict_dat$thermoreg_index <- pred_thermoreg
 predict_dat$disturb_index <- pred_disturb
   
 #Predict damage
-pred_damage = predict(dfit,node = "damage_risk",data = predict_dat,method = "parents")
+pred_damage = predict(dfit,node = "damage_risk",data = predict_dat,method = "exact", from=c("NPI","NLI","disturb_index","thermoreg_index"))
+#pred_damage = predict(dfit,node = "damage_risk",data = predict_dat,method = "parents")
 #method = "bayes-lw"
 predict_dat$damage_risk <- pred_damage
 
@@ -1506,6 +1533,13 @@ leaflet() %>%
 ```
 
 ```{r}
+#Save deer impact predictions as raster layer to export if needed
+
+writeRaster(rounded_raster, here("FR-iDeer-tool-dev/test_5km_raster.tif"),overwrite=TRUE)
+```
+
+```{r}
+
 #Plot the 4 incides as spatial layers to be included alongside the leaflet map ####
 
 # Save each plot to a separate PDF file with 300 dpi resolution
