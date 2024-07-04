@@ -1249,7 +1249,7 @@ cpquery(dfit, c(lf_density == "LOW"|DAMS_MAX == "HIGH"|landscape_nutritional_sco
 ```{r}
 predict_dat <- df_categorical %>%st_drop_geometry() %>% #drop geometry
    mutate(across(where(is.character), toupper)) %>% #convert characters to upper case
-   dplyr::select(-c("pixel_ID","x","y"))
+   dplyr::select(-c("x","y"))
 #Ensure variable names match those in BBN
 predict_dat<-predict_dat%>%rename(
                               nearest_road=nearest_road,
