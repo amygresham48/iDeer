@@ -46,7 +46,7 @@ ggplot(CPT, aes(x = NPI, y = Damage_Index, col = NLI, group = NLI)) +
 dev.off()
 
 
-#Have a look at disturbance CPT ####
+#Disturbance CPT ####
 
 disturb <- read.csv(here("data/BBN-cpts/CPT_Disturbance_Index.csv"))
 
@@ -56,12 +56,101 @@ recode_mapping <- c("LOW" = 1, "MED" = 2, "HIGH" = 3)
 disturb <- disturb %>%
   mutate(across(1:4, ~ recode(., !!!recode_mapping)))
 
-
 ggplot(disturb, aes(x = Urban_proximity, y = Disturbance_Index, col = Connectivity, group = Connectivity)) +  # Set aesthetics
   geom_line() +
   geom_point() + 
-  facet_wrap(.~Road_density) +  # Set facets
+  facet_grid(rows=vars(Connectivity), cols=vars(Road_density),labeller = label_both)+
+  theme_bw() -> urbplot#+  Use a clean theme
+  #scale_color_viridis_c() + # Use viridis color scale
+  # Create a simple secondary axis for the facets (use the appropriate scale_x function)
+ # scale_x_continuous(sec.axis = sec_axis(~ . , name = "Road_density", breaks = NULL, labels = NULL))
+
+  ggplot(disturb, aes(x = Road_density, y = Disturbance_Index, col = Connectivity, group = Connectivity)) +  # Set aesthetics
+    geom_line() +
+    geom_point() + 
+    facet_grid(rows=vars(Connectivity), cols=vars(Urban_proximity),labeller = label_both)+
+    theme_bw() -> rdplot #+  # Use a clean theme
+    # Create a simple secondary axis for the facets (use the appropriate scale_x function)
+    #scale_x_continuous(sec.axis = sec_axis(~ . , name = "Road_density", breaks = NULL, labels = NULL))
+
+  ggplot(disturb, aes(x = Connectivity, y = Disturbance_Index, col = Connectivity, group = 1)) +  # Set aesthetics
+    geom_line() +
+    geom_point() + 
+    facet_grid(rows=vars(Road_density), cols=vars(Urban_proximity),labeller = label_both)+
+    theme_bw() -> conplot #+  # Use a clean theme
+  # Create a simple secondary axis for the facets (use the appropriate scale_x function)
+  #scale_x_continuous(sec.axis = sec_axis(~ . , name = "Road_density", breaks = NULL, labels = NULL))
+  
+  
+  
+gridExtra::grid.arrange(urbplot, rdplot, conplot)    
+
+#Try correcting the odd relationships, plot again:
+#USING THIS LOGIC IN BBN AS OF 04/07/2024
+
+#Disturbance CPT ####
+
+disturb_v2 <- read.csv(here("data/BBN-cpts/CPT_Disturbance_Index_refined.csv"))
+
+#Recode to numbers
+recode_mapping <- c("LOW" = 1, "MED" = 2, "HIGH" = 3)
+# Recode the first four columns
+disturb_v2 <- disturb_v2 %>%
+  mutate(across(1:4, ~ recode(., !!!recode_mapping)))
+
+ggplot(disturb_v2, aes(x = Urban_proximity, y = Disturbance_Index, col = Connectivity, group = Connectivity)) +  # Set aesthetics
+  geom_line() +
+  geom_point() + 
+  facet_grid(rows=vars(Connectivity), cols=vars(Road_density),labeller = label_both)+
+  theme_bw() -> urbplot#+  Use a clean theme
+#scale_color_viridis_c() + # Use viridis color scale
+# Create a simple secondary axis for the facets (use the appropriate scale_x function)
+# scale_x_continuous(sec.axis = sec_axis(~ . , name = "Road_density", breaks = NULL, labels = NULL))
+
+ggplot(disturb_v2, aes(x = Road_density, y = Disturbance_Index, col = Connectivity, group = Connectivity)) +  # Set aesthetics
+  geom_line() +
+  geom_point() + 
+  facet_grid(rows=vars(Connectivity), cols=vars(Urban_proximity),labeller = label_both)+
+  theme_bw() -> rdplot #+  # Use a clean theme
+# Create a simple secondary axis for the facets (use the appropriate scale_x function)
+#scale_x_continuous(sec.axis = sec_axis(~ . , name = "Road_density", breaks = NULL, labels = NULL))
+
+ggplot(disturb_v2, aes(x = Connectivity, y = Disturbance_Index, col = Connectivity, group = 1)) +  # Set aesthetics
+  geom_line() +
+  geom_point() + 
+  facet_grid(rows=vars(Road_density), cols=vars(Urban_proximity),labeller = label_both)+
+  theme_bw() -> conplot #+  # Use a clean theme
+# Create a simple secondary axis for the facets (use the appropriate scale_x function)
+#scale_x_continuous(sec.axis = sec_axis(~ . , name = "Road_density", breaks = NULL, labels = NULL))
+
+gridExtra::grid.arrange(urbplot, rdplot, conplot)    
+
+###########################
+
+#Nutritional landscape index ####
+      
+nli <- read.csv(here("data/BBN-cpts/CPT_NLI.csv"))
+#Recode to numbers
+recode_mapping <- c("LOW" = 1, "MED" = 2, "HIGH" = 3)
+# Recode the three column
+nli <- nli %>%
+  mutate(across(1:3, ~ recode(., !!!recode_mapping)))
+
+ggplot(nli, aes(x = linear_density, y = NLI)) +  # Set aesthetics
+  geom_line() +
+  geom_point() + 
+  facet_wrap(.~nutritional_landscape_composition) +  # Set facets
   theme_bw() +  # Use a clean theme
   scale_color_viridis_c() + # Use viridis color scale
   # Create a simple secondary axis for the facets (use the appropriate scale_x function)
-  scale_x_continuous(sec.axis = sec_axis(~ . , name = "Road_density", breaks = NULL, labels = NULL))
+  scale_x_continuous(sec.axis = sec_axis(~ . , name = "nutritional_landscape_composition", breaks = NULL, labels = NULL))
+
+ggplot(nli, aes(x = nutritional_landscape_composition, y = NLI)) +  # Set aesthetics
+  geom_line() +
+  geom_point() + 
+  facet_wrap(.~linear_density) +  # Set facets
+  theme_bw() +  # Use a clean theme
+  scale_color_viridis_c() + # Use viridis color scale
+  # Create a simple secondary axis for the facets (use the appropriate scale_x function)
+  scale_x_continuous(sec.axis = sec_axis(~ . , name = "linear feature density", breaks = NULL, labels = NULL))
+
