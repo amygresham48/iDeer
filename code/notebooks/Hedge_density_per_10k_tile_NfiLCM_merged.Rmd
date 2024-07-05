@@ -53,7 +53,6 @@ nfi.lcm.2015 <- raster(here(project_dir,"inputs", "nfi_lcm_2015_overlaid_woods_o
 #Modification done in ArcGIS pro
 #Used nfi.lcm.polys to erase overlapping linear feature geometry
 #Result = linear features outside of woods
-
 lf <- st_read(here(project_dir,"intermediate_outputs","linear_features_outside_woods.shp"))
 
 ```
