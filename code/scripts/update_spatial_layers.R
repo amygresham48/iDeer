@@ -1,6 +1,5 @@
-#UPDATE iDEER SPATIAL LAYERS FOR BAYESIAN BELIEF NETWORK MODEL ####
-#Author: Amy Gresham
-#Date: 05/07/2024
+#UPDATING iDEER SPATIAL LAYERS FOR BAYESIAN BELIEF NETWORK MODEL ####
+#Author: Amy Gresham, July 2024
 
 #The purpose of this script is to update spatial layers for the Bayesian
 #Belief Network model that produces the initial deer damage risk map presented
@@ -15,7 +14,10 @@ library(dplyr)
 library(here)
 library(progress)
 
-#Import datasets
+#British National Grid
+bng <- 27700
+
+#Import raw datasets ####
 
 #Latest NFI dataset
 nfi <- st_read(here("data/raw-data/nfi-2022-raw/NATIONAL_FOREST_INVENTORY_GB_2022.shp"))
@@ -23,8 +25,20 @@ nfi <- st_read(here("data/raw-data/nfi-2022-raw/NATIONAL_FOREST_INVENTORY_GB_202
 #Latest CEH LCM dataset
 lcm <- raster(here("data/raw-data/lcm-2022/gblcm2022_25m.tif"))
 
-#England and Wales 10k squares
-ew10k <- sf::st_read(here("data/clean-data/10k_tiles_EW.shp"))
+#uk10k
+uk10k <-sf::st_read(dsn = "C:/Users/ik929086/OneDrive - University of Reading/Documents/Spatial datasets/os_bng_grids.gpkg", layer = "10km_grid")
+
+#Import UK shapefile
+
+#GB shapefile
+GB <- st_read("C:/Users/ik929086/OneDrive - University of Reading/Documents/Spatial datasets/GB shapefile/Countries_December_2022_GB_BFC_-8802398211591794926/CTRY_DEC_2022_GB_BFC.shp")
+#Remove Scotland
+EW <- GB[!grepl("Scotland", GB$CTRY22NM),]
+
+#st_filter to keep all 10k tiles that overlap EW
+#using st_filter instead of st_intersection ensures that edges of tiles are not cut off
+
+uk10k_EW <- sf::st_filter(uk10k, EW)
 
 #OS Open Roads
 roads <- sf::st_read(here("data/raw-data/open_roads.gpkg"), layer = "road_link") %>%
@@ -33,10 +47,24 @@ roads <- sf::st_read(here("data/raw-data/open_roads.gpkg"), layer = "road_link")
 #Linear feature layer
 #Dataset = CEH Woody Linear Feature Framework (2016)
 #Need to modify to remove linear features within woodlands
-lf <- raster(here("data/raw-data/linear_features/lf_raster.tif"))
 
+lf <- st_read(here("data/raw-data/linear_features/GB_WLF_V1_0.gdb"),layer="GB_WLF_V1_0")
+st_crs(lf) <- bng
 
-#####################################################
+#dams (Direct Aspect Method Scoring) dataset from Forest Research
+#This layer has been pre-processed in ArcGIS Pro as follows: 
+
+#1. CRS unknown, therefore assigned British National Grid
+#Original dams layer had no defined crs, but the pixels line up with other BNG rasters
+
+#2. Interpolated from 50m resolution to 25m resolution
+#To match the resolution of other raster layers used in the functions below
+#Interpolation method = bilinear
+
+dams <- raster(here("data/raw-data/DAMS/dams_25m_bng.tif"))
+crs(dams) <- bng
+
+#-------------------------------------------------
 
 #RUN FUNCTIONS ####
 
@@ -44,63 +72,106 @@ lf <- raster(here("data/raw-data/linear_features/lf_raster.tif"))
 #This function produces a modified land cover raster with woodland edges
 #classified by modal land cover type
 #also produces a binary woodland raster to be used for subsequent spatial layers
+#!WARNING! THIS FUNCTION MAY TAKE SEVERAL DAYS TO RUN DEPENDING ON SIZE OF AREA.
+#FOR ENGLAND AND WALES, WILL TAKE 2-3 DAYS
 
 #Call function
-source(here("code/functions/NFI_CEHLCM_woodland_edge_function.R"))
+source(here("code/functions/NFI_LCM_RASTER_FUNCTION.R"))
 
-update_map(nfi=nfi, 
-           lcm=lcm,
-           uk10k=uk10k,
-           EW=EW)
+update_map(nfi=nfi, #latest NFI dataset 
+           lcm=lcm, # latest CEH LCM dataset
+           tiles=uk10k_EW) #10k tiles for England and Wales
 
-#The following require on the update_map() function to be run first
-#As this generates the updated woodland map
+#-------------------------------------
 
-#Import binary raster and combined CEH/LCM land cover maps
+#The following require the update_map() function to be run first
+#As this generates the updated woodland map and binary map
 
-cehlcm_map <- raster(here("output/edge_core_raster_all_tiles_EW.tif"))
-NFI_LCM_woods_only <- raster(here("NFILCM_binary_woodland.tif"))
+#Import woodland raster and combined CEH/LCM land cover maps
+#Generated from update_map() function
 
-#Import shapefile of binary woodland map for connectivity analysis
+#This layer does NOT include woodland edge type
+nfi_lcm_map <- raster(here("data/derived-data/nfi_lcm_2022_overlaid.tif"))
+crs(nfi_lcm_map) <- bng
+NFI_LCM_woods_only <- raster(here("output/NFILCM_2022_binary_woodland_all_tiles_EW.tif"))
+crs(NFI_LCM_woods_only) <- bng
+#Reclassify to make a binary raster (0/1)
+reclass_matrix <- matrix(c(
+  1, 1,  # Reclassify value 1 to 1 #Broadleaf
+  2, 1,  # Reclassify value 2 to 1 #Coniferous
+  22, 1, # Reclassify value 22 to 1 #Mixed mainly BL
+  23, 1  # Reclassify value 23 to 1 #Mixed mainly conifer
+), ncol=2, byrow=TRUE)
+NFI_LCM_woods_only <- reclassify(NFI_LCM_woods_only, reclass_matrix)
+crs(NFI_LCM_woods_only) <- bng
 
-hab_patches_all <- st_read(here("output/NFILCM_binary_woodland.shp"))
+#Make shapefile of binary woodland raster (0/1)
+#Where raster cell = 1, dissolve into multipolygon
+woodland_polys <- rasterToPolygons(NFI_LCM_woods_only, fun=function(x){x==1}, dissolve=TRUE)
+woodland_polys <- st_as_sf(woodland_polys)
+#Explode multipolygon into non-adjoining polygons
+woodland_polys<-st_cast(woodland_polys,"POLYGON")
+
+hab_patches_all <- woodland_polys %>%
+  select(-c(NFILCM_2022_binary_woodland_all_tiles_EW)) %>%
+  mutate(Id = row_number(),
+         Area = st_area(geometry))%>%
+  mutate(Area = as.numeric(Area))
+  
+
+#-------------------------------------
 
 #2. The nearest main road (A road, B road or motorway)
 
-source(here("code/functions/nearest_road_func.R"))
+source(here("code/functions/NEAREST_ROAD_RASTER_FUNCTION.R"))
 
 nearest_road(wood_binary_rast = NFI_LCM_woods_only, #woodland binary raster
-            lcm=lcm, #Latest CEH LCM
-            ew10k=ew10k, #BNG 10km tiles within England and Wales
+            lcm=lcm, #Latest CEH LCM to act as template raster
+            tiles=uk10k_EW, #BNG 10km tiles within England and Wales
             roads=roads)
+
+#------------------------------------
 
 #3. The nearest urban and suburban features
 
-source(here("code/functions/nearest_urb_suburb_func.R"))
+source(here("code/functions/NEAREST_URBAN_SUBURBAN_RASTER_FUNCTION.R"))
 
-nearest_urb_suburb(wood_binary_rast = NFI_LCM_woods_only,
-                   lcm = lcm,
-                   tiles=ew10k)
+nearest_urb_suburb(wood_binary_rast = NFI_LCM_woods_only, #woodland binary raster
+                   nfi_lcm_map = nfi_lcm_map, #combined nfi/lcm raster
+                   tiles=uk10k_EW)
+
+#------------------------------------
 
 #4. MAXIMUM DAMS (metric for landscape exposure outside of woodlands)
 #Need to ensure this is using the combined NFI/LCM when identifying the open habitats
 
-source(here("code/functions/max_dams_func.R"))
+#THIS FUNCTION NEEDS FIXING!!
+#Extent of output for focal statistics step does not match input
+
+source(here("code/functions/MAX_DAMS_FUNCTION.R"))
 
 max_dams(wood_binary_rast = NFI_LCM_woods_only,
-         dams_map = dams)
+         dams = dams,
+         nfi_lcm_map = nfi_lcm_map,
+         tiles=uk10k_EW)
+
+#------------------------------------
 
 #5. Linear feature density (hedgerows and treelines)
 
-source(here("code/functions/linear_feature_func.R"))
+source(here("code/functions/LINEAR_FEATURE_DENSITY_FUNCTION.R"))
 
 linear_feature_density(wood_binary_rast = NFI_LCM_woods_only,
-                       tiles=ew10k,
-                       lcm=lcm
+                       tiles=uk10k_EW,
+                       lcm=lcm,
+                       hab_patches_all=hab_patches_all
                        )
+
+#------------------------------------
+
 #6. Connectivity
 
-source(here("code/functions/connectivity_func.R"))
+source(here("code/functions/WOODLAND_CONNECTIVITY_RASTER_FUNCTION.R"))
 
 connectivity(hab_patches_all = nfi_lcm_overlaid_shapefile_woods_export)
 
