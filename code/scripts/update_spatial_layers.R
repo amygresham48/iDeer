@@ -115,8 +115,8 @@ woodland_polys<-st_cast(woodland_polys,"POLYGON")
 hab_patches_all <- woodland_polys %>%
   select(-c(NFILCM_2022_binary_woodland_all_tiles_EW)) %>%
   mutate(Id = row_number(),
-         Area = st_area(geometry))%>%
-  mutate(Area = as.numeric(Area))
+         Shape_Area = st_area(geometry))%>%
+  mutate(Shape_Area = as.numeric(Shape_Area))
   
 
 #-------------------------------------
@@ -173,6 +173,8 @@ linear_feature_density(wood_binary_rast = NFI_LCM_woods_only,
 
 source(here("code/functions/WOODLAND_CONNECTIVITY_RASTER_FUNCTION.R"))
 
-connectivity(hab_patches_all = nfi_lcm_overlaid_shapefile_woods_export)
+incoming_connectivity(hab_patches_all = hab_patches_all,
+                      nfi_lcm_map = nfi_lcm_map,
+                      )
 
 
