@@ -44,8 +44,8 @@ hab_patches <-st_filter(hab_patches_all, ew_10k, .predicate =st_intersects)
 ```{r}
 #### SET CONNECTIVITY PARAMETERS ####
 # connectivity parametetrs - % of dispersers reaching a set distance #
-percentage_dispersers <- 0.05 ### 5%
-dispersal_distance <- 434 #Gets curve up to 1000m on x axis
+percentage_dispersers <- 0.05 ### 5% - 95% of individuals will go to woodlands
+dispersal_distance <- 400 
 dispersal_contribution <-
   -((log(1 / percentage_dispersers)) / dispersal_distance)
 
@@ -106,7 +106,7 @@ for (i in 1:nrow(hab_patches)) {
   focal_patch <- hab_patches[i,]
   
   # id patches to measure to
-  # buffer from slected focal patch by bufferDistnace
+  # buffer from selected focal patch by bufferDistnace
   focal_patch_buffer <- st_buffer(focal_patch, buffer_cutoff)
   # select source patches within buffer distance of focal patch
   source_patch <- st_filter(hab_patches, focal_patch_buffer, .predicate = st_intersects)
