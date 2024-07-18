@@ -194,6 +194,8 @@ ggplot(nearest_urban_extraction) +
 
 ```{r}
 
+#NEAREST SUBURBAN EXTRACTION ####
+
 source(here("code/functions/extract_suburban_raster_function.R"))
 
 nearest_suburban_extraction <- extract_suburban_rasters(fivekm_buffer=buffered_woods_5km, 
