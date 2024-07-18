@@ -72,7 +72,7 @@ crs(dams) <- bng
 #This function produces a modified land cover raster with woodland edges
 #classified by modal land cover type
 #also produces a binary woodland raster to be used for subsequent spatial layers
-#!WARNING! THIS FUNCTION MAY TAKE SEVERAL DAYS TO RUN DEPENDING ON SIZE OF AREA.
+#!WARNING! THIS FUNCTION MAY TAKE SEVERAL DAYS TO CLASSIFY WOODLAND EDGES DEPENDING ON SIZE OF AREA.
 #FOR ENGLAND AND WALES, WILL TAKE 2-3 DAYS
 
 #Call function
