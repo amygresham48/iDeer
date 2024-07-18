@@ -254,9 +254,10 @@ pb$terminate()
 
 saveRDS(tile_list, here("output/edge_tile_list.rds"))
 
-tiles_to_mosaic <- readRDS(here("output/edge_tile_list.rds"))
+#tiles_to_mosaic <- readRDS(here("output/edge_tile_list.rds"))
+#edges_all_tiles <- tiles_to_mosaic
 
-edges_all_tiles <- tiles_to_mosaic
+edges_all_tiles <- tile_list
 
 #Mosaic the tiles together
 # Label elements that are not RasterLayers or are empty
