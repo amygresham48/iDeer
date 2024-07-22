@@ -29,11 +29,10 @@ ift_df$IFT_IOA <- ifts
 #Mixed Coniferous = 23
 ift_df$ift_vals[ift_df$IFT_IOA == "Broadleaved"] <- 1
 ift_df$ift_vals[ift_df$IFT_IOA == "Conifer"] <- 2
-ift_df$ift_vals[ift_df$IFT_IOA == "Mixed mainly broadleaved"] <- 22
-ift_df$ift_vals[ift_df$IFT_IOA == "Mixed mainly conifer"] <- 23
+ift_df$ift_vals[ift_df$IFT_IOA == "Mixed mainly broadleaved"] <- 1 #classify as Brodleaved
+ift_df$ift_vals[ift_df$IFT_IOA == "Mixed mainly conifer"] <- 2 #classify as Coniferous
 
 #Add values to NFI dataset
-
 nfi_vals <- left_join(nfi, ift_df, by = c("IFT_IOA" = "IFT_IOA"))
 
 #rasterize nfi ####
