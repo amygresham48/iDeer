@@ -95,25 +95,38 @@ nfi_lcm_map <- raster(here("data/derived-data/nfi_lcm_2022_overlaid.tif"))
 crs(nfi_lcm_map) <- bng
 NFI_LCM_woods_only <- raster(here("output/NFILCM_2022_binary_woodland_all_tiles_EW.tif"))
 crs(NFI_LCM_woods_only) <- bng
+
+
+
 #Reclassify to make a binary raster (0/1)
 reclass_matrix <- matrix(c(
   1, 1,  # Reclassify value 1 to 1 #Broadleaf
-  2, 1,  # Reclassify value 2 to 1 #Coniferous
-  22, 1, # Reclassify value 22 to 1 #Mixed mainly BL
-  23, 1  # Reclassify value 23 to 1 #Mixed mainly conifer
+  2, 1  # Reclassify value 2 to 1 #Coniferous
 ), ncol=2, byrow=TRUE)
 NFI_LCM_woods_only <- reclassify(NFI_LCM_woods_only, reclass_matrix)
 crs(NFI_LCM_woods_only) <- bng
 
-#Make shapefile of binary woodland raster (0/1)
+#Make shapefile of binary woodland raster (0/1) ####
+#This is for the connectivity analysis
+
 #Where raster cell = 1, dissolve into multipolygon
-woodland_polys <- rasterToPolygons(NFI_LCM_woods_only, fun=function(x){x==1}, dissolve=TRUE)
-woodland_polys <- st_as_sf(woodland_polys)
+#woodland_polys <- rasterToPolygons(NFI_LCM_woods_only, fun=function(x){x==1}, dissolve=TRUE)
+#woodland_polys <- st_as_sf(woodland_polys)
 #Explode multipolygon into non-adjoining polygons
-woodland_polys<-st_cast(woodland_polys,"POLYGON")
+#woodland_polys<-st_cast(woodland_polys,"POLYGON")
+
+#This takes AGES in R, so I did it in ArcGIS Pro instead using Raster to Polygon
+#Converted NFILCM_2022_binary_woodland_all_tiles_EW.tif into a raster
+#Ticked "Simplify Polygons" to smooth the edges.
+#Then, merged adjoining polygons using "Dissolve Boundaries" function.
+
+#Read in woodland polygons from ArcGIS pro:
+
+woodland_polys <- st_read(here("data/derived-data/NFI_LCM_woods_2022_raster_to_polygon.shp"))
+st_crs(woodland_polys) <- bng
 
 hab_patches_all <- woodland_polys %>%
-  select(-c(NFILCM_2022_binary_woodland_all_tiles_EW)) %>%
+  select(-c(SHAPE_Leng, SHAPE_Area)) %>%
   mutate(Id = row_number(),
          Shape_Area = st_area(geometry))%>%
   mutate(Shape_Area = as.numeric(Shape_Area))
