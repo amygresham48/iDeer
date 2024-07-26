@@ -49,7 +49,7 @@ all_possible_values <- unique(ift_df$ift_vals)
 reclass_matrix <- matrix(NA, nrow = length(all_possible_values), ncol = 2)
 
 # Fill the matrix based on conditions
-#1,2,22 and 23 remain
+#1 and 2 remain
 #All others reclassified to NA
 for (i in 1:length(all_possible_values)) {
   if (all_possible_values[i] %in% c(1, 2, 22, 23)) {
