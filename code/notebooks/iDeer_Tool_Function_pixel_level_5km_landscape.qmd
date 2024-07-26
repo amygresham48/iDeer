@@ -304,7 +304,7 @@ ggplot(nearest_road_extraction) +
 
 #Reclassify land cover map using forage quality scores
 
-edge.val.types <- read.csv(file.path(here("data/raw-data/Expert_Qnaire/Expert_derived_quality_ranks_edge_types_with_water.csv")))
+edge.val.types <- read.csv(file.path(here("data/raw-data/Expert_Qnaire/Expert_derived_quality_ranks_edge_types_with_water_no_mixed_woods.csv")))
 
 #make is-becomes matrix
 reclass_vals <- edge.val.types%>%dplyr::select(Forage_Q,class) %>%
