@@ -1,0 +1,270 @@
+---
+title: "current_deer_impact_risk_EW"
+format: html
+editor: visual
+---
+
+This code will produce a current deer impact risk map for the whole of England and Wales, using the latest spatial layers
+
+```{r}
+#Load packages
+
+library(plyr)
+library(ggplot2)
+library(dplyr)
+library(sf)
+library(raster)
+library(terra)
+library(here)
+library(progress)
+library(bnlearn)
+library(RColorBrewer)
+library(rasterVis)
+library(ggmap)
+library(gRain)
+
+```
+
+```{r}
+
+#Load latest spatial layers, made in update_spatial_layers.R with associated functions
+
+#All these layers have been calculated using a combined NFI/CEHLCM raster made using the 2022 maps.
+
+#Load nearest road
+#Nearest A road, B road or motorway
+nearest_road <- raster(here("data/derived-data/2015-spatial-layers/nearest_road_raster_2015_all_tiles_corrected.tif"))
+crs(nearest_road) <- bng
+
+#Load nearest urban
+nearest_urban <- raster(here("data/derived-data/2015-spatial-layers/nearest_urban_raster_2015_all_tiles_corrected.tif"))
+crs(nearest_urban) <- bng
+nearest_suburb <- raster(here("data/derived-data/2015-spatial-layers/nearest_suburban_raster_2015_all_tiles_corrected.tif"))
+crs(nearest_suburb) <- bng
+
+#Load linear feature density at 1km scale
+lf <- raster(here("data/derived-data/2015-spatial-layers/linear_features/lf_1000_mosaic_all_tiles_corrected.tif"))
+crs(lf) <- bng
+
+#Load MAX DAMS calculated at 1km scale
+dams <- raster(here("data/derived-data/2015-spatial-layers/Max_DAMS/focal.dams.1000.max.non_wood_EW.tif"))
+
+#Woodland edge/core land cover raster (2022)
+edge_core_rast <- raster::raster(here("data/derived-data/edge_core_raster_2022_all_tiles_EW.tif"))
+crs(edge_core_rast) <- bng
+
+  
+#This layer does NOT include woodland edge type
+nfi_lcm_map <- raster(here("data/derived-data/nfi_lcm_2022_overlaid.tif"))
+crs(nfi_lcm_map) <- bng
+
+#Binary woodland raster
+NFI_LCM_woods_only <- raster(here("output/NFILCM_2022_binary_woodland_all_tiles_EW.tif"))
+crs(NFI_LCM_woods_only) <- bng
+
+#Read in woodland polygon dataset
+#Combined NFI 2022 and LCM 2022 woodlands
+#These polygons will be used to calculate the connectivity, they are unified
+#All touching polygons have been unified
+hab_patches_all <- st_read(here("outputs/NFI_LCM_2022_polys_made_in_R.shp"))
+
+#Incoming connectivity dataset
+#STILL TO BE SAVED
+connect_df <- readRDS(here("data/derived-data/incoming-connect-2022-woods.rds"))
+
+
+```
+
+```{r}
+#Load custom functions ####
+
+#function to extract pixel values from raster layers
+source(here("code/functions/extract_raster_pixels_func.R"))
+```
+
+```{r}
+#----------------------- EXTRACT NUTRITIONAL LANDSCAPE QUALITY VALUES ####
+
+#LAND COVER EXTRACTION AT 1KM AROUND WOODLAND PIXELS ####
+  
+  #Reclassify land cover map using forage quality scores
+  
+  #make is-becomes matrix
+  reclass_vals <- edge.val.types%>%dplyr::select(Forage_Q,class) %>%
+    rename(becomes = Forage_Q,
+           is = class) %>%
+    relocate(is) %>%
+    filter(!is.na(is))
+  
+  reclass_vals
+  
+  #Reclassify
+  map_reclass <- raster::reclassify(edge_core_rast, reclass_vals)
+
+  #create circular buffers around every pixel
+  circle.buff = raster::focalWeight (map_reclass, d=1000, type="circle",fillNA=T )#Create buffer
+  circle.buff[circle.buff > 0] <- 1   # replacing weights by 1
+  Focal1000= raster::focal(map_reclass, w=circle.buff, fun=mean, na.rm=T,pad=TRUE, padValue=NA,)#do focal
+  
+  plot(Focal1000)
+  crs(Focal1000) <- bng
+  
+ #Extract the landscape quality values into a dataframe ####
+
+  
+ lcpix <- extract_pixel_vals(map_reclass = map_reclass,
+                             woodland_polys = woodland_polys,
+                             raster = Focal1000,
+                             landscape = landscape
+                             )
+
+  
+```
+
+```{r}
+#------------- Extract woodland pixel forage scores values from land cover map
+  
+  woodpix <- extract_pixel_vals(map_reclass = map_reclass,
+                                woodland_polys = woodland_polys,
+                                raster = map_reclass,
+                                landscape = landscape)
+  #Plot
+  ggplot(woodpix) +
+    geom_tile(aes(x = x, y = y, fill = class)) +
+    scale_fill_viridis_c(option = "plasma") +  # Apply a continuous viridis color scale
+    theme_minimal() +
+    guides(fill = guide_colorbar(barwidth = 1, barheight = 10)) +  # Customize the colorbar appearance
+    labs(title = "Land cover",
+         fill = "Pixel class")  
+```
+
+```{r}
+#----------------------Make sf points of all woodland pixels ####
+
+#Get woodland pixels as sf points
+
+chunked.wood <- crop(woods_binary, map_ext)
+chunked.wood[chunked.wood == 0] <- NA #make zeros NAs
+chunked.wood.points <- rasterToPoints(chunked.wood, spatial = TRUE) #Raster to point
+chunked.wood.points <- st_as_sf(chunked.wood.points, crs = bng)
+chunked.wood.points <- sf::st_transform(chunked.wood.points, crs = bng)
+```
+
+```{r}
+#------EXTRACT NEAREST MAIN ROAD RASTER
+road_pix <- extract_pixel_vals(map_reclass = map_reclass,
+                   woodland_polys = hab_patches_all,
+                   raster = road_dist_raster,
+                   landscape = landscape
+                   )
+
+#Plot
+ggplot(road_pix) +
+  geom_tile(aes(x = x, y = y, fill = class)) +
+  scale_fill_viridis_c(option = "plasma") +  # Apply a continuous viridis color scale
+  theme_minimal() +
+  guides(fill = guide_colorbar(barwidth = 1, barheight = 10)) +  # Customize the colorbar appearance
+  labs(title = "Distance to nearest main road",
+       fill = "")
+```
+
+```{r}
+#-------EXTRACT NEAREST URBAN/SUBURBAN RASTER
+urbanpix <- extract_pixel_vals(map_reclass = map_reclass,
+                               woodland_polys = woodland_polys,
+                               raster = urban_dist_raster,
+                               landscape = landscape)
+
+
+#Plot
+ggplot(urbanpix) +
+  geom_tile(aes(x = x, y = y, fill = class)) +
+  scale_fill_viridis_c(option = "plasma") +  # Apply a continuous viridis color scale
+  theme_minimal() +
+  guides(fill = guide_colorbar(barwidth = 1, barheight = 10)) +  # Customize the colorbar appearance
+  labs(title = "Distance to nearest urban/suburban area",
+       fill = "") 
+```
+
+```{r}
+#-------EXTRACT LINEAR FEATURE DENSITY WITHIN 1KM RASTER
+lfpix <- extract_pixel_vals(map_reclass = map_reclass,
+                               woodland_polys = woodland_polys,
+                               raster = lf_raster,
+                               landscape = landscape)
+
+#Plot
+ggplot(lfpix) +
+  geom_tile(aes(x = x, y = y, fill = class)) +
+  scale_fill_viridis_c(option = "plasma") +  # Apply a continuous viridis color scale
+  theme_minimal() +
+  guides(fill = guide_colorbar(barwidth = 1, barheight = 10)) +  # Customize the colorbar appearance
+  labs(title = "Linear feature length within 1km",
+       fill = "") 
+```
+
+```{r}
+#--------EXTRACT MAX DAMS WITHIN 1KM RASTER
+damspix <- extract_pixel_vals(map_reclass = map_reclass,
+                            woodland_polys = woodland_polys,
+                            raster = Focal1000_dams,
+                            landscape = landscape)
+
+ggplot(damspix) +
+  geom_tile(aes(x = x, y = y, fill = class)) +
+  scale_fill_viridis_c(option = "plasma") +  # Apply a continuous viridis color scale
+  theme_minimal() +
+  guides(fill = guide_colorbar(barwidth = 1, barheight = 10)) +  # Customize the colorbar appearance
+  labs(title = "Maximum DAMS within 1km",
+       fill = "") 
+```
+
+```{r}
+#--------COMBINE THE SPATIAL DATASETS INTO ONE
+
+#Rename class columns to all be unique for left_join
+damspix <- damspix %>% rename(max_dams = class)
+road_pix <- road_pix %>% rename (dist_nearest_road = class)
+urbanpix <- urbanpix %>% rename(dist_nearest_urb = class)
+lfpix <- lfpix %>% rename(lf_density_1km = class)
+lcpix <- lcpix %>% rename(lc_q = class)
+woodpix <- woodpix %>% rename(wood_q = class)
+
+#left_join the datasets by pixel_ID and coordinates
+df <- left_join(lcpix, woodpix, by = c("pixel_ID","x","y"))
+df <- left_join(df,damspix,by = c("pixel_ID","x","y"))
+df <- left_join(df,road_pix,by=c("pixel_ID","x","y"))
+df <- left_join(df,lfpix,by=c("pixel_ID","x","y"))
+df <- left_join(df,urbanpix,by=c("pixel_ID","x","y"))
+df <- left_join(df,connect_df,by=c("pixel_ID","x","y"))
+```
+
+```{r}
+#-------Reclassify continuous data into pre-specified LOW,MED,HIGH categories
+
+```
+
+```{r}
+#-------Set up conditional probability tables for BBN
+```
+
+```{r}
+#----Create BBN structure ####
+```
+
+```{r}
+#------Predict values for 4 indices using BBN
+#Indices: Disturbance Index, Thermoregulation Index, Nutritional landscape Index, Nutritional woodland index
+
+```
+
+```{r}
+#------Predict values for deer damage risk, add to final dataframe
+```
+
+```{r}
+#---------Draw maps
+```
+
+```{#--------Add predicted damage data to an interactive leaflet map ####}
+```
