@@ -106,24 +106,30 @@ reclass_matrix <- matrix(c(
 NFI_LCM_woods_only <- reclassify(NFI_LCM_woods_only, reclass_matrix)
 crs(NFI_LCM_woods_only) <- bng
 
-#Make shapefile of binary woodland raster (0/1) ####
-#This is for the connectivity analysis
-
-#Where raster cell = 1, dissolve into multipolygon
-#woodland_polys <- rasterToPolygons(NFI_LCM_woods_only, fun=function(x){x==1}, dissolve=TRUE)
-#woodland_polys <- st_as_sf(woodland_polys)
+#Make shapefile of binary woodland raster (0/1)
+#convert to spatraster
+spat_raster <- terra::rast(NFI_LCM_woods_only)
+woodland_polys <- terra::as.polygons(spat_raster, values = FALSE)
+woodland_polys <- st_as_sf(woodland_polys)
 #Explode multipolygon into non-adjoining polygons
-#woodland_polys<-st_cast(woodland_polys,"POLYGON")
+woodland_polys<-st_cast(woodland_polys,"POLYGON")
+
+hab_patches_all <- woodland_polys %>%
+  mutate(Id = row_number(),
+         Shape_Area = st_area(geometry))%>%
+  mutate(Shape_Area = as.numeric(Shape_Area))
+
+#save hab_patches_all
+
+st_write(hab_patches_all,here("outputs/NFI_LCM_2022_polys_made_in_R.shp"))
 
 #This takes AGES in R, so I did it in ArcGIS Pro instead using Raster to Polygon
 #Converted NFILCM_2022_binary_woodland_all_tiles_EW.tif into a raster
 #Ticked "Simplify Polygons" to smooth the edges.
 #Then, merged adjoining polygons using "Dissolve Boundaries" function.
-
 #Read in woodland polygons from ArcGIS pro:
-
-woodland_polys <- st_read(here("data/derived-data/NFI_LCM_woods_2022_raster_to_polygon.shp"))
-st_crs(woodland_polys) <- bng
+#woodland_polys <- st_read(here("data/derived-data/NFI_LCM_woods_2022_raster_to_polygon.shp"))
+#st_crs(woodland_polys) <- bng
 
 hab_patches_all <- woodland_polys %>%
   select(-c(SHAPE_Leng, SHAPE_Area)) %>%
