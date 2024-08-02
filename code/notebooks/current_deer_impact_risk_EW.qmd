@@ -86,6 +86,8 @@ source(here("code/functions/extract_raster_pixels_func.R"))
 #----------------------- EXTRACT NUTRITIONAL LANDSCAPE QUALITY VALUES ####
 
 #LAND COVER EXTRACTION AT 1KM AROUND WOODLAND PIXELS ####
+
+edge.val.types <- read.csv(here("data/raw-data/Expert_Qnaire/Forage_Q_stats_large_small_deer.csv"))
   
   #Reclassify land cover map using forage quality scores
   
@@ -266,5 +268,4 @@ df <- left_join(df,connect_df,by=c("pixel_ID","x","y"))
 #---------Draw maps
 ```
 
-```{#--------Add predicted damage data to an interactive leaflet map ####}
-```
+`{#--------Add predicted damage data to an interactive leaflet map ####}`
