@@ -91,20 +91,18 @@ update_map(nfi=nfi, #latest NFI dataset
 #Generated from update_map() function
 
 #This layer does NOT include woodland edge type
-nfi_lcm_map <- raster(here("data/derived-data/nfi_lcm_2022_overlaid.tif"))
+nfi_lcm_map <- raster(here("output/EW_datasets_2022/nfi_lcm_2022_overlaid.tif"))
 crs(nfi_lcm_map) <- bng
-NFI_LCM_woods_only <- raster(here("output/NFILCM_2022_binary_woodland_all_tiles_EW.tif"))
+NFI_LCM_woods_only <- raster(here("output/EW_datasets_2022/NFILCM_2022_binary_woodland_all_tiles_EW.tif"))
 crs(NFI_LCM_woods_only) <- bng
-
-
-
-#Reclassify to make a binary raster (0/1)
-reclass_matrix <- matrix(c(
-  1, 1,  # Reclassify value 1 to 1 #Broadleaf
-  2, 1  # Reclassify value 2 to 1 #Coniferous
-), ncol=2, byrow=TRUE)
+#Ensure binary raster is 0/1, not 1/2
+# Define the reclassification matrix
+reclass_matrix <- matrix(c(1,0,  # From 1 to 0
+                           2,1), # From 2 to 1
+                         ncol=2, byrow=TRUE)
 NFI_LCM_woods_only <- reclassify(NFI_LCM_woods_only, reclass_matrix)
-crs(NFI_LCM_woods_only) <- bng
+
+
 
 #Make shapefile of binary woodland raster (0/1)
 #convert to spatraster
@@ -122,6 +120,7 @@ hab_patches_all <- woodland_polys %>%
 #save hab_patches_all
 
 st_write(hab_patches_all,here("outputs/NFI_LCM_2022_polys_made_in_R.shp"))
+saveRDS(hab_patches_all, here("outputs/NFI_LCM_2022_polys_made_in_R.rds"))
 
 #This takes AGES in R, so I did it in ArcGIS Pro instead using Raster to Polygon
 #Converted NFILCM_2022_binary_woodland_all_tiles_EW.tif into a raster
@@ -131,11 +130,14 @@ st_write(hab_patches_all,here("outputs/NFI_LCM_2022_polys_made_in_R.shp"))
 #woodland_polys <- st_read(here("data/derived-data/NFI_LCM_woods_2022_raster_to_polygon.shp"))
 #st_crs(woodland_polys) <- bng
 
-hab_patches_all <- woodland_polys %>%
-  select(-c(SHAPE_Leng, SHAPE_Area)) %>%
-  mutate(Id = row_number(),
-         Shape_Area = st_area(geometry))%>%
-  mutate(Shape_Area = as.numeric(Shape_Area))
+hab_patches_all <- readRDS(here("data/derived-data/NFI_LCM_2022_polys_made_in_R.rds"))
+hab_patches_all <- st_as_sf(hab_patches_all)
+
+#hab_patches_all <- hab_patches_all %>%
+#  select(-c(SHAPE_Leng, SHAPE_Area)) %>%
+#  mutate(Id = row_number(),
+#         Shape_Area = st_area(geometry))%>%
+#  mutate(Shape_Area = as.numeric(Shape_Area))
   
 
 #-------------------------------------
