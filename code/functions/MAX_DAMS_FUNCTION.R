@@ -4,7 +4,7 @@ bng <- 27700
 
 tiles <- uk10k_EW
 
-#nfi_lcm_map_crop <- crop(nfi_lcm_map,tiles[1:10,])
+nfi_lcm_map_crop <- crop(nfi_lcm_map,tiles)
   
 # Crop dams to match the extent of nfi_lcm_map
 dams_crop <- crop(dams, extent(nfi_lcm_map))
@@ -29,9 +29,7 @@ DAMS_open_raster_EW <- crop(DAMS_open_raster,uk10k_EW)
 DAMS_open_raster_EW <- mask(DAMS_open_raster_EW,uk10k_EW)
 crs(DAMS_open_raster_EW) <- bng
 
-#writeRaster(DAMS_open_raster_EW, here("output/DAMS_open_raster_EW_2022.tif"),overwrite=TRUE)
-
-DAMS_open_raster_EW <- raster(here("output/DAMS_open_raster_EW_2022.tif"))
+writeRaster(DAMS_open_raster_EW, here("output/EW_datasets_2022/DAMS_open_raster_EW_2022.tif"),overwrite=TRUE)
 
 #-------------------------------------
 
@@ -40,10 +38,10 @@ DAMS_open_raster_EW <- raster(here("output/DAMS_open_raster_EW_2022.tif"))
 
 #if na.rm = F, edges become cropped.
 
-circle.buff = raster::focalWeight (DAMS_open_raster, d=1000, type="circle",fillNA=T )#Create buffer
+circle.buff = raster::focalWeight (DAMS_open_raster_EW, d=1000, type="circle",fillNA=T )#Create buffer
 circle.buff[circle.buff > 0] <- 1   # replacing weights by 1
-Focal1000= raster::focal(x=DAMS_open_raster, w=circle.buff, fun=max, na.rm=T, pad=TRUE, padValue=NA,
-                         filename = here("output/max_dams_1km_non_wood_2022_tiles_1_200.tif"), 
+Focal1000= raster::focal(x=DAMS_open_raster_EW, w=circle.buff, fun=max, na.rm=T, pad=TRUE, padValue=NA,
+                         filename = here("output/max_dams_1km_non_wood_2022.tif"), 
                          overwrite=T)#do focal window analysis with weights matrix
 
 plot(Focal1000)
