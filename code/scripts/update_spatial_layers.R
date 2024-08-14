@@ -13,6 +13,7 @@ library(fasterize)
 library(dplyr)
 library(here)
 library(progress)
+library(ggplot2)
 
 #British National Grid
 bng <- 27700
@@ -25,8 +26,16 @@ nfi <- st_read(here("data/raw-data/nfi-2022-raw/NATIONAL_FOREST_INVENTORY_GB_202
 #Latest CEH LCM dataset
 lcm <- raster(here("data/raw-data/lcm-2022/gblcm2022_25m.tif"))
 
+#Linear feature layer
+#Dataset = CEH Woody Linear Feature Framework (2016)
+#Need to modify to remove linear features within woodlands
+
+lf <- st_read(here("data/raw-data/linear_features/GB_WLF_V1_0.gdb"),layer="GB_WLF_V1_0")
+st_crs(lf) <- bng
+
 #uk10k
-uk10k <-sf::st_read(dsn = "C:/Users/ik929086/OneDrive - University of Reading/Documents/Spatial datasets/os_bng_grids.gpkg", layer = "10km_grid")
+uk10k <-sf::st_read(dsn = "C:/Users/ik929086/OneDrive - University of Reading/Documents/Spatial datasets/os_bng_grids.gpkg", layer = "10km_grid") %>%
+  st_transform(.,bng)
 
 #Import UK shapefile
 
@@ -34,6 +43,7 @@ uk10k <-sf::st_read(dsn = "C:/Users/ik929086/OneDrive - University of Reading/Do
 GB <- st_read("C:/Users/ik929086/OneDrive - University of Reading/Documents/Spatial datasets/GB shapefile/Countries_December_2022_GB_BFC_-8802398211591794926/CTRY_DEC_2022_GB_BFC.shp")
 #Remove Scotland
 EW <- GB[!grepl("Scotland", GB$CTRY22NM),]
+rm(GB)
 
 #st_filter to keep all 10k tiles that overlap EW
 #using st_filter instead of st_intersection ensures that edges of tiles are not cut off
@@ -43,13 +53,6 @@ uk10k_EW <- sf::st_filter(uk10k, EW)
 #OS Open Roads
 roads <- sf::st_read(here("data/raw-data/open_roads.gpkg"), layer = "road_link") %>%
   st_transform(.,bng)
-
-#Linear feature layer
-#Dataset = CEH Woody Linear Feature Framework (2016)
-#Need to modify to remove linear features within woodlands
-
-lf <- st_read(here("data/raw-data/linear_features/GB_WLF_V1_0.gdb"),layer="GB_WLF_V1_0")
-st_crs(lf) <- bng
 
 #dams (Direct Aspect Method Scoring) dataset from Forest Research
 #This layer has been pre-processed in ArcGIS Pro as follows: 
@@ -94,7 +97,7 @@ update_map(nfi=nfi, #latest NFI dataset
 nfi_lcm_map <- raster(here("output/EW_datasets_2022/nfi_lcm_2022_overlaid.tif"))
 crs(nfi_lcm_map) <- bng
 NFI_LCM_woods_only <- raster(here("output/EW_datasets_2022/NFILCM_2022_binary_woodland_all_tiles_EW.tif"))
-crs(NFI_LCM_woods_only) <- bng
+NFI_LCM_woods_only <- projectRaster(NFI_LCM_woods_only, crs = bng) 
 #Ensure binary raster is 0/1, not 1/2
 # Define the reclassification matrix
 reclass_matrix <- matrix(c(1,0,  # From 1 to 0
@@ -102,7 +105,8 @@ reclass_matrix <- matrix(c(1,0,  # From 1 to 0
                          ncol=2, byrow=TRUE)
 NFI_LCM_woods_only <- reclassify(NFI_LCM_woods_only, reclass_matrix)
 
-
+#NFI_LCM_woods_only_crop <- crop(NFI_LCM_woods_only, uk10k_EW)
+#NFI_LCM_woods_only_mask <- mask(NFI_LCM_woods_only_crop, uk10k_EW)
 
 #Make shapefile of binary woodland raster (0/1)
 #convert to spatraster
