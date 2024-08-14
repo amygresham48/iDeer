@@ -1,25 +1,29 @@
-linear_feature_density <- function(wood_binary_rast,tiles,lcm,hab_patches_all){
-  
-  lf_filtered <- st_filter(lf, tiles[1:2,])
+linear_feature_density <- function(wood_binary_rast,tiles,lcm,lf,hab_patches_all){
   
   #Function to erase linear features inside woodland geometry
   st_erase = function(x, y)st_difference(x, st_union(y))
-  #Get linear features outside of woodlands:
-  lf_erase <- st_erase(lf_filtered,hab_patches_all)
-  crs(lf_outside_woods)
-  lf_erase <- st_as_sf(lf_erase)
+  
   
 #-----------------------------------------------------
 
-  tiles <- tiles[1:2,]
+  tiles <- uk10k_EW[1191:1400,]
+  
+  #wood_binary_rast <- NFI_LCM_woods_only_mask
   
 #LOOP THROUGH EACH TILE AND CALCULATE LINEAR FEATURE DENSITY WITHIN 1KM OF EACH WOODLAND PIXEL ####
   
   lf_1000_list <- list()
+  
+  # Create a progress bar
+  pb <- progress_bar$new(
+    format = "[:bar] :current/:total (:percent) elapsed: :elapsedfull",
+    total = length(tiles$tile_name), clear = FALSE, width = 60
+  )
 
   for (i in 1:length(tiles$tile_name)) {
     tile <- tiles[i,]
-    tile.buff <- st_buffer(tile, 1200)
+    #Buffer tile by 1100m
+    tile.buff <- st_buffer(tile, 1100)
     chunked.wood <- crop(wood_binary_rast, tile)
     chunked.wood[chunked.wood == 0] <- NA  # remove zeros
     chunked.wood.points <- rasterToPoints(chunked.wood, spatial = TRUE)
@@ -30,15 +34,23 @@ linear_feature_density <- function(wood_binary_rast,tiles,lcm,hab_patches_all){
       chunked.wood.points$uniqueforID <- paste("point", chunked.wood.points$geometry, sep = "_")
       chunked.wood.points$TILENAME <- tile$tile_name
       
-      lf_tile <- st_filter(lf_erase, tile.buff)
+      lf_tile <- st_filter(lf, tile.buff) #filter for linear features within tile and 1100m buffer
+      #Get linear features outside of woodlands:
+      wood.buffer <- crop(wood_binary_rast, tile.buff) #make polygons of woodlands within 1100m buffer
+      wood.buffer <- rasterToPolygons(wood.buffer)
+      wood.buffer <- st_as_sf(wood.buffer) %>%
+        st_transform(.,bng)
+      lf_erase <- st_erase(lf_tile,wood.buffer) #st_erase the lf within the buffer that overlap woodlands
+      crs(lf_erase)
+      lf_erase <- st_as_sf(lf_erase)
       
-      if (nrow(lf_tile) > 0) {
+      if (nrow(lf_erase) > 0) {
         sections_lf <- chunked.wood.points
         sections_lf_all <- list()
         
-        # Only use the 1000 buffer size
-        buffer_size <- 1000
-        LFclip <- st_intersection(lf_tile, st_buffer(st_centroid(sections_lf), buffer_size))
+        
+        buffer_size <- 1000 #1km buffer size
+        LFclip <- st_intersection(lf_erase, st_buffer(st_centroid(sections_lf), buffer_size))
         
         if(nrow(LFclip) > 0) {
           LFclip <- LFclip %>% mutate(lf_len = SHAPE_Length)
@@ -83,8 +95,54 @@ linear_feature_density <- function(wood_binary_rast,tiles,lcm,hab_patches_all){
       # Assign NA if nrow chunked.wood.points is 0
       lf_1000_list[[i]] <- NA
     }
+    # Update the progress bar
+    pb$tick()
     
   }
   
+print("LF raster list complete")
+  
+  
+#save tiles
+#save raster tile list
+saveRDS(lf_1000_list, here("output/intermediate-outputs/lf_1000_list_1101_1191.rds"))
+
+#Read in all raster tiles
+
+lf1 <- readRDS(here("output/intermediate-outputs/lf_1000_list_1_200.rds"))
+lf2 <- readRDS(here("output/intermediate-outputs/lf_1000_list_201_500.rds"))
+lf3 <- readRDS(here("output/intermediate-outputs/lf_1000_list_501_800.rds"))
+lf4 <- readRDS(here("output/intermediate-outputs/lf_1000_list_801_1100.rds"))
+lf4 <- readRDS(here("output/intermediate-outputs/lf_1000_list_1101_1191.rds"))
+lf5 <- readRDS(here("output/intermediate-outputs/lf_1000_list_1401_1740.rds"))
+
+# defining new list
+lf_list <- c(lf1, lf2, lf3, lf4, lf5)
+
+
+#Mosaic the tiles together
+# Label elements that are not RasterLayers or are empty
+valid_lf_rasters <- lapply(lf_list, function(raster_layer) {
+  if (inherits(raster_layer, "RasterLayer") && any(!is.na(values(raster_layer)))) {
+    return(raster_layer)
+  } else {
+    return(NULL)
+  }
+})
+
+
+# Remove NULL elements from the list
+valid_lf_rasters  <- Filter(function(x) !is.null(x), valid_lf_rasters )
+
+# Mosaic raster
+lf_mosaic <- do.call(mosaic, c(valid_lf_rasters , fun = mean))
+
+#ensure crs is bng
+
+crs(lf_mosaic) <- bng
+
+# Save raster
+writeRaster(lf_mosaicc, here("outputs/lf_density_1km_raster_2022_incomplete_EW.tif"),overwrite=TRUE)
+print("LF raster mosaic complete and saved")
   
 }
