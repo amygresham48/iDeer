@@ -1,17 +1,15 @@
-incoming_connectivity <- function(hab_patches_all,tiles,nfi_lcm_map) {
+#incoming_connectivity <- function(hab_patches_all,tiles,nfi_lcm_map) {
   
   bng <- 27700
   
-  hab_patches_all <- hab_patches_all %>% dplyr::rename(patch_ID = Id,
-                                                       patch_area = Shape_Area)
+  hab_patches_all <- readRDS(here("data/derived-data/NFI_LCM_2022_polys_made_in_R.rds"))
+  hab_patches_all <- st_as_sf(hab_patches_all)
   
-  #Buffer all woods by 5km
-  buffered_woods_5km <- st_as_sf(st_buffer(hab_patches_all, dist = 5000))  # dist = 5km in meters
-  #Buffer all woods by 7km (5km landscape + 2km edge buffer)
-  buffered_woods_7km <- st_as_sf(st_buffer(hab_patches_all, dist = 7000))  # dist = 7km in meters
-  #ensure crs of buffers is BNG
-  st_crs(buffered_woods_7km) <- bng
-  st_crs(buffered_woods_5km) <- bng
+  hab_patches_all <- hab_patches_all %>% dplyr::rename(patch_ID = Id,
+                                                       patch_area = Shape_Area) %>%
+    st_transform(.,bng)
+  
+  
 #-----------------------------------------
   
   #### SET CONNECTIVITY PARAMETERS ####
@@ -39,22 +37,52 @@ incoming_connectivity <- function(hab_patches_all,tiles,nfi_lcm_map) {
     geom_vline(xintercept = buffer_cutoff, color = "red")
   
   #See how buffer size looks
-  focal_patch_buffer <- st_buffer(hab_patches[1,], buffer_cutoff)
+  focal_patch_buffer <- st_buffer(hab_patches_all[1,], buffer_cutoff)
   plot(st_geometry(focal_patch_buffer))
-  plot(st_geometry(hab_patches[1,]),add=TRUE)
+  plot(st_geometry(hab_patches_all[1,]),add=TRUE)
   
-#----------------------------------------------
+#---------------------------------------------- START OF LOOP ####
+  
+tiles <- uk10k_EW[401:1740,]
+  
+  # Make empty list to store raster tiles
+  incoming_connect_df <- list()
+  
+  # Initialize the progress bar
+  pb <- progress_bar$new(
+    format = "  Processing[:bar] :percent eta: :eta",
+    total = nrow(tiles), clear = FALSE, width= 60)
+  
+  for (i in 1:length(tiles$tile_name)) { 
+    tile <- tiles[i,]
+    #Buffer tile by 2km
+    tile.buff <- st_buffer(tile, 2000)
+    st_crs(tile.buff) <- bng
+    #Filter for woods inside tile buffer
+    hab_patches_tile <- st_filter(hab_patches_all, tile.buff)
+    
+    if(nrow(hab_patches_tile) >0) {
+      
+    #Buffer all woods by 1km
+    #buffered_woods_1km <- st_as_sf(st_buffer(hab_patches_tile, dist = 1000))  # dist = 1km in meters
+    #Buffer all woods by 2km (1km landscape + 1km edge buffer)
+    buffered_woods_2km <- st_as_sf(st_buffer(hab_patches_tile, dist = 2000))  # dist = 2km in meters
+    #ensure crs of buffers is BNG
+    st_crs(buffered_woods_2km) <- bng
+    #st_crs(buffered_woods_1km) <- bng
   
   #Connectivity for loop ####
   
   connectivity_results <- list()
   
-  # Use the 7km buffer as the source patches area
-  source_woods <- st_filter(hab_patches_all, buffered_woods_7km, .predicate = st_intersects)
+  # Use the 2km buffer as the source patches area
+  source_woods <- st_filter(hab_patches_tile, buffered_woods_2km, .predicate = st_intersects)
   
-  # Filter the woodlands in the original 5km square to get the focal patches
-  focal_woods <- st_filter(hab_patches_all, buffered_woods_5km, .predicate = st_intersects)
-  n_distinct(focal_woods$patch_ID)
+  # Filter the woodlands in the original tile to get the focal patches
+  focal_woods <- st_filter(hab_patches_tile, tile, .predicate = st_intersects)
+  n_focal_woods <- n_distinct(focal_woods$patch_ID)
+  
+  if(n_focal_woods >0) {
   
   # Calculate connectivity for each focal woodland
   Connectivity_table <- NULL
@@ -100,7 +128,7 @@ incoming_connectivity <- function(hab_patches_all,tiles,nfi_lcm_map) {
     # Store results for this woodland
     connectivity_results[[paste("focal_wood", focal_woods$patch_ID[j])]] <- Connectivity_table
   }
-  
+
 #----------------------------------------------------------------------
 
     #Remove rows where focal_patch = source_patch
@@ -115,20 +143,23 @@ incoming_connectivity <- function(hab_patches_all,tiles,nfi_lcm_map) {
       unique(Connectivity_table_filt$focal_patch)
     )
     
-    print(missing_patch_ids)  # This will show which patch IDs are missing
+    #print("Missing patch IDs = ")
+    #print(missing_patch_ids)  # This will show which patch IDs are missing
     
-    missing_patches <- Connectivity_table %>% filter(focal_patch %in% missing_patch_ids) %>%
-      # Replace NAs in 'incoming_connect' with 0
-      mutate(incoming_connect = coalesce(incoming_connect, 0))  # Replace NA with 0
-    
-    #Make rows for patches with no connectivity so we don't lose any patches
-    Connectivity_table_filt <- rbind(Connectivity_table_filt, missing_patches)
+    if (length(missing_patch_ids) > 0) {
+      missing_patches <- Connectivity_table %>% filter(focal_patch %in% missing_patch_ids) %>%
+        # Replace NAs in 'incoming_connect' with 0
+        mutate(incoming_connect = coalesce(incoming_connect, 0))  # Replace NA with 0
+      
+      # Make rows for patches with no connectivity so we don't lose any patches
+      Connectivity_table_filt <- rbind(Connectivity_table_filt, missing_patches)
+    }
     
     #Ensure no duplicate rows
     Connectivity_table_filt <- Connectivity_table_filt %>% distinct()
     
     #Now no patches should be missing
-    n_distinct(Connectivity_table_filt$focal_patch)
+    #n_distinct(Connectivity_table_filt$focal_patch)
     
     #sum incoming connectivity by focal patch
     incoming_connectivity_sum <- Connectivity_table_filt %>%
@@ -138,53 +169,98 @@ incoming_connectivity <- function(hab_patches_all,tiles,nfi_lcm_map) {
                        n = n()) %>%
       mutate(n = if_else(total_connect == 0, 0, n)) %>%  # Set 'n' to 0 when 'incoming_connect' is 0
       rename(patch_ID = focal_patch)
+    
+    incoming_connect_df[[i]] <- incoming_connectivity_sum 
+    
+    } else {
+      # Assign NA if nrow(hab_patches_tile) = 0
+      incoming_connect_df[[i]] <- NA
+    }
+  
+    } else {
+      # Assign NA if n_focal_woods = 0
+      incoming_connect_df[[i]] <- NA
+    }
+    
+    #Update progress bar
+    pb$tick()
+    
+  }
+  
+# Convert incoming_connect_df list to a data frame if needed
+incoming_connect_df_table <- do.call(rbind, incoming_connect_df)
 
-#--------------------------------
+#save chunk of data
+
+saveRDS(incoming_connect_df_table, here("output/incoming_connect_df_tiles_401_1740.rds"))
+
+#----------------------------------------------------------------------#END OF LOOP ####
 #Get pixel scale connectivity scores from patch-scale data 
 
-    #subset hab_patches_all that have a connectivity value in incoming_connectivity_sum
+#import chunks of data table
+
+ic1 <- readRDS(here("output/incoming_connect_df_tiles_1_39.rds"))
+ic2 <- readRDS(here("output/incoming_connect_df_tiles_40_200.rds"))
+ic3 <- readRDS(here("output/incoming_connect_df_tiles_201_400.rds"))
+ic4 <- readRDS(here("output/incoming_connect_df_tiles_401_1740.rds"))
+
+incoming_connect_df_table <- rbind(ic1,ic2,ic3,ic4)
+
+#subset hab_patches_all that have a connectivity value in incoming_connectivity_sum
     hab_patches_connect <- hab_patches_all %>%
-      filter(patch_ID %in% incoming_connectivity_sum$patch_ID)
+      filter(patch_ID %in% incoming_connect_df_table $patch_ID)
     #left_join the connectivity dataset to the geometry
-    incoming_connect_vals <- incoming_connectivity_sum %>%
+    incoming_connect_vals <- incoming_connect_df_table  %>%
       dplyr::select(-c("n"))
     
     hab_patches_connect <- left_join(hab_patches_connect, incoming_connect_vals, by="patch_ID")
     hab_patches_connect<-st_as_sf(hab_patches_connect)
     
-    #plot
-    ggplot(data = hab_patches_connect) +
-      geom_sf(aes(fill = total_connect)) +
-      scale_fill_viridis_c() +  # Optional: for a nice color scale
-      theme_minimal() 
-    
     #fasterize, use land cover map as template
     connect_raster <- fasterize::fasterize(hab_patches_connect, raster=nfi_lcm_map,field="total_connect")
-    plot(connect_raster)
     crs(connect_raster) <- bng
     
-    #crop raster to buffer_5km
+    connect_rast_square <- crop(connect_raster, tiles[250:260,])
+    plot(connect_rast_square)
     
-    connect_raster_5km <- crop(connect_raster, buffered_woods_5km)
-    plot(connect_raster_5km)
+    
+    #fasterize patch area
+    
+    patch_area_rast <- fasterize::fasterize(hab_patches_connect, raster=nfi_lcm_map, field="patch_area")
+    crs(patch_area_rast) <- bng
+    
+    patch_area_square <- crop(patch_area_rast, tiles[250:260,])
+    plot(patch_area_square)
+    
+    
+    #crop raster to tile
+    
+    #connect_raster_tiles <- crop(connect_raster, extent(uk10k_EW))
+    
+    pal <- colorRampPalette(c("red", "blue"))
+    plot(connect_raster, col = pal(100))
+    
+  #--------------------------
+    
+    #Raster Extraction
     
     # List to store extracted data
     extraction_results <- list()
     
     # Loop through each buffered buffer and crop all rasters
-    buffer_geometry <- buffered_woods_5km$geometry
+    #buffer_geometry <- buffered_woods_1km$geometry
     
     # Convert buffer geometry to a spatial object that raster can use
-    buffer_extent <- as(extent(st_bbox(buffer_geometry)), "Extent")
+    tile_extent <- as(extent(st_bbox(uk10k_EW)), "Extent")
     
     # Get the cell numbers within the extent
-    pixel_ID <- cellsFromExtent(nfi_lcm_map, buffer_extent)
+    pixel_ID <- cellsFromExtent(nfi_lcm_map, tile_extent)
     
     # Get the coordinates for these cells
     cell_coords <- as.data.frame(xyFromCell(nfi_lcm_map, pixel_ID))
     
     #Extract pixel values
-    pixel_values <- extract(connect_raster_5km, cell_coords)
+    pixel_values <- extract(connect_raster, cell_coords)
     
     # Create a data frame with the extracted values and cell indices
     connect.vals <- data.frame(total_connect = pixel_values, 
@@ -195,24 +271,22 @@ incoming_connectivity <- function(hab_patches_all,tiles,nfi_lcm_map) {
     # Filter out NA values
     connect.vals <- connect.vals[!is.na(connect.vals$total_connect), ]
     
-    # Append to the results list
-    extraction_results <- connect.vals
-    
-    # Combine all results into a single dataframe
-    connect_df <- bind_rows(extraction_results)
-    
-    #Plot
-    ggplot(connect_df) +
-      geom_tile(aes(x = x, y = y, fill = total_connect)) +
-      scale_fill_viridis_c(option = "plasma") +  # Apply a continuous viridis color scale
-      theme_minimal() +
-      guides(fill = guide_colorbar(barwidth = 1, barheight = 10)) +  # Customize the colorbar appearance
-      labs(title = "Incoming connectivity",
-           fill = "Total connectivity")  # Adjust the legend title to be more descriptive
-    
-#save connect_df
 
-saveRDS(connect_df, here("output/woodland_connectivity_2022.rds"))
+#plot
+ggplot(data = hab_patches_all[1:10000,]) +
+geom_sf(aes(fill = patch_area)) +
+scale_fill_viridis_c() +  # Optional: for a nice color scale
+theme_minimal() 
 
-  }
-  
+#Plot
+ggplot(connect.vals[1:1000000,]) +
+  geom_tile(aes(x = x, y = y, fill = total_connect)) +
+  scale_fill_viridis_c(option = "plasma") +  # Apply a continuous viridis color scale
+  theme_minimal() +
+  guides(fill = guide_colorbar(barwidth = 1, barheight = 10)) +  # Customize the colorbar appearance
+  labs(title = "Incoming connectivity",
+       fill = "Total connectivity")  # Adjust the legend title to be more descriptive
+
+#save connect.vals
+
+saveRDS(connect.vals, here("output/woodland_connectivity_2022.rds"))
