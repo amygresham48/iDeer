@@ -140,23 +140,6 @@ forage.q.vals <- left_join(forage.q.vals, land.cover.classes, by = "Land.cover")
 ```
 
 ```{r}
-#------------- Extract woodland pixel forage scores values from land cover map
-  
-  woodpix <- extract_pixel_vals(map_reclass = map_reclass,
-                                woodland_polys = woodland_polys,
-                                raster = map_reclass,
-                                landscape = landscape)
-  #Plot
-  ggplot(woodpix) +
-    geom_tile(aes(x = x, y = y, fill = class)) +
-    scale_fill_viridis_c(option = "plasma") +  # Apply a continuous viridis color scale
-    theme_minimal() +
-    guides(fill = guide_colorbar(barwidth = 1, barheight = 10)) +  # Customize the colorbar appearance
-    labs(title = "Land cover",
-         fill = "Pixel class")  
-```
-
-```{r}
 #----------------------Make sf points of all woodland pixels ####
 
 #Get woodland pixels as sf points
