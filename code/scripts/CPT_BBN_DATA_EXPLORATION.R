@@ -11,8 +11,9 @@ here()
 #CPT data exploration ####
 
 #Import dataset
+CPT <- read.csv(here("CPT_BBN_deer_impact_tinkering.csv"))
 
-CPT <- read.csv(here("data/BBN-cpts/CPT_BBN_deer_impact_tinkering.csv"))
+#CPT <- read.csv(here("data/BBN-cpts/CPT_BBN_deer_impact_tinkering.csv"))
 
 #Recode to numbers
 recode_mapping <- c("LOW" = 1, "MED" = 2, "HIGH" = 3)
