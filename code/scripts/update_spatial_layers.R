@@ -14,6 +14,9 @@ library(dplyr)
 library(here)
 library(progress)
 library(ggplot2)
+library(stringr)
+library(here)
+library(pbapply)
 
 #British National Grid
 bng <- 27700
@@ -37,22 +40,27 @@ st_crs(lf) <- bng
 uk10k <-sf::st_read(dsn = "C:/Users/ik929086/OneDrive - University of Reading/Documents/Spatial datasets/os_bng_grids.gpkg", layer = "10km_grid") %>%
   st_transform(.,bng)
 
+#uk50k
+uk50k <-sf::st_read(dsn = "C:/Users/ik929086/OneDrive - University of Reading/Documents/Spatial datasets/os_bng_grids.gpkg", layer = "50km_grid") %>%
+  st_transform(.,bng)
+
 #Import UK shapefile
 
 #GB shapefile
 GB <- st_read("C:/Users/ik929086/OneDrive - University of Reading/Documents/Spatial datasets/GB shapefile/Countries_December_2022_GB_BFC_-8802398211591794926/CTRY_DEC_2022_GB_BFC.shp")
 #Remove Scotland
 EW <- GB[!grepl("Scotland", GB$CTRY22NM),]
-rm(GB)
 
 #st_filter to keep all 10k tiles that overlap EW
 #using st_filter instead of st_intersection ensures that edges of tiles are not cut off
 
 uk10k_EW <- sf::st_filter(uk10k, EW)
 
+uk10k_GB <- sf::st_filter(uk10k, GB)
+
 #OS Open Roads
-roads <- sf::st_read(here("data/raw-data/open_roads.gpkg"), layer = "road_link") %>%
-  st_transform(.,bng)
+#roads <- sf::st_read(here("data/raw-data/open_roads.gpkg"), layer = "road_link") %>%
+#  st_transform(.,bng)
 
 #dams (Direct Aspect Method Scoring) dataset from Forest Research
 #This layer has been pre-processed in ArcGIS Pro as follows: 
@@ -94,24 +102,34 @@ update_map(nfi=nfi, #latest NFI dataset
 #Generated from update_map() function
 
 #This layer does NOT include woodland edge type
-nfi_lcm_map <- raster(here("output/EW_datasets_2022/nfi_lcm_2022_overlaid.tif"))
+nfi_lcm_map <- raster(here("output/nfi_lcm_2022_overlaid.tif"))
 crs(nfi_lcm_map) <- bng
-NFI_LCM_woods_only <- raster(here("output/EW_datasets_2022/NFILCM_2022_binary_woodland_all_tiles_EW.tif"))
-NFI_LCM_woods_only <- projectRaster(NFI_LCM_woods_only, crs = bng) 
+#reclass everything apart from woods to zero
+reclass_matrix <- matrix(c(1:21,
+                           1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0),
+                         ncol = 2)
+
+NFI_LCM_woods_only <- reclassify(nfi_lcm_map, reclass_matrix)
+#save
+writeRaster(NFI_LCM_woods_only, here("output/EW_datasets_2022/NFILCM_2022_binary_woodland_all_tiles_GB.tif"))
+
+#Read
+
+NFI_LCM_woods_only <- raster(here("output/EW_datasets_2022/NFILCM_2022_binary_woodland_all_tiles_GB.tif"))
+crs(NFI_LCM_woods_only) <- bng
+
+#Spare code: making a binary raster from previously saved raster when read in
 #Ensure binary raster is 0/1, not 1/2
 # Define the reclassification matrix
-reclass_matrix <- matrix(c(1,0,  # From 1 to 0
-                           2,1), # From 2 to 1
-                         ncol=2, byrow=TRUE)
-NFI_LCM_woods_only <- reclassify(NFI_LCM_woods_only, reclass_matrix)
-
-#NFI_LCM_woods_only_crop <- crop(NFI_LCM_woods_only, uk10k_EW)
-#NFI_LCM_woods_only_mask <- mask(NFI_LCM_woods_only_crop, uk10k_EW)
+#reclass_matrix <- matrix(c(1,0,  # From 1 to 0
+                           #2,1), # From 2 to 1
+                         #ncol=2, byrow=TRUE)
+#NFI_LCM_woods_only <- reclassify(NFI_LCM_woods_only, reclass_matrix)
 
 #Make shapefile of binary woodland raster (0/1)
 #convert to spatraster
 spat_raster <- terra::rast(NFI_LCM_woods_only)
-woodland_polys <- terra::as.polygons(spat_raster, values = FALSE)
+woodland_polys <- terra::as.polygons(spat_raster > 0, values = FALSE) #use woodlands only to make binary raster (value = 1)
 woodland_polys <- st_as_sf(woodland_polys)
 #Explode multipolygon into non-adjoining polygons
 woodland_polys<-st_cast(woodland_polys,"POLYGON")
@@ -123,26 +141,28 @@ hab_patches_all <- woodland_polys %>%
 
 #save hab_patches_all
 
-st_write(hab_patches_all,here("outputs/NFI_LCM_2022_polys_made_in_R.shp"))
-saveRDS(hab_patches_all, here("outputs/NFI_LCM_2022_polys_made_in_R.rds"))
-
-#This takes AGES in R, so I did it in ArcGIS Pro instead using Raster to Polygon
-#Converted NFILCM_2022_binary_woodland_all_tiles_EW.tif into a raster
-#Ticked "Simplify Polygons" to smooth the edges.
-#Then, merged adjoining polygons using "Dissolve Boundaries" function.
-#Read in woodland polygons from ArcGIS pro:
-#woodland_polys <- st_read(here("data/derived-data/NFI_LCM_woods_2022_raster_to_polygon.shp"))
-#st_crs(woodland_polys) <- bng
+st_write(hab_patches_all,here("outputs/NFI_LCM_2022_GB_polys_made_in_R.shp"))
+saveRDS(hab_patches_all, here("outputs/NFI_LCM_2022_GB_polys_made_in_R.rds"))
 
 hab_patches_all <- readRDS(here("data/derived-data/NFI_LCM_2022_polys_made_in_R.rds"))
 hab_patches_all <- st_as_sf(hab_patches_all)
 
-#hab_patches_all <- hab_patches_all %>%
-#  select(-c(SHAPE_Leng, SHAPE_Area)) %>%
-#  mutate(Id = row_number(),
-#         Shape_Area = st_area(geometry))%>%
-#  mutate(Shape_Area = as.numeric(Shape_Area))
-  
+#This takes AGES in R, so I did it in ArcGIS Pro instead using Raster to Polygon
+#Converted NFILCM_2022_binary_woodland_all_tiles_GB.tif into a raster
+#Ticked "Simplify Polygons" to smooth the edges.
+#Then, merged adjoining polygons using "Dissolve Boundaries" function.
+
+#Read in woodland polygons from ArcGIS pro:
+wood_polys <- st_read(here("data/derived-data/NFILCM_2022_GB_polys_arcgis.shp"))
+st_crs(woodland_polys) <- bng
+
+hab_patches_all <- wood_polys %>%
+  dplyr::select(-c(SHAPE_Leng, SHAPE_Area)) %>%
+  mutate(patch_ID = dplyr::row_number(),
+         Shape_Area = st_area(geometry))%>%
+  mutate(Shape_Area = as.numeric(Shape_Area))
+
+edge.core.rast <- raster(here("output/EW_datasets_2022/edge_core_raster_2022_all_tiles_EW.tif"))
 
 #-------------------------------------
 
@@ -188,7 +208,7 @@ source(here("code/functions/LINEAR_FEATURE_DENSITY_FUNCTION.R"))
 
 linear_feature_density(wood_binary_rast = NFI_LCM_woods_only,
                        tiles=uk10k_EW,
-                       lcm=lcm,
+                       lcm=nfi_lcm_map,
                        hab_patches_all=hab_patches_all
                        )
 
