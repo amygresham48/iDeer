@@ -60,7 +60,17 @@ crs(NFI_LCM_woods_only) <- bng
 #Combined NFI 2022 and LCM 2022 woodlands
 #These polygons will be used to calculate the connectivity, they are unified
 #All touching polygons have been unified
-hab_patches_all <- st_read(here("outputs/NFI_LCM_2022_polys_made_in_R.shp"))
+#hab_patches_all <- st_read(here("outputs/NFI_LCM_2022_polys_made_in_R.shp"))
+
+#Read in woodland polygons from ArcGIS pro:
+wood_polys <- st_read(here("data/derived-data/NFILCM_2022_GB_polys_arcgis.shp"))
+st_crs(woodland_polys) <- bng
+
+hab_patches_all <- wood_polys %>%
+  dplyr::select(-c(SHAPE_Leng, SHAPE_Area)) %>%
+  mutate(patch_ID = dplyr::row_number(),
+         Shape_Area = st_area(geometry))%>%
+  mutate(Shape_Area = as.numeric(Shape_Area))
 
 #Incoming connectivity dataset
 #STILL TO BE SAVED
