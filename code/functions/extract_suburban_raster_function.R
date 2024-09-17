@@ -4,7 +4,6 @@ extract_suburban_rasters <- function(fivekm_buffer, raster_layer, land_cover_ras
   # List to store extracted data
   extraction_results <- list()
   
-  # Loop through each buffered buffer and crop all rasters
   buffer_geometry <- fivekm_buffer$geometry
 
   # Convert buffer geometry to a spatial object that raster can use
