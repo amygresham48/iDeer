@@ -1,25 +1,18 @@
 #EXTRACT PIXEL VALUES FROM RASTER LAYER PIXELS ####
 
-extract_raster <- function(map_reclass, woodland_polys, ew10k) {
+extract_raster <- function(map_reclass, lcm) {
   
   # List to store extracted data
   extraction_results <- list()
-
-  # Crop raster layer to England and Wales 10k tiles
-  EW_raster_crop <- crop(map_reclass, ew10k)
-  EW_raster_mask <- mask(EW_raster_crop, ew10k)
-
-  # Get extent of EW
-  EW_extent <- extent(st_bbox(ew10k))
   
   # Get the cell numbers within the extent
-  pixel_ID <- cellsFromExtent(EW_raster_crop, EW_extent)
+  pixel_ID <- cellsFromExtent(map_reclass, extent(st_bbox(lcm)))
   
   # Get the coordinates for these cells
-  cell_coords <- as.data.frame(xyFromCell(EW_raster_crop, pixel_ID))
+  cell_coords <- as.data.frame(xyFromCell(map_reclass, pixel_ID))
   
   # Extract pixel values
-  pixel_values <- extract(EW_raster_crop, cell_coords)
+  pixel_values <- extract(map_reclass, cell_coords)
   
   # Get name of map_reclass
   raster_name <- deparse(substitute(map_reclass))

@@ -25,13 +25,13 @@ here()
 
 #Read in CPTs
 
-sd_damage <- read.csv("C:/Users/ik929086/Documents/iDeer/data/BBN-cpts/post-interviews/small-deer/CPT_damage_risk_small_deer.csv")
+sd_damage <- read.csv("C:/Users/ik929086/Documents/iDeer/data/BBN-cpts/post-interviews/small-deer/CPT_damage_risk_small_deer_final.csv")
 
 #Recode to numbers
 recode_mapping <- c("LOW" = 1, "MED" = 2, "HIGH" = 3)
 # Recode the first four columns
 CPT_sd <- sd_damage %>%
-  mutate(across(1:4, ~ recode(., !!!recode_mapping)))
+  mutate(across(1:3, ~ recode(., !!!recode_mapping)))
 
 
 #recode impact column
@@ -39,18 +39,17 @@ CPT_sd <- sd_damage %>%
 recode_mapping <- c("LOW" = 1, "LOW-MED" = 2, "MED" =3,"MED-HIGH" = 4,"HIGH"=5)
 # Recode the first four columns
 CPT_sd <- CPT_sd %>%
-  mutate(across(5, ~ recode(., !!!recode_mapping)))
+  mutate(across(4, ~ recode(., !!!recode_mapping)))
 
 
-ggplot(CPT_sd, aes(x = wood_patch_quality_index, y = damage_risk, col = alt_forage_nutrition_landscape_index, group = alt_forage_nutrition_landscape_index)) +  
+ggplot(CPT_sd, aes(x = alt_forage_availability_index, y = damage_risk, group = thermoreg_index)) +  
   geom_line() +
   geom_point() + 
   facet_grid(rows = vars(thermoreg_index), cols = vars(connect_index)) +  
   theme_bw() +  
-  scale_color_viridis_c(breaks = c(1, 2, 3)) + 
-  labs(x = "Patch quality", col = "Landscape quality") +
-  scale_y_continuous(sec.axis = sec_axis(~ . , name = "thermoreg_index", breaks = NULL, labels = NULL)) +
-  scale_x_continuous(sec.axis = sec_axis(~ . , name = "connect_index", breaks = NULL, labels = NULL), 
+  labs(x = "Alternative Forage Availability Index", col = "Connectivity Index") +
+  scale_y_continuous(sec.axis = sec_axis(~ . , name = "Thermoregulation Index", breaks = NULL, labels = NULL)) +
+  scale_x_continuous(sec.axis = sec_axis(~ . , name = "Connectivity_Index", breaks = NULL, labels = NULL), 
                      lim = c(1, 3), 
                      breaks = seq(1, 3, 1))
 
@@ -64,30 +63,30 @@ ggplot(CPT_sd, aes(x = wood_patch_quality_index, y = damage_risk, col = alt_fora
 
 #Read in CPTs
 
-ld_damage <- read.csv("C:/Users/ik929086/Documents/iDeer/data/BBN-cpts/post-interviews/large-deer/CPT_damage_risk_large_deer.csv")
+ld_damage <- read.csv("C:/Users/ik929086/Documents/iDeer/data/BBN-cpts/post-interviews/large-deer/CPT_damage_risk_large_deer_final.csv")
 
 #Recode to numbers
 recode_mapping <- c("LOW" = 1, "MED" = 2, "HIGH" = 3)
 # Recode the first four columns
 CPT_ld <- ld_damage %>%
-mutate(across(1:4, ~ recode(., !!!recode_mapping)))
+mutate(across(1:3, ~ recode(., !!!recode_mapping)))
 
 #recode impact column
 
 recode_mapping <- c("LOW" = 1, "LOW-MED" = 2, "MED" =3,"MED-HIGH" = 4,"HIGH"=5)
 # Recode the first four columns
 CPT_ld <- CPT_ld %>%
-mutate(across(5, ~ recode(., !!!recode_mapping)))
+mutate(across(4, ~ recode(., !!!recode_mapping)))
 
 
-ggplot(CPT_ld, aes(x = wood_patch_quality_index, y = damage_risk, col = herbivory_index, group = herbivory_index)) +  
+ggplot(CPT_ld, aes(x = foraging_pressure_index, y = damage_risk, group = thermoreg_index)) +  
   geom_line() +
   geom_point() + 
   facet_grid(rows = vars(thermoreg_index), cols = vars(disturb_index)) +  
   theme_bw() +  
   scale_color_viridis_c(breaks = c(1, 2, 3)) + 
   labs(x = "Patch quality", col = "Landscape quality") +
-  scale_y_continuous(sec.axis = sec_axis(~ . , name = "thermoreg_index", breaks = NULL, labels = NULL)) +
-  scale_x_continuous(sec.axis = sec_axis(~ . , name = "disturb_index", breaks = NULL, labels = NULL), 
+  scale_y_continuous(sec.axis = sec_axis(~ . , name = "Thermoregulation Index", breaks = NULL, labels = NULL)) +
+  scale_x_continuous(sec.axis = sec_axis(~ . , name = "Disturbance Index", breaks = NULL, labels = NULL), 
                      lim = c(1, 3), 
                      breaks = seq(1, 3, 1))

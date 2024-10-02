@@ -65,9 +65,7 @@ update_map <- function(lcm, nfi, tiles) {
   #Give priority to reclassified NFI raster
   
   #Mosaic the two rasters together using the overlay function ####
-  #This should give a raster with values from 1-23, where 1 and 2 are BL and conif woodland (same for lcm and NFI)
-  #Values 22 and 23 will be the mixed woodland types which are not included in the lcm but are included in the NFI dataset.
-  #All other remaining land cover types will be present
+  #This should give a raster with values from 1-21, where 1 and 2 are BL and conif woodland (same for lcm and NFI)
   
   #Give priority to the first raster except where first raster has NAs ####
   priority_function <- function(x, y) {

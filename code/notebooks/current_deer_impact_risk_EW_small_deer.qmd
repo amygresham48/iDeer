@@ -202,6 +202,8 @@ df <- left_join(df,road_pix,by=c("pixel_ID","x","y"))
 df <- left_join(df,lfpix,by=c("pixel_ID","x","y"))
 df <- left_join(df,urbanpix,by=c("pixel_ID","x","y"))
 df <- left_join(df,connect_df,by=c("pixel_ID","x","y"))
+
+
 ```
 
 ```{r}
