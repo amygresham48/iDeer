@@ -20,42 +20,33 @@ library(leaflet)
 #British National Grid
 bng <- 27700
 
-#Import current_risk datasets #--------------
-
-#woodland connectivity within 200m
-connectivity <- raster(here("data/small_deer_layers/woodland_connectivity_200m_2022_GB.tif"))
-
-#linear feature density within 200m
-lf_200m <- raster(here("data/small_deer_layers/lf_density_200m_2022.tif"))
-
-#woodland area within 200m
-wood_area_200m <- raster(here("data/small_deer_layers/sum_woodland_area_200m_small_deer_EW.tif"))
-
-#land cover map
-#This layer does NOT include woodland edge type
-nfi_lcm_map <- raster(here("data/small_deer_layers/nfi_lcm_2022_overlaid.tif"))
-
-#sum of DAMS within 200m
-dams_200m <- raster(here("data/small_deer_layers/sum_dams_200_non_wood_2022.tif"))
-
-#woodland habitat patches as an sf object
+#Import required spatial layers #--------------
 
 #Read in woodland polygons from ArcGIS pro:
-wood_polys <- st_read(here("data/small_deer_layers/NFILCM_2022_GB_polys_arcgis.shp"))
+wood_polys <- st_read(here("data/derived-data/NFILCM_2022_filtered_EW_arcgis.shp"))
 st_crs(wood_polys) <- bng
 
 hab_patches_all <- wood_polys %>%
-  dplyr::select(-c(SHAPE_Leng, SHAPE_Area)) %>%
+  dplyr::select(-c(SHAPE_Leng, Shape_Area, Shape_Le_1)) %>%
   mutate(patch_ID = dplyr::row_number(),
          Shape_Area = st_area(geometry))%>%
   mutate(Shape_Area = as.numeric(Shape_Area))
 
+#Filter by ew10k tiles
+
 #Linear feature layer
 #Dataset = CEH Woody Linear Feature Framework (2016)
-#Need to modify to remove linear features within woodlands
+#sf dataset
+#Modified using script make_LF_raster.R to make a raster
+#linear features in England and Wales, outside woodlands
 
-lf <- st_read(here("data/raw-data/GB_WLF_V1_0.gdb"),layer="GB_WLF_V1_0")
-st_crs(lf) <- bng
+lf <- raster(here("data/derived-data/WLF_EW_RASTER.tif"))
+crs(lf) <- bng
+
+#This layer does NOT include woodland edge type
+nfi_lcm_map <- raster(here("output/nfi_lcm_2022_overlaid.tif"))
+crs(nfi_lcm_map) <- bng
+extent(nfi_lcm_map)
 
 #DAMS
 #Interpolated from 50m resolution to 25m resolution
@@ -64,44 +55,82 @@ st_crs(lf) <- bng
 dams <- raster(here("data/raw-data/DAMS/dams_25m_bng.tif"))
 crs(dams) <- bng
 
+#Binary woodland map
+
+NFI_LCM_woods_only <- raster(here("output/EW_datasets_2022/NFILCM_2022_binary_woodland_all_tiles_EW.tif"))
+crs(NFI_LCM_woods_only) <- bng
+#plot(NFI_LCM_woods_only)
+
 #function to extract pixel values from raster layers
 source(here("code/functions/extract_raster_pixels_func.R"))
+
+#current risk raster
+current.risk <- raster("C:/Users/ik929086/Documents/iDeer-tool/data/test.risk.map.tif")
+
+#England-Wales 10k tiles
+EW <- st_read(here("data/derived-data/10k_tiles_EW.shp"))
 
 #Add new woodland polygons to hab_patches_all #-----------------------
 
 #To test out updating spatial layers with new polygons
 
-# Define a simple bounding box or use actual coordinates for your area
-bbox <- st_bbox(hab_patches_all)  # Get bounding box of existing polygons
-# Generate a random point within the bounding box
-set.seed(123)  # For reproducibility
-random_point_1 <- st_sample(st_as_sfc(bbox), 1)  # Sample 1 point
+# Function to create a random polygon centered in a region with a specified half-width
+create_random_polygon <- function(easting_range, northing_range, half_width) {
+  # Generate random centroid within the specified range
+  centroid <- c(runif(1, min(easting_range), max(easting_range)),
+                runif(1, min(northing_range), max(northing_range)))
+  
+  # Create a square polygon around the centroid with the given half-width
+  coords <- matrix(c(-half_width, -half_width, 
+                     half_width, -half_width, 
+                     half_width, half_width, 
+                     -half_width, half_width, 
+                     -half_width, -half_width), 
+                   ncol = 2, byrow = TRUE)
+  
+  # Shift the square coordinates by the centroid values
+  shifted_coords <- coords + matrix(rep(centroid, each = 5), ncol = 2)
+  
+  # Create polygon
+  polygon <- st_polygon(list(shifted_coords))
+  
+  # Convert to sf object and set CRS
+  sf_polygon <- st_sfc(polygon, crs = bng)
+  
+  return(sf_polygon)
+}
 
-# Create a 200m buffer around this point
-buffer_200m <- st_buffer(random_point_1, dist = 200)
+# Define easting and northing ranges for Leicestershire
+easting_range <- c(440000, 460000)
+northing_range <- c(295000, 315000)
 
-# Generate a second random point within the 200m buffer
-random_point_2 <- st_sample(buffer_200m, 1)
+# Create one random polygon 50m wide and another 80m wide
+polygon1 <- create_random_polygon(easting_range, northing_range, half_width = 25)  # 50m wide
+polygon2 <- create_random_polygon(easting_range, northing_range, half_width = 40)  # 80m wide
 
-# Create polygons around these points
-polygons <- st_buffer(random_point_1, dist = 50) %>%
-  st_union(st_buffer(random_point_2, dist = 50)) %>%
-  st_cast(.,"POLYGON")
+# Combine the two polygons into a single sfc object
+polygons_sfc <- st_sfc(polygon1[[1]], polygon2[[1]])
 
-# Convert the polygons to an sf object
-new_polygons_sf <- st_sf(geometry = polygons) %>%
-  mutate(patch_ID = max(hab_patches_all$patch_ID) + 1 + row_number(),  # Continue patch_IDs
-         Shape_Area = as.numeric(st_area(geometry)))  # Calculate areas
+# Convert the sfc object to an sf object
+polygons_sf <- st_sf(geometry = polygons_sfc)
+st_crs(polygons_sf) <- bng
+
+# Plot the polygons
+plot(st_geometry(polygons_sf), col = c("red", "blue"), main = "Random Polygons in Leicestershire (50m & 80m wide)")
 
 # Combine new polygons with existing data
-hab_patches_all_updated <- bind_rows(hab_patches_all, new_polygons_sf)
+hab_patches_all_updated <- bind_rows(hab_patches_all, polygons_sf)
 
-plot(new_polygons_sf$geometry)
+plot(polygons_sf$geometry)
 
 #Assign polygons woodland type (broadleaved or coniferous)
 
-new_polygons_sf_types <- new_polygons_sf %>%
+new_polygons_sf_types <- polygons_sf %>%
   mutate(woodland_type = c("Mainly broadleaf","Mainly conifer"))
+st_crs(new_polygons_sf_types) <- bng
+
+plot(EW$geometry)
+plot(new_polygons_sf_types$geometry,add=TRUE)
 
 #Update layers #####-------------------------------------------------
 
@@ -110,138 +139,63 @@ new_polygons_sf_types <- new_polygons_sf %>%
 #classified by modal land cover type
 #also produces a binary woodland raster to be used for subsequent spatial layers
 
-buffered_woods_5km <- st_as_sf(st_buffer(random_polygons_sf, dist = 5000))
+buffered_woods_5km <- st_as_sf(st_buffer(new_polygons_sf_types, dist = 5000))
+st_crs(buffered_woods_5km) <- bng
 
-buffered_woods_7km <- st_as_sf(st_buffer(random_polygons_sf, dist = 7000))
+buffered_woods_7km <- st_as_sf(st_buffer(new_polygons_sf_types, dist = 7000))
+st_crs(buffered_woods_7km) <- bng
 
 plot(buffered_woods_5km$geometry)
-plot(random_polygons_sf$geometry,add=TRUE)
-
-eg_buffer_7km <- buffered_woods_7km[1,]
-eg_buffer_5km <- buffered_woods_5km[1,]
+plot(new_polygons_sf_types$geometry,add=TRUE)
 
 #Crop original rasters to 7km buffer (e.g. landscape size selected by user)
 #e.g. 5km landscape + 2km buffer
 
-lcm_cropped <- crop(nfi_lcm_map, eg_buffer_7km)
+lcm_cropped <- crop(nfi_lcm_map, buffered_woods_7km)
 
 # Reclassify the woodland_type into numeric values
-random_polygons_sf_types$woodland_type_num <- ifelse(random_polygons_sf_types$woodland_type == "Mainly broadleaf", 1, 
-                                                    ifelse(random_polygons_sf_types$woodland_type == "Mainly conifer", 2, NA))
+new_polygons_sf_types$woodland_type_num <- ifelse(new_polygons_sf_types$woodland_type == "Mainly broadleaf", 1, 
+                                                    ifelse(new_polygons_sf_types$woodland_type == "Mainly conifer", 2, NA))
 
 #Rasterize the new woodland polygon(s) 
 #value = 1 if woodland_type = broadleaved
 #value = 2 if woodland_type = coniferous
 
 # Rasterize the polygons
-raster_polys <- rasterize(random_polygons_sf_types, lcm_cropped, field = "woodland_type_num")
+raster_polys <- rasterize(new_polygons_sf_types, lcm_cropped, field = "woodland_type_num")
+#set zero values to NA
+values(raster_polys)[values(raster_polys) <= 0] = NA
 
 # Overlay function: replace values in nfi_lcm_map with non-NA values from woodland_raster
 nfi_lcm_map_updated <- overlay(lcm_cropped, raster_polys, fun = function(nfi, wood) {
   ifelse(!is.na(wood), wood, nfi)  # If woodland_raster has a non-NA value, use it; otherwise keep nfi_lcm_map value
 })
 
+plot(nfi_lcm_map_updated)
+
 #2. Get woodland edges #####-------------------------------------------------
 
-wood.raster <- nfi_lcm_map_updated
 crs(nfi_lcm_map_updated) <- bng
 
   #Get wood boundaries in tile buffer
   # make binary edge raster. 1 if edge, 0 if not ####
   #Filter for woodland only, make everything else NA
-  wood <- wood.raster
+  wood <- nfi_lcm_map_updated
   wood[wood[] >= 3] = NA
-  boundaries = boundaries(wood, type='inner') # edge raster
+  boundaries_wood = boundaries(wood, type='inner') # edge raster
   #Make woodland boundaries = 1000
-  boundaries_wood <- boundaries*1000
+  #boundaries_wood <- boundaries*1000
   # need to make NAs 0
   boundaries_wood[is.na(boundaries_wood[])] <- 0 
-  
-  if (sum(boundaries_wood[] == 1000, na.rm = TRUE) > 0) { #if there are woodland boundary pixels
-    
-    #Get pixel indices for whole tile.buff
-    tile_buff_indices <- cellFromXY(boundaries_wood, xyFromCell(boundaries_wood, 1:ncell(boundaries_wood)))
-    
-    # Get the coordinates of cells in the buffer
-    buff_coords <- xyFromCell(boundaries_wood, tile_buff_indices)
-    
-    # Identify indices of cells that fall within the tile's bounding box
-    cell_indices <- which(buff_coords[, 1] >= st_bbox(eg_buffer_5km)$xmin &
-                            buff_coords[, 1] <= st_bbox(eg_buffer_5km)$xmax &
-                            buff_coords[, 2] >= st_bbox(eg_buffer_5km)$ymin &
-                            buff_coords[, 2] <= st_bbox(eg_buffer_5km)$ymax)
-    
-    #Get pixel indices for pixels that == 1000 within tile.buff
-    woodland_indices <- which(boundaries_wood[] == 1000)
-    
-    #subset woodland_indices for those within tile boundary
-    woodland_indices_tile <- woodland_indices[woodland_indices %in% cell_indices]
-    
-    #Convert this table into a raster
-    #First make template using original raster
-    template_raster <- raster(ext = extent(boundaries_wood), res = res(boundaries_wood), crs = bng)
-    
-    wood_edge_raster <- raster()
-    
-    
-
-#Overlay the edges over the to nfi/lcm overlaid raster ####
-
-#Crop lcm to uk10k_EW
-wood.raster.crop <- crop(wood.raster, neighbour_raster)
-#wood.raster.mask <- mask(wood.raster.crop, neighbour_raster)
-
-#Get rid of the edges that do not correspond to woodlands
-#make a woodland binary raster
-woods.only <- wood.raster.crop
-woods.only[woods.only >= 3] <- NA
-woods.only[woods.only == 0] <- NA
-
-edge_raster_woodland_edges_only <- mask(neighbour_raster, woods.only)
-#This should get rid of edges that do not overlap with woodlands
-
-#Add rasters together
-# need to make NAs 0, otherwise when we add them, it wont work!
-edge_raster_woodland_edges_only [is.na(edge_raster_woodland_edges_only [])] <- 0 
-
-#Adding these two rasters together should preserve the nfi/lcm values that do not overlap with edge_raster_mosaic_woodland_edges_only
-edge_core_raster <- edge_raster_woodland_edges_only + wood.raster.crop
-unique(edge_core_raster)
-
-#The result shows the type of land cover, and any decimals show the woodland edge type
-#To recap the reclassified land cover categories:
-#1 = BL woodland, 2 = conifer woodland, 3 = arable, 5 = grassland, 6 = mountain/bog/heath, 7 = saltwater, 8 = freshwater,
-#9 = coastal, 20 = urban, 21 = suburban
-
-#To recap the edge types:
-#0.5 = Grassland, 0.6 = Mountain/heath/bog, 0.7 = saltwater, 0.8 = Freshwater, 0.9 = coastal, 0.202 = urban, 0.201 = suburban,
-#0.444 = Mixed edge (multiple modes)
-
-#Export final raster
-#writeRaster(edge_core_raster, here("output/EW_datasets_2022/edge_core_raster_2022_all_tiles_EW.tif"),overwrite=TRUE)
-#writeRaster(woods.only, here("output/EW_datasets_2022/NFILCM_2022_woodland_all_tiles_EW.tif"),overwrite=TRUE)
-
-#Reclassify wood raster to make a binary raster (0/1)
-reclass_matrix <- matrix(c(
-  1, 1,  # Reclassify value 1 to 1 #Broadleaf
-  2, 1  # Reclassify value 2 to 1 #Coniferous
-), ncol=2, byrow=TRUE)
-NFI_LCM_woods_only <- reclassify(woods.only, reclass_matrix)
-crs(NFI_LCM_woods_only) <- bng
-
-#writeRaster(NFI_LCM_woods_only, here("output/EW_datasets_2022/NFILCM_2022_binary_woodland_all_tiles_EW.tif"),overwrite=TRUE)
-
-NFI_LCM_woods_only <- projectRaster(NFI_LCM_woods_only, nfi_lcm_map_updated)
+  plot(boundaries_wood)
 
 #-------------------------------------
 
 #LENGTH OF WOODLAND EDGE WITHIN 200m ####
 
-plot(edge_raster_woodland_edges_only)
-
-circle.buff = raster::focalWeight(edge_raster_woodland_edges_only, d=200, type="circle",fillNA=T)#Create buffer
+circle.buff = raster::focalWeight(boundaries_wood, d=200, type="circle",fillNA=T)#Create buffer
 circle.buff[circle.buff > 0] <- 1   # replacing weights by 1
-Focal200_EDGE_AREA= raster::focal(x=edge_raster_woodland_edges_only, w=circle.buff, fun=sum, na.rm=T, pad=TRUE, padValue=NA)
+Focal200_EDGE_AREA= raster::focal(x=boundaries_wood, w=circle.buff, fun=sum, na.rm=T, pad=TRUE, padValue=NA)
 
 plot(Focal200_EDGE_AREA)
 
@@ -251,6 +205,8 @@ Focal200_EDGE_AREA <- Focal200_EDGE_AREA*25
 plot(Focal200_EDGE_AREA)
 
 Focal200_EDGE_AREA <- projectRaster(Focal200_EDGE_AREA, nfi_lcm_map_updated)
+
+plot(Focal200_EDGE_AREA)
 
 #-------------------------------------
 
@@ -292,22 +248,53 @@ plot(st_geometry(hab_patches_all_updated[1,]),add=TRUE)
 
 #-------------------------------------------------------
 
-#CALCULATE INCOMING CONNECTIVITY FOR ALL WOODLANDS ####
+#Get extent of landscape area to use in connectivity calculations ####
+
+# Get the extent of the raster
+raster_extent <- extent(nfi_lcm_map_updated)
+raster_extent <- terra::ext(raster_extent)
+
+# Convert the extent to a polygon (terra automatically creates SpatVector polygons)
+extent_polygon <- terra::as.polygons(raster_extent)
+
+# Convert SpatVector to sf object
+extent_sf <- st_as_sf(extent_polygon)
+
+# Assign a CRS if not already set
+st_crs(extent_sf) <- bng # Use the same CRS as the raster
+
+# Plot the extent polygon
+plot(st_geometry(extent_sf), main = "Raster Extent as sf Polygon")
+
+#------------------------------------------------------
+
+# CALCULATE INCOMING CONNECTIVITY FOR ALL WOODLANDS ####
+
 
 # Make empty list to store raster tiles
 incoming_connect_df <- list()
 
-  #Filter for woods inside larger buffer
-  hab_patches_buffer <- st_filter(hab_patches_all_updated, eg_buffer_7km)
+hab_patches_all_updated <- st_as_sf(hab_patches_all_updated)
+
+# Assuming you are looping over multiple tiles or patches, 
+# this loop could represent multiple iterations (e.g., different 10km tiles)
   
-  if(nrow(hab_patches_buffer) >0) {
+  # Filter for woods inside larger buffer
+  hab_patches_buffer <- st_filter(hab_patches_all_updated, extent_sf)
+  
+  if (nrow(hab_patches_buffer) > 0) {
     
-    #Buffer all woods by 200m
+    # Buffer all woods by 200m
     buffered_woods_200m <- st_as_sf(st_buffer(hab_patches_buffer, dist = 200))
-    #ensure crs of buffers is BNG
+    # Ensure CRS of buffers is BNG
     st_crs(buffered_woods_200m) <- bng
     
-    #Connectivity for loop ####
+  } else {
+    # Assign NA if nrow(hab_patches_buffer) = 0
+    buffered_woods_200m <- NA
+  }
+    
+    # Connectivity for loop ####
     
     connectivity_results <- list()
     
@@ -317,11 +304,11 @@ incoming_connect_df <- list()
     plot(source_woods$geometry)
     
     # Filter the woodlands in the original tile to get the focal patches
-    focal_woods <- st_filter(hab_patches_buffer, eg_buffer_5km, .predicate = st_intersects)
+    focal_woods <- st_filter(hab_patches_buffer, buffered_woods_5km, .predicate = st_intersects)
     n_focal_woods <- n_distinct(focal_woods$patch_ID)
     plot(focal_woods$geometry)
     
-    if(n_focal_woods >0) {
+    if (n_focal_woods > 0) {
       
       # Calculate connectivity for each focal woodland
       Connectivity_table <- NULL
@@ -329,7 +316,7 @@ incoming_connect_df <- list()
       # Loop through each focal woodland to calculate connectivity
       for (j in 1:nrow(focal_woods)) {
         
-        # Focal patch in the 10km square square
+        # Focal patch in the 10km square
         focal_patch <- focal_woods[j, ]
         
         # Buffer 200m around the focal patch
@@ -368,36 +355,35 @@ incoming_connect_df <- list()
         connectivity_results[[paste("focal_wood", focal_woods$patch_ID[j])]] <- Connectivity_table
       }
       
-      #Remove rows where focal_patch = source_patch
+    } else {
+      # Assign NA if n_focal_woods = 0
+      Connectiviy_table <- NA
+    }
+      
+      # Remove rows where focal_patch = source_patch
       Connectivity_table_filt <- Connectivity_table %>%
         filter(focal_patch != source_patch)
       
       # Identify missing unique patch IDs
-      # These patches have no source patches so will have been filtered out
-      # We need to put them back in so we can give them an incoming_connect value of 0
       missing_patch_ids <- setdiff(
         unique(Connectivity_table$focal_patch),
         unique(Connectivity_table_filt$focal_patch)
       )
       
-      #print(missing_patch_ids)  # This will show which patch IDs are missing
-      
+      # Add missing patches back with 'incoming_connect' value of 0
       if (length(missing_patch_ids) > 0) {
         missing_patches <- Connectivity_table %>% filter(focal_patch %in% missing_patch_ids) %>%
           # Replace NAs in 'incoming_connect' with 0
           mutate(incoming_connect = coalesce(incoming_connect, 0))  # Replace NA with 0
         
-        # Make rows for patches with no connectivity so we don't lose any patches
+        # Add missing patches back to the filtered table
         Connectivity_table_filt <- rbind(Connectivity_table_filt, missing_patches)
       }
       
-      #Ensure no duplicate rows
+      # Ensure no duplicate rows
       Connectivity_table_filt <- Connectivity_table_filt %>% distinct()
       
-      #Now no patches should be missing
-      #n_distinct(Connectivity_table_filt$focal_patch)
-      
-      #sum incoming connectivity by focal patch
+      # Sum incoming connectivity by focal patch
       incoming_connectivity_sum <- Connectivity_table_filt %>%
         dplyr::select(focal_patch, incoming_connect) %>%
         group_by(focal_patch) %>%
@@ -406,136 +392,36 @@ incoming_connect_df <- list()
         mutate(n = if_else(total_connect == 0, 0, n)) %>%  # Set 'n' to 0 when 'incoming_connect' is 0
         rename(patch_ID = focal_patch)
       
-      incoming_connect_df[[i]] <- incoming_connectivity_sum 
-      
-    } else {
-      # Assign NA if nrow(hab_patches_tile) = 0
-      incoming_connect_df[[i]] <- NA
-    }
-    
-  } else {
-    # Assign NA if n_focal_woods = 0
-    incoming_connect_df[[i]] <- NA
-  }
-  
-
-# Convert incoming_connect_df list to a data frame if needed
-incoming_connect_df_table <- do.call(rbind, incoming_connect_df)
 
 #FASTERIZE CONNECTIVITY DATA TO ASSIGN PATCH CONNECTIVITY TO PIXELS ####
 
 #subset hab_patches_all that have a connectivity value in incoming_connectivity_sum
 hab_patches_connect <- hab_patches_all_updated %>%
   #rename(patch_ID = Id) %>%
-  filter(patch_ID %in% incoming_connect_df_table$patch_ID)
+  filter(patch_ID %in% incoming_connectivity_sum$patch_ID)
 #left_join the connectivity dataset to the geometry
-incoming_connect_vals <- incoming_connect_df_table  %>%
+incoming_connect_vals <- incoming_connectivity_sum  %>%
   dplyr::select(-c("n"))
 
 hab_patches_connect <- left_join(hab_patches_connect, incoming_connect_vals, by="patch_ID")
 hab_patches_connect<-st_as_sf(hab_patches_connect)
 
 #fasterize, use land cover map as template
-connect_raster <- fasterize::fasterize(hab_patches_connect, raster=edge_core_raster,field="total_connect")
+connect_raster <- fasterize::fasterize(hab_patches_connect, raster=boundaries_wood,field="total_connect")
 crs(connect_raster) <- bng
 
+connect_raster <- projectRaster(connect_raster, nfi_lcm_map_updated)
 plot(connect_raster)
 
-connect_raster <- projectRaster(connect_raster, nfi_lcm_map_updated)
-
-#-----------------------------------
-
-#LINEAR FEATURE DENSITY WITHIN 200M
-
-#Function to erase linear features inside woodland geometry
-st_erase = function(x, y)st_difference(x, st_union(y))
-
-wood_binary_rast <- NFI_LCM_woods_only
-
-#CALCULATE LINEAR FEATURE DENSITY WITHIN 200m OF EACH WOODLAND PIXEL ####
-
-  chunked.wood <- crop(wood_binary_rast, eg_buffer_7km)
-  chunked.wood[chunked.wood == 0] <- NA  # remove zeros
-  chunked.wood.points <- rasterToPoints(chunked.wood, spatial = TRUE)
-  chunked.wood.points <- st_as_sf(chunked.wood.points)
-  chunked.wood.points <- sf::st_transform(chunked.wood.points, crs = bng)
-  
-  if (nrow(chunked.wood.points) > 0) {
-    chunked.wood.points$uniqueforID <- paste("point", chunked.wood.points$geometry, sep = "_")
-
-    lf_filtered <- st_filter(lf, eg_buffer_7km) #filter for linear features within landscape and 200m buffer
-    #Get linear features outside of woodlands:
-    wood.buffer <- crop(wood_binary_rast, eg_buffer_7km) #make polygons of woodlands within 200m buffer
-    wood.buffer[wood.buffer == 0] <- NA  # remove zeros
-    wood.buffer <- rasterToPolygons(wood.buffer)
-    wood.buffer <- st_as_sf(wood.buffer) %>%
-      st_transform(.,bng)
-    lf_erase <- st_erase(lf_filtered,wood.buffer) #st_erase the lf within the buffer that overlap woodlands
-    lf_erase <- st_as_sf(lf_erase)
-    
-    if (nrow(lf_erase) > 0) {
-      sections_lf <- chunked.wood.points
-      sections_lf_all <- list()
-      
-      
-      buffer_size <- 200 #200m buffer size
-      LFclip <- st_intersection(lf_erase, st_buffer(st_centroid(sections_lf), buffer_size))
-      
-      if(nrow(LFclip) > 0) {
-        LFclip <- LFclip %>% mutate(lf_len = SHAPE_Length)
-        
-        # Convert LFclip to a data.table
-        LFclip <- data.table::data.table(LFclip)
-        
-        # Summarize using data.table
-        sections_l <- LFclip[, .(LFLEN = sum(SHAPE_Length)), by = uniqueforID]
-        
-        # If you need to convert back to a data frame for further dplyr operations
-        sections_l <- as.data.frame(sections_l)
-        
-        sections_l <- merge(sections_l, sections_lf, by = "uniqueforID", all = TRUE)
-        sections_l <- sections_l %>% dplyr::mutate(LFLEN = tidyr::replace_na(LFLEN, 0))
-        sections_l$buffer_size <- buffer_size
-        sections_lf_all[[length(sections_lf_all) + 1]] <- data.frame(sections_l)
-        
-        chunked.wood.points.lf <- do.call(rbind, sections_lf_all)
-        chunked.wood.points.lf <- st_as_sf(chunked.wood.points.lf, crs = bng)
-        chunked.wood.points.2col <- chunked.wood.points.lf %>% dplyr::select(geometry, LFLEN)
-        
-        template_raster <- crop(nfi_lcm_map_updated, eg_buffer_7km)
-        raster_layer <- raster::rasterize(chunked.wood.points.2col, template_raster, field = "LFLEN")
-        raster_layer <- crop(raster_layer, eg_buffer_5km)
-        crs(raster_layer) <- bng
-        
-        raster_layer
-        
-      } else {
-        # Assign NA if LFclip is empty
-        raster_layer <- NA
-      }
-      
-    } else {
-      # Assign NA if nrow lf_tile is 0
-      raster_layer <- NA
-    }
-    
-  } else {
-    # Assign NA if nrow chunked.wood.points is 0
-    raster_layer <- NA
-  }
-
-lf_200_updated <- raster_layer
-  
-#-----------------------------------
-
-#WOODLAND + HEDGEROW AREA WITHIN 200M
+##WOODLAND + HEDGEROW AREA WITHIN 200M---------------------------------------------------------
 
 #Get raster of woodlands within buffer
-NFI_LCM_woods_only #binary woodland raster
+woods_binary_crop <- crop(NFI_LCM_woods_only, extent_sf)
+plot(woods_binary_crop)
 
-circle.buff = raster::focalWeight(NFI_LCM_woods_only, d=200, type="circle",fillNA=T)#Create buffer
+circle.buff = raster::focalWeight(woods_binary_crop, d=200, type="circle",fillNA=T)#Create buffer
 circle.buff[circle.buff > 0] <- 1   # replacing weights by 1
-Focal200_WOOD_AREA= raster::focal(x=NFI_LCM_woods_only, w=circle.buff, fun=sum, na.rm=T, pad=TRUE, padValue=NA)
+Focal200_WOOD_AREA= raster::focal(x=woods_binary_crop, w=circle.buff, fun=sum, na.rm=T, pad=TRUE, padValue=NA)
 
 plot(Focal200_WOOD_AREA)
 
@@ -546,16 +432,14 @@ plot(Focal200_WOOD_AREA)
 
 Focal200_WOOD_AREA <- projectRaster(Focal200_WOOD_AREA, nfi_lcm_map_updated)
 
+#LINEAR FEATURE LENGTH WITHIN 200M--------------------------------------------------------------
 
-#Get raster of linear features outside of woods
+LFclip <- crop(lf, extent_sf)
+plot(LFclip)
 
-#lf_sf <- st_as_sf(LFclip)
-#lf_raster <- raster::rasterize(lf_sf, template_raster, field = "layer") #binary linear feature raster
-#circle.buff = raster::focalWeight(lf_raster, d=200, type="circle",fillNA=T)#Create buffer
-#circle.buff[circle.buff > 0] <- 1   # replacing weights by 1
-#Focal200_LF_AREA= raster::focal(x=lf_raster, w=circle.buff, fun=sum, na.rm=T, pad=TRUE, padValue=NA)
-
-Focal200_LF_AREA <- lf_200_updated
+circle.buff = raster::focalWeight(LFclip, d=200, type="circle",fillNA=T)#Create buffer
+circle.buff[circle.buff > 0] <- 1   # replacing weights by 1
+Focal200_LF_AREA= raster::focal(x=LFclip, w=circle.buff, fun=sum, na.rm=T, pad=TRUE, padValue=NA)
 
 #Get actual area - multiply summed pixels by 25 (1 pixel = 25m2 pixel)
 
@@ -622,19 +506,20 @@ reclass_vals <-
   rename(becomes = Median,
          is = class) %>%
   relocate(is) %>%
-  filter(!is.na(is))
+  filter(!is.na(is))%>%
+  filter(is %% 1 == 0)  # This keeps only rows where "is" is a whole number - don't need edges for this
 
 reclass_vals
 
 #Reclassify
-map_reclass <- raster::reclassify(edge_core_raster, reclass_vals)
+map_reclass <- raster::reclassify(nfi_lcm_map_updated, reclass_vals)
 
 #mask reclassified map to include perennial arable only
 
 plot(peren_arable_raster)
 
 #make polygons with which to mask
-peren_arable_polys <- rasterToPolygons(peren_arable_raster,na.rm=TRUE,fun=function(x){x>0}, dissolve=TRUE)
+peren_arable_polys <- rasterToPolygons(peren_arable_raster,na.rm=TRUE,fun=function(x){x>0}, dissolve=TRUE) #TAKES LONG TIME
 peren_arable_polys <- st_as_sf(peren_arable_polys)
 plot(peren_arable_polys$geometry)
 
@@ -688,6 +573,9 @@ plot(Focal200_SUM_DAMS)
 
 #Get code from current_deer_impact_risk_EW_small_deer to extract raster values
 #Create a dataframe containing all extracted raster values within user's landscape
+
+#This takes too long for whole England-Wales dataset
+#Try running predict() function using raster data instead
 
 #EXTRACT LENGTH OF WOODLAND EDGE
 
@@ -776,12 +664,30 @@ df <- left_join(df,woodpix, by = c("pixel_ID","x","y"))
 df <- left_join(df,damspix, by = c("pixel_ID","x","y"))
 df <- left_join(df, foragepix, by = c("pixel_ID","x","y"))
 
+#make any NAs zeros apart from the connect raster
+#The connect raster has the correct woodland pixels
+
+df <- df %>%
+  mutate(across(c(Focal200_EDGE_AREA, Focal200_LF_AREA, Focal_200_WOOD_LF_AREA_SUM, 
+                  Focal200_SUM_DAMS, Focal200_FORAGE_QUAL), 
+                ~ tidyr::replace_na(., 0)))
+
 #Remove the NAs
 
 df <- na.omit(df)
 
-
 #plot the maps
+
+par(mfrow = c(3, 2))
+
+#woodland connectivity
+ggplot(df) +
+  geom_tile(aes(x = x, y = y, fill = connect_raster)) +
+  scale_fill_viridis_c(option = "plasma") +  # Apply a continuous viridis color scale
+  theme_minimal() +
+  guides(fill = guide_colorbar(barwidth = 1, barheight = 10)) +  # Customize the colorbar appearance
+  labs(title = "woodland + linear feature area within 200m",
+       fill = "") 
 
 #woodland + linear feature area
 ggplot(df) +
@@ -917,54 +823,73 @@ connect_index_cpt <- array(
 #order = connectivity_index, lf_length_200m, wood_connectivity_200m
 
 #table1: lf_length_200m = LOW, wood_connectivity_200m = LOW
-connect_index_cpt["LOW","LOW","LOW"] <- 1
-connect_index_cpt["MED","LOW","LOW"] <- 0
+connect_index_cpt["LOW","LOW","LOW"] <- 0.95
+connect_index_cpt["MED","LOW","LOW"] <- 0.05
 connect_index_cpt["HIGH","LOW","LOW"] <- 0
 
 #table3: lf_length_200m = MED, wood_connectivity_200m = LOW
-connect_index_cpt["LOW","MED","LOW"] <- 1
-connect_index_cpt["MED","MED","LOW"] <- 0
-connect_index_cpt["HIGH","MED","LOW"] <- 0
+connect_index_cpt["LOW","MED","LOW"] <- 0.15
+connect_index_cpt["MED","MED","LOW"] <- 0.7
+connect_index_cpt["HIGH","MED","LOW"] <- 0.15
 
 #table3: lf_length_200m = HIGH, wood_connectivity_200m = LOW
-connect_index_cpt["LOW","HIGH","LOW"] <- 0
-connect_index_cpt["MED","HIGH","LOW"] <- 1
-connect_index_cpt["HIGH","HIGH","LOW"] <- 0
+connect_index_cpt["LOW","HIGH","LOW"] <- 0.2
+connect_index_cpt["MED","HIGH","LOW"] <- 0.5
+connect_index_cpt["HIGH","HIGH","LOW"] <- 0.3
 
 #table4: lf_length_200m = LOW, wood_connectivity_200m = MED
-connect_index_cpt["LOW","LOW","MED"] <- 0
-connect_index_cpt["MED","LOW","MED"] <- 0
-connect_index_cpt["HIGH","LOW","MED"] <- 1
+connect_index_cpt["LOW","LOW","MED"] <- 0.1
+connect_index_cpt["MED","LOW","MED"] <- 0.8
+connect_index_cpt["HIGH","LOW","MED"] <- 0.1
 
 #table5: lf_length_200m = LOW, wood_connectivity_200m = HIGH
-connect_index_cpt["LOW","LOW","HIGH"] <- 1
-connect_index_cpt["MED","LOW","HIGH"] <- 0
-connect_index_cpt["HIGH","LOW","HIGH"] <- 0
+connect_index_cpt["LOW","LOW","HIGH"] <- 0
+connect_index_cpt["MED","LOW","HIGH"] <- 0.3
+connect_index_cpt["HIGH","LOW","HIGH"] <- 0.7
 
 #table6: lf_length_200m = MED, wood_connectivity_200m = MED
-connect_index_cpt["LOW","MED","MED"] <- 0
-connect_index_cpt["MED","MED","MED"] <- 0
-connect_index_cpt["HIGH","MED","MED"] <- 1
+connect_index_cpt["LOW","MED","MED"] <- 0.025
+connect_index_cpt["MED","MED","MED"] <- 0.95
+connect_index_cpt["HIGH","MED","MED"] <- 0.025
 
 #table7: lf_length_200m = HIGH, wood_connectivity_200m = HIGH
 connect_index_cpt["LOW","HIGH","HIGH"] <- 0
-connect_index_cpt["MED","HIGH","HIGH"] <- 0
-connect_index_cpt["HIGH","HIGH","HIGH"] <- 1
+connect_index_cpt["MED","HIGH","HIGH"] <- 0.1
+connect_index_cpt["HIGH","HIGH","HIGH"] <- 0.9
 
 #table8: lf_length_200m = HIGH, wood_connectivity_200m = MED
 connect_index_cpt["LOW","HIGH","MED"] <- 0
-connect_index_cpt["MED","HIGH","MED"] <- 1
-connect_index_cpt["HIGH","HIGH","MED"] <- 0
+connect_index_cpt["MED","HIGH","MED"] <- 0.2
+connect_index_cpt["HIGH","HIGH","MED"] <- 0.8
 
 #table9: lf_length_200m = MED, wood_connectivity_200m = HIGH
 connect_index_cpt["LOW","MED","HIGH"] <- 0
-connect_index_cpt["MED","MED","HIGH"] <- 1
-connect_index_cpt["HIGH","MED","HIGH"] <- 0
+connect_index_cpt["MED","MED","HIGH"] <- 0.1
+connect_index_cpt["HIGH","MED","HIGH"] <- 0.9
 
 
 connect_index_cpt
 
-#CPT for Foraging pressure index ####
+# Convert the CPT to a data frame for plotting
+connect_index_df <- as.data.frame(as.table(connect_index_cpt))
+
+# Rename the columns for clarity
+colnames(connect_index_df) <- c("connect_index","lf_density_200m", "woodland_connect_200m","probability")
+
+# Create the plot
+p <- ggplot(connect_index_df, aes(x = connect_index, y = probability, group = woodland_connect_200m)) +
+  geom_line(size = 1) +  # Line plot for probability distribution
+  geom_point(size = 2) +  # Points on the curves
+  facet_grid(rows = vars(woodland_connect_200m), cols = vars(lf_density_200m),labeller="label_both") +  
+  theme_bw()+
+  labs(
+    x = "Connectivity Index",
+    y = "Probability")
+
+# Display the plot
+print(p)
+
+#CPT for Foraging pressure index ------------------------------------------------####
 
 forage_pressure_index_cpt <- array(
   0,  # Default probability for each cell
@@ -981,119 +906,170 @@ forage_pressure_index_cpt <- array(
 
 # Updated CPT for forage_pressure_index to ensure at most one 1 per row
 
-# Updated CPT for forage_pressure_index to ensure at most one 1 per row
+forage_pressure_index_cpt["LOW","LOW","LOW","LOW"] <- 0.1
+forage_pressure_index_cpt["MED","LOW","LOW","LOW"] <- 0.8
+forage_pressure_index_cpt["HIGH","LOW","LOW","LOW"] <- 0.1
 
-forage_pressure_index_cpt["LOW","LOW","LOW","LOW"] <- 1
-forage_pressure_index_cpt["MED","LOW","LOW","LOW"] <- 0
-forage_pressure_index_cpt["HIGH","LOW","LOW","LOW"] <- 0
+forage_pressure_index_cpt["LOW","MED","LOW","LOW"] <- 0.2
+forage_pressure_index_cpt["MED","MED","LOW","LOW"] <- 0.7
+forage_pressure_index_cpt["HIGH","MED","LOW","LOW"] <- 0.1
 
-forage_pressure_index_cpt["LOW","MED","LOW","LOW"] <- 0
-forage_pressure_index_cpt["MED","MED","LOW","LOW"] <- 1
-forage_pressure_index_cpt["HIGH","MED","LOW","LOW"] <- 0
+forage_pressure_index_cpt["LOW","HIGH","LOW","LOW"] <- 0.5
+forage_pressure_index_cpt["MED","HIGH","LOW","LOW"] <- 0.3
+forage_pressure_index_cpt["HIGH","HIGH","LOW","LOW"] <- 0.2
 
-forage_pressure_index_cpt["LOW","HIGH","LOW","LOW"] <- 0
-forage_pressure_index_cpt["MED","HIGH","LOW","LOW"] <- 0
-forage_pressure_index_cpt["HIGH","HIGH","LOW","LOW"] <- 1
+forage_pressure_index_cpt["LOW","LOW","MED","LOW"] <- 0.7
+forage_pressure_index_cpt["MED","LOW","MED","LOW"] <- 0.2
+forage_pressure_index_cpt["HIGH","LOW","MED","LOW"] <- 0.1
 
-forage_pressure_index_cpt["LOW","LOW","MED","LOW"] <- 0
-forage_pressure_index_cpt["MED","LOW","MED","LOW"] <- 1
-forage_pressure_index_cpt["HIGH","LOW","MED","LOW"] <- 0
+forage_pressure_index_cpt["LOW","MED","MED","LOW"] <- 0.8
+forage_pressure_index_cpt["MED","MED","MED","LOW"] <- 0.15
+forage_pressure_index_cpt["HIGH","MED","MED","LOW"] <- 0.05
 
-forage_pressure_index_cpt["LOW","MED","MED","LOW"] <- 1
-forage_pressure_index_cpt["MED","MED","MED","LOW"] <- 0
-forage_pressure_index_cpt["HIGH","MED","MED","LOW"] <- 0
+forage_pressure_index_cpt["LOW","HIGH","MED","LOW"] <- 0.7
+forage_pressure_index_cpt["MED","HIGH","MED","LOW"] <- 0.2
+forage_pressure_index_cpt["HIGH","HIGH","MED","LOW"] <- 0.1
 
-forage_pressure_index_cpt["LOW","HIGH","MED","LOW"] <- 0
-forage_pressure_index_cpt["MED","HIGH","MED","LOW"] <- 1
-forage_pressure_index_cpt["HIGH","HIGH","MED","LOW"] <- 0
+forage_pressure_index_cpt["LOW","LOW","HIGH","LOW"] <- 0.8
+forage_pressure_index_cpt["MED","LOW","HIGH","LOW"] <- 0.15
+forage_pressure_index_cpt["HIGH","LOW","HIGH","LOW"] <- 0.05
 
-forage_pressure_index_cpt["LOW","LOW","HIGH","LOW"] <- 0
-forage_pressure_index_cpt["MED","LOW","HIGH","LOW"] <- 1
-forage_pressure_index_cpt["HIGH","LOW","HIGH","LOW"] <- 0
+forage_pressure_index_cpt["LOW","MED","HIGH","LOW"] <- 0.8
+forage_pressure_index_cpt["MED","MED","HIGH","LOW"] <- 0.15
+forage_pressure_index_cpt["HIGH","MED","HIGH","LOW"] <- 0.05
 
-forage_pressure_index_cpt["LOW","MED","HIGH","LOW"] <- 0
-forage_pressure_index_cpt["MED","MED","HIGH","LOW"] <- 0
-forage_pressure_index_cpt["HIGH","MED","HIGH","LOW"] <- 1
+forage_pressure_index_cpt["LOW","HIGH","HIGH","LOW"] <- 0.8
+forage_pressure_index_cpt["MED","HIGH","HIGH","LOW"] <- 0.15
+forage_pressure_index_cpt["HIGH","HIGH","HIGH","LOW"] <- 0.05
 
-forage_pressure_index_cpt["LOW","HIGH","HIGH","LOW"] <- 1
-forage_pressure_index_cpt["MED","HIGH","HIGH","LOW"] <- 0
-forage_pressure_index_cpt["HIGH","HIGH","HIGH","LOW"] <- 0
+forage_pressure_index_cpt["LOW","LOW","LOW","MED"] <- 0.1
+forage_pressure_index_cpt["MED","LOW","LOW","MED"] <- 0.7
+forage_pressure_index_cpt["HIGH","LOW","LOW","MED"] <- 0.2
 
-forage_pressure_index_cpt["LOW","LOW","LOW","MED"] <- 1
-forage_pressure_index_cpt["MED","LOW","LOW","MED"] <- 0
-forage_pressure_index_cpt["HIGH","LOW","LOW","MED"] <- 0
+forage_pressure_index_cpt["LOW","MED","LOW","MED"] <- 0.1
+forage_pressure_index_cpt["MED","MED","LOW","MED"] <- 0.5
+forage_pressure_index_cpt["HIGH","MED","LOW","MED"] <- 0.4
 
-forage_pressure_index_cpt["LOW","MED","LOW","MED"] <- 0
-forage_pressure_index_cpt["MED","MED","LOW","MED"] <- 1
-forage_pressure_index_cpt["HIGH","MED","LOW","MED"] <- 0
+forage_pressure_index_cpt["LOW","HIGH","LOW","MED"] <- 0.1
+forage_pressure_index_cpt["MED","HIGH","LOW","MED"] <- 0.3
+forage_pressure_index_cpt["HIGH","HIGH","LOW","MED"] <- 0.6
 
-forage_pressure_index_cpt["LOW","HIGH","LOW","MED"] <- 0
-forage_pressure_index_cpt["MED","HIGH","LOW","MED"] <- 0
-forage_pressure_index_cpt["HIGH","HIGH","LOW","MED"] <- 1
+forage_pressure_index_cpt["LOW","LOW","MED","MED"] <- 0.3
+forage_pressure_index_cpt["MED","LOW","MED","MED"] <- 0.5
+forage_pressure_index_cpt["HIGH","LOW","MED","MED"] <- 0.2
 
-forage_pressure_index_cpt["LOW","LOW","MED","MED"] <- 0
-forage_pressure_index_cpt["MED","LOW","MED","MED"] <- 1
-forage_pressure_index_cpt["HIGH","LOW","MED","MED"] <- 0
+forage_pressure_index_cpt["LOW","MED","MED","MED"] <- 0.1
+forage_pressure_index_cpt["MED","MED","MED","MED"] <- 0.8
+forage_pressure_index_cpt["HIGH","MED","MED","MED"] <- 0.1
 
-forage_pressure_index_cpt["LOW","MED","MED","MED"] <- 0
-forage_pressure_index_cpt["MED","MED","MED","MED"] <- 1
-forage_pressure_index_cpt["HIGH","MED","MED","MED"] <- 0
+forage_pressure_index_cpt["LOW","HIGH","MED","MED"] <- 0.6
+forage_pressure_index_cpt["MED","HIGH","MED","MED"] <- 0.2
+forage_pressure_index_cpt["HIGH","HIGH","MED","MED"] <- 0.2
 
-forage_pressure_index_cpt["LOW","HIGH","MED","MED"] <- 1
-forage_pressure_index_cpt["MED","HIGH","MED","MED"] <- 0
-forage_pressure_index_cpt["HIGH","HIGH","MED","MED"] <- 0
+forage_pressure_index_cpt["LOW","LOW","HIGH","MED"] <- 0.5
+forage_pressure_index_cpt["MED","LOW","HIGH","MED"] <- 0.3
+forage_pressure_index_cpt["HIGH","LOW","HIGH","MED"] <- 0.2
 
-forage_pressure_index_cpt["LOW","LOW","HIGH","MED"] <- 0
-forage_pressure_index_cpt["MED","LOW","HIGH","MED"] <- 1
-forage_pressure_index_cpt["HIGH","LOW","HIGH","MED"] <- 0
+forage_pressure_index_cpt["LOW","MED","HIGH","MED"] <- 0.15
+forage_pressure_index_cpt["MED","MED","HIGH","MED"] <- 0.7
+forage_pressure_index_cpt["HIGH","MED","HIGH","MED"] <- 0.15
 
-forage_pressure_index_cpt["LOW","MED","HIGH","MED"] <- 0
-forage_pressure_index_cpt["MED","MED","HIGH","MED"] <- 0
-forage_pressure_index_cpt["HIGH","MED","HIGH","MED"] <- 1
+forage_pressure_index_cpt["LOW","HIGH","HIGH","MED"] <- 0.4
+forage_pressure_index_cpt["MED","HIGH","HIGH","MED"] <- 0.4
+forage_pressure_index_cpt["HIGH","HIGH","HIGH","MED"] <- 0.2
 
-forage_pressure_index_cpt["LOW","HIGH","HIGH","MED"] <- 0
-forage_pressure_index_cpt["MED","HIGH","HIGH","MED"] <- 1
-forage_pressure_index_cpt["HIGH","HIGH","HIGH","MED"] <- 0
+forage_pressure_index_cpt["LOW","LOW","LOW","HIGH"] <- 0.1
+forage_pressure_index_cpt["MED","LOW","LOW","HIGH"] <- 0.6
+forage_pressure_index_cpt["HIGH","LOW","LOW","HIGH"] <- 0.3
 
-forage_pressure_index_cpt["LOW","LOW","LOW","HIGH"] <- 0
-forage_pressure_index_cpt["MED","LOW","LOW","HIGH"] <- 1
-forage_pressure_index_cpt["HIGH","LOW","LOW","HIGH"] <- 0
+forage_pressure_index_cpt["LOW","MED","LOW","HIGH"] <- 0.2
+forage_pressure_index_cpt["MED","MED","LOW","HIGH"] <- 0.4
+forage_pressure_index_cpt["HIGH","MED","LOW","HIGH"] <- 0.4
 
-forage_pressure_index_cpt["LOW","MED","LOW","HIGH"] <- 1
-forage_pressure_index_cpt["MED","MED","LOW","HIGH"] <- 0
-forage_pressure_index_cpt["HIGH","MED","LOW","HIGH"] <- 0
+forage_pressure_index_cpt["LOW","HIGH","LOW","HIGH"] <- 0.1
+forage_pressure_index_cpt["MED","HIGH","LOW","HIGH"] <- 0.3
+forage_pressure_index_cpt["HIGH","HIGH","LOW","HIGH"] <- 0.6
 
-forage_pressure_index_cpt["LOW","HIGH","LOW","HIGH"] <- 0
-forage_pressure_index_cpt["MED","HIGH","LOW","HIGH"] <- 0
-forage_pressure_index_cpt["HIGH","HIGH","LOW","HIGH"] <- 1
+forage_pressure_index_cpt["LOW","LOW","MED","HIGH"] <- 0.25
+forage_pressure_index_cpt["MED","LOW","MED","HIGH"] <- 0.5
+forage_pressure_index_cpt["HIGH","LOW","MED","HIGH"] <- 0.25
 
-forage_pressure_index_cpt["LOW","LOW","MED","HIGH"] <- 0
-forage_pressure_index_cpt["MED","LOW","MED","HIGH"] <- 1
-forage_pressure_index_cpt["HIGH","LOW","MED","HIGH"] <- 0
+forage_pressure_index_cpt["LOW","MED","MED","HIGH"] <- 0.25
+forage_pressure_index_cpt["MED","MED","MED","HIGH"] <- 0.5
+forage_pressure_index_cpt["HIGH","MED","MED","HIGH"] <- 0.25
 
-forage_pressure_index_cpt["LOW","MED","MED","HIGH"] <- 0
-forage_pressure_index_cpt["MED","MED","MED","HIGH"] <- 1
-forage_pressure_index_cpt["HIGH","MED","MED","HIGH"] <- 0
+forage_pressure_index_cpt["LOW","HIGH","MED","HIGH"] <- 0.2
+forage_pressure_index_cpt["MED","HIGH","MED","HIGH"] <- 0.3
+forage_pressure_index_cpt["HIGH","HIGH","MED","HIGH"] <- 0.5
 
-forage_pressure_index_cpt["LOW","HIGH","MED","HIGH"] <- 1
-forage_pressure_index_cpt["MED","HIGH","MED","HIGH"] <- 0
-forage_pressure_index_cpt["HIGH","HIGH","MED","HIGH"] <- 0
+forage_pressure_index_cpt["LOW","LOW","HIGH","HIGH"] <- 0.1
+forage_pressure_index_cpt["MED","LOW","HIGH","HIGH"] <- 0.7
+forage_pressure_index_cpt["HIGH","LOW","HIGH","HIGH"] <- 0.2
 
-forage_pressure_index_cpt["LOW","LOW","HIGH","HIGH"] <- 0
-forage_pressure_index_cpt["MED","LOW","HIGH","HIGH"] <- 1
-forage_pressure_index_cpt["HIGH","LOW","HIGH","HIGH"] <- 0
+forage_pressure_index_cpt["LOW","MED","HIGH","HIGH"] <- 0.1
+forage_pressure_index_cpt["MED","MED","HIGH","HIGH"] <- 0.2
+forage_pressure_index_cpt["HIGH","MED","HIGH","HIGH"] <- 0.7
 
-forage_pressure_index_cpt["LOW","MED","HIGH","HIGH"] <- 0
-forage_pressure_index_cpt["MED","MED","HIGH","HIGH"] <- 1
-forage_pressure_index_cpt["HIGH","MED","HIGH","HIGH"] <- 0
-
-forage_pressure_index_cpt["LOW","HIGH","HIGH","HIGH"] <- 1
-forage_pressure_index_cpt["MED","HIGH","HIGH","HIGH"] <- 0
-forage_pressure_index_cpt["HIGH","HIGH","HIGH","HIGH"] <- 0
+forage_pressure_index_cpt["LOW","HIGH","HIGH","HIGH"] <- 0.2
+forage_pressure_index_cpt["MED","HIGH","HIGH","HIGH"] <- 0.3
+forage_pressure_index_cpt["HIGH","HIGH","HIGH","HIGH"] <- 0.5
 
 forage_pressure_index_cpt
 
-#CPT for thermoregulation index ####
+# Convert the CPT to a data frame for plotting
+forage_pressure_index_df <- as.data.frame(as.table(forage_pressure_index_cpt))
+
+# Rename the columns for clarity
+colnames(forage_pressure_index_df) <- c("forage_pressure_index","alt_forage_quality_200m", "woodland_LF_area_200m","wood_edge_area_200m","probability")
+
+#subset by wood_edge_area_200m levels
+
+edges_low <- subset(forage_pressure_index_df, wood_edge_area_200m %in% c("LOW"))
+edges_med <- subset(forage_pressure_index_df, wood_edge_area_200m %in% c("MED"))
+edges_high <- subset(forage_pressure_index_df, wood_edge_area_200m %in% c("HIGH"))
+
+p_edges_low <- ggplot(edges_low, aes(x = forage_pressure_index, y = probability, group = alt_forage_quality_200m)) +
+  geom_line(size = 1) +  # Line plot for probability distribution
+  geom_point(size = 2) +  # Points on the curves
+  facet_grid(rows = vars(alt_forage_quality_200m), 
+             cols = vars(woodland_LF_area_200m), 
+             labeller = label_both) +  # Facet by both alt_forage_quality_200m and wood_edge_area_200m in rows
+  theme_bw() +
+  labs(
+    x = "Forage Pressure Index",
+    y = "Probability"
+  )
+
+p_edges_med <- ggplot(edges_med, aes(x = forage_pressure_index, y = probability, group = alt_forage_quality_200m)) +
+  geom_line(size = 1) +  # Line plot for probability distribution
+  geom_point(size = 2) +  # Points on the curves
+  facet_grid(rows = vars(alt_forage_quality_200m), 
+             cols = vars(woodland_LF_area_200m), 
+             labeller = label_both) +  # Facet by both alt_forage_quality_200m and wood_edge_area_200m in rows
+  theme_bw() +
+  labs(
+    x = "Forage Pressure Index",
+    y = "Probability"
+  )
+
+p_edges_high <- ggplot(edges_high, aes(x = forage_pressure_index, y = probability, group = alt_forage_quality_200m)) +
+  geom_line(size = 1) +  # Line plot for probability distribution
+  geom_point(size = 2) +  # Points on the curves
+  facet_grid(rows = vars(alt_forage_quality_200m), 
+             cols = vars(woodland_LF_area_200m), 
+             labeller = label_both) +  # Facet by both alt_forage_quality_200m and wood_edge_area_200m in rows
+  theme_bw() +
+  labs(
+    x = "Forage Pressure Index",
+    y = "Probability"
+  )
+
+library(gridExtra)
+
+grid.arrange(p_edges_low,p_edges_med,p_edges_high)
+
+
+#CPT for thermoregulation index ----------------------------------------####
 
 thermoreg_index_cpt <- array(
   0,  # Default probability for each cell
@@ -1107,109 +1083,113 @@ thermoreg_index_cpt <- array(
 #order = thermoreg_index, sum_dams_200m
 
 #table1: 
-thermoreg_index_cpt["LOW","LOW"] <- 1
-thermoreg_index_cpt["MED","LOW"] <- 0
-thermoreg_index_cpt["HIGH","LOW"] <- 0
+thermoreg_index_cpt["LOW","LOW"] <- 0.6
+thermoreg_index_cpt["MED","LOW"] <- 0.3
+thermoreg_index_cpt["HIGH","LOW"] <- 0.1
 
 #table2:
-thermoreg_index_cpt["LOW","MED"] <- 0
-thermoreg_index_cpt["MED","MED"] <- 1
-thermoreg_index_cpt["HIGH","MED"] <- 0
+thermoreg_index_cpt["LOW","MED"] <- 0.2
+thermoreg_index_cpt["MED","MED"] <- 0.6
+thermoreg_index_cpt["HIGH","MED"] <- 0.2
 
 #table3:
-thermoreg_index_cpt["LOW","HIGH"] <- 0
-thermoreg_index_cpt["MED","HIGH"] <- 0
-thermoreg_index_cpt["HIGH","HIGH"] <- 1
+thermoreg_index_cpt["LOW","HIGH"] <- 0.1
+thermoreg_index_cpt["MED","HIGH"] <- 0.3
+thermoreg_index_cpt["HIGH","HIGH"] <- 0.6
 
 thermoreg_index_cpt
 
-#Final CPT: deer damage risk ####
+# Convert the CPT to a data frame for plotting
+thermoreg_index_df <- as.data.frame(as.table(thermoreg_index_cpt))
+
+# Rename the columns for clarity
+colnames(thermoreg_index_df) <- c("thermoreg_index", "sum_dams_200m", "probability")
+
+# Create the plot
+p <- ggplot(thermoreg_index_df, aes(x = thermoreg_index, y = probability, group = sum_dams_200m, color = sum_dams_200m)) +
+  geom_line(size = 1) +  # Line plot for probability distribution
+  geom_point(size = 2) +  # Points on the curves
+  facet_wrap(~ sum_dams_200m, ncol = 3) +  # Create a panel of plots for each sum_dams_200m
+  labs(title = "Probability Distributions of Thermoreg Index",
+       x = "Thermoreg Index",
+       y = "Probability") +
+  theme_minimal()
+
+# Display the plot
+print(p)
+
+#Final CPT: deer damage risk -----------------------------------------------####
 
 damage_risk_cpt <- array(
   0,  # Default probability for each cell
   dim = c(5, 3, 3, 3),  # Shape of the array
   dimnames = list(
     damage_risk = c("LOW","LOW-MED","MED","MED-HIGH","HIGH"),
-    connectivity_index = c("LOW", "MED", "HIGH"),
     forage_pressure_index = c("LOW", "MED", "HIGH"),
-    thermoreg_index = c("LOW", "MED", "HIGH")
-    
-  )
-)
-#order = damage_risk, connectivity_index,forage_pressure_index,thermoreg_index
-
-damage_risk_cpt <- array(
-  0,  # Default probability for each cell
-  dim = c(5, 3, 3, 3),  # Shape of the array
-  dimnames = list(
-    damage_risk = c("LOW","LOW-MED","MED","MED-HIGH","HIGH"),
     connectivity_index = c("LOW", "MED", "HIGH"),
-    forage_pressure_index = c("LOW", "MED", "HIGH"),
     thermoreg_index = c("LOW", "MED", "HIGH")
   )
 )
 
-# connectivity_index = LOW, thermoreg_index = LOW
-damage_risk_cpt["LOW", "LOW", "LOW", "LOW"] <- 1
-damage_risk_cpt["LOW-MED", "LOW", "LOW", "LOW"] <- 0
-damage_risk_cpt["MED", "LOW", "LOW", "LOW"] <- 0
+#order = damage_risk, forage_pressure_index, connectivity_index, thermoreg_index
+
+damage_risk_cpt["LOW", "LOW", "LOW", "LOW"] <- 0.8
+damage_risk_cpt["LOW-MED", "LOW", "LOW", "LOW"] <- 0.1
+damage_risk_cpt["MED", "LOW", "LOW", "LOW"] <- 0.1
 damage_risk_cpt["MED-HIGH", "LOW", "LOW", "LOW"] <- 0
 damage_risk_cpt["HIGH", "LOW", "LOW", "LOW"] <- 0
 
-damage_risk_cpt["LOW", "MED", "LOW", "LOW"] <- 0
-damage_risk_cpt["LOW-MED", "MED", "LOW", "LOW"] <- 1
-damage_risk_cpt["MED", "MED", "LOW", "LOW"] <- 0
+damage_risk_cpt["LOW", "MED", "LOW", "LOW"] <- 0.2
+damage_risk_cpt["LOW-MED", "MED", "LOW", "LOW"] <- 0.7
+damage_risk_cpt["MED", "MED", "LOW", "LOW"] <- 0.1
 damage_risk_cpt["MED-HIGH", "MED", "LOW", "LOW"] <- 0
 damage_risk_cpt["HIGH", "MED", "LOW", "LOW"] <- 0
 
 damage_risk_cpt["LOW", "HIGH", "LOW", "LOW"] <- 0
 damage_risk_cpt["LOW-MED", "HIGH", "LOW", "LOW"] <- 0
-damage_risk_cpt["MED", "HIGH", "LOW", "LOW"] <- 1
-damage_risk_cpt["MED-HIGH", "HIGH", "LOW", "LOW"] <- 0
-damage_risk_cpt["HIGH", "HIGH", "LOW", "LOW"] <- 0
+damage_risk_cpt["MED", "HIGH", "LOW", "LOW"] <- 0.2
+damage_risk_cpt["MED-HIGH", "HIGH", "LOW", "LOW"] <- 0.7
+damage_risk_cpt["HIGH", "HIGH", "LOW", "LOW"] <- 0.1
 
-# connectivity_index = LOW, thermoreg_index = MED
-damage_risk_cpt["LOW", "LOW", "LOW", "MED"] <- 0
-damage_risk_cpt["LOW-MED", "LOW", "LOW", "MED"] <- 1
+damage_risk_cpt["LOW", "LOW", "LOW", "MED"] <- 0.9
+damage_risk_cpt["LOW-MED", "LOW", "LOW", "MED"] <- 0.1
 damage_risk_cpt["MED", "LOW", "LOW", "MED"] <- 0
 damage_risk_cpt["MED-HIGH", "LOW", "LOW", "MED"] <- 0
 damage_risk_cpt["HIGH", "LOW", "LOW", "MED"] <- 0
 
 damage_risk_cpt["LOW", "MED", "LOW", "MED"] <- 0
-damage_risk_cpt["LOW-MED", "MED", "LOW", "MED"] <- 0
-damage_risk_cpt["MED", "MED", "LOW", "MED"] <- 1
-damage_risk_cpt["MED-HIGH", "MED", "LOW", "MED"] <- 0
+damage_risk_cpt["LOW-MED", "MED", "LOW", "MED"] <- 0.2
+damage_risk_cpt["MED", "MED", "LOW", "MED"] <- 0.6
+damage_risk_cpt["MED-HIGH", "MED", "LOW", "MED"] <- 0.2
 damage_risk_cpt["HIGH", "MED", "LOW", "MED"] <- 0
 
 damage_risk_cpt["LOW", "HIGH", "LOW", "MED"] <- 0
 damage_risk_cpt["LOW-MED", "HIGH", "LOW", "MED"] <- 0
-damage_risk_cpt["MED", "HIGH", "LOW", "MED"] <- 0
-damage_risk_cpt["MED-HIGH", "HIGH", "LOW", "MED"] <- 1
-damage_risk_cpt["HIGH", "HIGH", "LOW", "MED"] <- 0
+damage_risk_cpt["MED", "HIGH", "LOW", "MED"] <- 0.1
+damage_risk_cpt["MED-HIGH", "HIGH", "LOW", "MED"] <- 0.8
+damage_risk_cpt["HIGH", "HIGH", "LOW", "MED"] <- 0.1
 
-# connectivity_index = LOW, thermoreg_index = HIGH
-damage_risk_cpt["LOW", "LOW", "LOW", "HIGH"] <- 0
-damage_risk_cpt["LOW-MED", "LOW", "LOW", "HIGH"] <- 0
-damage_risk_cpt["MED", "LOW", "LOW", "HIGH"] <- 1
+damage_risk_cpt["LOW", "LOW", "LOW", "HIGH"] <- 0.8
+damage_risk_cpt["LOW-MED", "LOW", "LOW", "HIGH"] <- 0.2
+damage_risk_cpt["MED", "LOW", "LOW", "HIGH"] <- 0
 damage_risk_cpt["MED-HIGH", "LOW", "LOW", "HIGH"] <- 0
 damage_risk_cpt["HIGH", "LOW", "LOW", "HIGH"] <- 0
 
 damage_risk_cpt["LOW", "MED", "LOW", "HIGH"] <- 0
-damage_risk_cpt["LOW-MED", "MED", "LOW", "HIGH"] <- 0
-damage_risk_cpt["MED", "MED", "LOW", "HIGH"] <- 0
-damage_risk_cpt["MED-HIGH", "MED", "LOW", "HIGH"] <- 0
-damage_risk_cpt["HIGH", "MED", "LOW", "HIGH"] <- 1
+damage_risk_cpt["LOW-MED", "MED", "LOW", "HIGH"] <- 0.2
+damage_risk_cpt["MED", "MED", "LOW", "HIGH"] <- 0.2
+damage_risk_cpt["MED-HIGH", "MED", "LOW", "HIGH"] <- 0.6
+damage_risk_cpt["HIGH", "MED", "LOW", "HIGH"] <- 0
 
 damage_risk_cpt["LOW", "HIGH", "LOW", "HIGH"] <- 0
 damage_risk_cpt["LOW-MED", "HIGH", "LOW", "HIGH"] <- 0
-damage_risk_cpt["MED", "HIGH", "LOW", "HIGH"] <- 0
-damage_risk_cpt["MED-HIGH", "HIGH", "LOW", "HIGH"] <- 0
-damage_risk_cpt["HIGH", "HIGH", "LOW", "HIGH"] <- 1
+damage_risk_cpt["MED", "HIGH", "LOW", "HIGH"] <- 0.1
+damage_risk_cpt["MED-HIGH", "HIGH", "LOW", "HIGH"] <- 0.8
+damage_risk_cpt["HIGH", "HIGH", "LOW", "HIGH"] <- 0.1
 
-# connectivity_index = MED, thermoreg_index = LOW
-damage_risk_cpt["LOW", "LOW", "MED", "LOW"] <- 0
-damage_risk_cpt["LOW-MED", "LOW", "MED", "LOW"] <- 0
-damage_risk_cpt["MED", "LOW", "MED", "LOW"] <- 1
+damage_risk_cpt["LOW", "LOW", "MED", "LOW"] <- 0.2
+damage_risk_cpt["LOW-MED", "LOW", "MED", "LOW"] <- 0.7
+damage_risk_cpt["MED", "LOW", "MED", "LOW"] <- 0.1
 damage_risk_cpt["MED-HIGH", "LOW", "MED", "LOW"] <- 0
 damage_risk_cpt["HIGH", "LOW", "MED", "LOW"] <- 0
 
@@ -1220,108 +1200,156 @@ damage_risk_cpt["MED-HIGH", "MED", "MED", "LOW"] <- 0
 damage_risk_cpt["HIGH", "MED", "MED", "LOW"] <- 0
 
 damage_risk_cpt["LOW", "HIGH", "MED", "LOW"] <- 0
-damage_risk_cpt["LOW-MED", "HIGH", "MED", "LOW"] <- 0
-damage_risk_cpt["MED", "HIGH", "MED", "LOW"] <- 0
-damage_risk_cpt["MED-HIGH", "HIGH", "MED", "LOW"] <- 0
-damage_risk_cpt["HIGH", "HIGH", "MED", "LOW"] <- 1
+damage_risk_cpt["LOW-MED", "HIGH", "MED", "LOW"] <- 0.1
+damage_risk_cpt["MED", "HIGH", "MED", "LOW"] <- 0.8
+damage_risk_cpt["MED-HIGH", "HIGH", "MED", "LOW"] <- 0.1
+damage_risk_cpt["HIGH", "HIGH", "MED", "LOW"] <- 0
 
-# connectivity_index = MED, thermoreg_index = MED
-damage_risk_cpt["LOW", "LOW", "MED", "MED"] <- 0
-damage_risk_cpt["LOW-MED", "LOW", "MED", "MED"] <- 0
-damage_risk_cpt["MED", "LOW", "MED", "MED"] <- 1
+damage_risk_cpt["LOW", "LOW", "MED", "MED"] <- 0.1
+damage_risk_cpt["LOW-MED", "LOW", "MED", "MED"] <- 0.8
+damage_risk_cpt["MED", "LOW", "MED", "MED"] <- 0.1
 damage_risk_cpt["MED-HIGH", "LOW", "MED", "MED"] <- 0
 damage_risk_cpt["HIGH", "LOW", "MED", "MED"] <- 0
 
 damage_risk_cpt["LOW", "MED", "MED", "MED"] <- 0
-damage_risk_cpt["LOW-MED", "MED", "MED", "MED"] <- 1
-damage_risk_cpt["MED", "MED", "MED", "MED"] <- 0
-damage_risk_cpt["MED-HIGH", "MED", "MED", "MED"] <- 0
+damage_risk_cpt["LOW-MED", "MED", "MED", "MED"] <- 0
+damage_risk_cpt["MED", "MED", "MED", "MED"] <- 0.9
+damage_risk_cpt["MED-HIGH", "MED", "MED", "MED"] <- 0.1
 damage_risk_cpt["HIGH", "MED", "MED", "MED"] <- 0
 
 damage_risk_cpt["LOW", "HIGH", "MED", "MED"] <- 0
 damage_risk_cpt["LOW-MED", "HIGH", "MED", "MED"] <- 0
 damage_risk_cpt["MED", "HIGH", "MED", "MED"] <- 0
-damage_risk_cpt["MED-HIGH", "HIGH", "MED", "MED"] <- 0
-damage_risk_cpt["HIGH", "HIGH", "MED", "MED"] <- 1
+damage_risk_cpt["MED-HIGH", "HIGH", "MED", "MED"] <- 0.8
+damage_risk_cpt["HIGH", "HIGH", "MED", "MED"] <- 0.2
 
-# connectivity_index = MED, thermoreg_index = HIGH
 damage_risk_cpt["LOW", "LOW", "MED", "HIGH"] <- 0
-damage_risk_cpt["LOW-MED", "LOW", "MED", "HIGH"] <- 0
-damage_risk_cpt["MED", "LOW", "MED", "HIGH"] <- 1
+damage_risk_cpt["LOW-MED", "LOW", "MED", "HIGH"] <- 0.9
+damage_risk_cpt["MED", "LOW", "MED", "HIGH"] <- 0.1
 damage_risk_cpt["MED-HIGH", "LOW", "MED", "HIGH"] <- 0
 damage_risk_cpt["HIGH", "LOW", "MED", "HIGH"] <- 0
 
 damage_risk_cpt["LOW", "MED", "MED", "HIGH"] <- 0
 damage_risk_cpt["LOW-MED", "MED", "MED", "HIGH"] <- 0
-damage_risk_cpt["MED", "MED", "MED", "HIGH"] <- 1
-damage_risk_cpt["MED-HIGH", "MED", "MED", "HIGH"] <- 0
-damage_risk_cpt["HIGH", "MED", "MED", "HIGH"] <- 0
+damage_risk_cpt["MED", "MED", "MED", "HIGH"] <- 0.1
+damage_risk_cpt["MED-HIGH", "MED", "MED", "HIGH"] <- 0.8
+damage_risk_cpt["HIGH", "MED", "MED", "HIGH"] <- 0.1
 
 damage_risk_cpt["LOW", "HIGH", "MED", "HIGH"] <- 0
 damage_risk_cpt["LOW-MED", "HIGH", "MED", "HIGH"] <- 0
 damage_risk_cpt["MED", "HIGH", "MED", "HIGH"] <- 0
-damage_risk_cpt["MED-HIGH", "HIGH", "MED", "HIGH"] <- 0
-damage_risk_cpt["HIGH", "HIGH", "MED", "HIGH"] <- 1
+damage_risk_cpt["MED-HIGH", "HIGH", "MED", "HIGH"] <- 0.1
+damage_risk_cpt["HIGH", "HIGH", "MED", "HIGH"] <- 0.9
 
-# connectivity_index = HIGH, thermoreg_index = LOW
 damage_risk_cpt["LOW", "LOW", "HIGH", "LOW"] <- 0
 damage_risk_cpt["LOW-MED", "LOW", "HIGH", "LOW"] <- 0
-damage_risk_cpt["MED", "LOW", "HIGH", "LOW"] <- 1
-damage_risk_cpt["MED-HIGH", "LOW", "HIGH", "LOW"] <- 0
-damage_risk_cpt["HIGH", "LOW", "HIGH", "LOW"] <- 0
+damage_risk_cpt["MED", "LOW", "HIGH", "LOW"] <- 0.2
+damage_risk_cpt["MED-HIGH", "LOW", "HIGH", "LOW"] <- 0.7
+damage_risk_cpt["HIGH", "LOW", "HIGH", "LOW"] <- 0.1
 
 damage_risk_cpt["LOW", "MED", "HIGH", "LOW"] <- 0
-damage_risk_cpt["LOW-MED", "MED", "HIGH", "LOW"] <- 0
-damage_risk_cpt["MED", "MED", "HIGH", "LOW"] <- 0
-damage_risk_cpt["MED-HIGH", "MED", "HIGH", "LOW"] <- 1
+damage_risk_cpt["LOW-MED", "MED", "HIGH", "LOW"] <- 0.1
+damage_risk_cpt["MED", "MED", "HIGH", "LOW"] <- 0.7
+damage_risk_cpt["MED-HIGH", "MED", "HIGH", "LOW"] <- 0.2
 damage_risk_cpt["HIGH", "MED", "HIGH", "LOW"] <- 0
 
 damage_risk_cpt["LOW", "HIGH", "HIGH", "LOW"] <- 0
 damage_risk_cpt["LOW-MED", "HIGH", "HIGH", "LOW"] <- 0
-damage_risk_cpt["MED", "HIGH", "HIGH", "LOW"] <- 0
-damage_risk_cpt["MED-HIGH", "HIGH", "HIGH", "LOW"] <- 1
-damage_risk_cpt["HIGH", "HIGH", "HIGH", "LOW"] <- 0
+damage_risk_cpt["MED", "HIGH", "HIGH", "LOW"] <- 0.1
+damage_risk_cpt["MED-HIGH", "HIGH", "HIGH", "LOW"] <- 0.8
+damage_risk_cpt["HIGH", "HIGH", "HIGH", "LOW"] <- 0.1
 
-# connectivity_index = HIGH, thermoreg_index = MED
 damage_risk_cpt["LOW", "LOW", "HIGH", "MED"] <- 0
-damage_risk_cpt["LOW-MED", "LOW", "HIGH", "MED"] <- 0
-damage_risk_cpt["MED", "LOW", "HIGH", "MED"] <- 0
-damage_risk_cpt["MED-HIGH", "LOW", "HIGH", "MED"] <- 1
+damage_risk_cpt["LOW-MED", "LOW", "HIGH", "MED"] <- 0.2
+damage_risk_cpt["MED", "LOW", "HIGH", "MED"] <- 0.6
+damage_risk_cpt["MED-HIGH", "LOW", "HIGH", "MED"] <- 0.2
 damage_risk_cpt["HIGH", "LOW", "HIGH", "MED"] <- 0
 
 damage_risk_cpt["LOW", "MED", "HIGH", "MED"] <- 0
 damage_risk_cpt["LOW-MED", "MED", "HIGH", "MED"] <- 0
-damage_risk_cpt["MED", "MED", "HIGH", "MED"] <- 0
-damage_risk_cpt["MED-HIGH", "MED", "HIGH", "MED"] <- 0
-damage_risk_cpt["HIGH", "MED", "HIGH", "MED"] <- 1
+damage_risk_cpt["MED", "MED", "HIGH", "MED"] <- 0.2
+damage_risk_cpt["MED-HIGH", "MED", "HIGH", "MED"] <- 0.6
+damage_risk_cpt["HIGH", "MED", "HIGH", "MED"] <- 0.2
 
 damage_risk_cpt["LOW", "HIGH", "HIGH", "MED"] <- 0
 damage_risk_cpt["LOW-MED", "HIGH", "HIGH", "MED"] <- 0
 damage_risk_cpt["MED", "HIGH", "HIGH", "MED"] <- 0
-damage_risk_cpt["MED-HIGH", "HIGH", "HIGH", "MED"] <- 0
-damage_risk_cpt["HIGH", "HIGH", "HIGH", "MED"] <- 1
+damage_risk_cpt["MED-HIGH", "HIGH", "HIGH", "MED"] <- 0.1
+damage_risk_cpt["HIGH", "HIGH", "HIGH", "MED"] <- 0.9
 
-# connectivity_index = HIGH, thermoreg_index = HIGH
 damage_risk_cpt["LOW", "LOW", "HIGH", "HIGH"] <- 0
-damage_risk_cpt["LOW-MED", "LOW", "HIGH", "HIGH"] <- 0
-damage_risk_cpt["MED", "LOW", "HIGH", "HIGH"] <- 1
-damage_risk_cpt["MED-HIGH", "LOW", "HIGH", "HIGH"] <- 0
+damage_risk_cpt["LOW-MED", "LOW", "HIGH", "HIGH"] <- 0.2
+damage_risk_cpt["MED", "LOW", "HIGH", "HIGH"] <- 0.6
+damage_risk_cpt["MED-HIGH", "LOW", "HIGH", "HIGH"] <- 0.2
 damage_risk_cpt["HIGH", "LOW", "HIGH", "HIGH"] <- 0
 
 damage_risk_cpt["LOW", "MED", "HIGH", "HIGH"] <- 0
 damage_risk_cpt["LOW-MED", "MED", "HIGH", "HIGH"] <- 0
-damage_risk_cpt["MED", "MED", "HIGH", "HIGH"] <- 0
-damage_risk_cpt["MED-HIGH", "MED", "HIGH", "HIGH"] <- 0
-damage_risk_cpt["HIGH", "MED", "HIGH", "HIGH"] <- 1
+damage_risk_cpt["MED", "MED", "HIGH", "HIGH"] <- 0.1
+damage_risk_cpt["MED-HIGH", "MED", "HIGH", "HIGH"] <- 0.8
+damage_risk_cpt["HIGH", "MED", "HIGH", "HIGH"] <- 0.1
 
 damage_risk_cpt["LOW", "HIGH", "HIGH", "HIGH"] <- 0
 damage_risk_cpt["LOW-MED", "HIGH", "HIGH", "HIGH"] <- 0
 damage_risk_cpt["MED", "HIGH", "HIGH", "HIGH"] <- 0
-damage_risk_cpt["MED-HIGH", "HIGH", "HIGH", "HIGH"] <- 0
-damage_risk_cpt["HIGH", "HIGH", "HIGH", "HIGH"] <- 1
+damage_risk_cpt["MED-HIGH", "HIGH", "HIGH", "HIGH"] <- 0.1
+damage_risk_cpt["HIGH", "HIGH", "HIGH", "HIGH"] <- 0.9
 
 
 damage_risk_cpt
+
+# Convert the CPT to a data frame for plotting
+damage_risk_df <- as.data.frame(as.table(damage_risk_cpt))
+
+# Rename the columns for clarity
+colnames(damage_risk_df)[5] <- "probability"
+
+#subset by thermoreg_index levels
+
+thermoreg_low <- subset(damage_risk_df, thermoreg_index %in% c("LOW"))
+thermoreg_med <- subset(damage_risk_df, thermoreg_index %in% c("MED"))
+thermoreg_high <- subset(damage_risk_df, thermoreg_index %in% c("HIGH"))
+
+p_thermoreg_low <- ggplot(thermoreg_low, aes(x = damage_risk, y = probability, group = forage_pressure_index)) +
+  geom_line(size = 1) +  # Line plot for probability distribution
+  geom_point(size = 2) +  # Points on the curves
+  facet_grid(rows = vars(forage_pressure_index), 
+             cols = vars(connectivity_index), 
+             labeller = label_both) +  # Facet by both forage_pressure_index and thermoreg_index in rows
+  theme_bw() +
+  labs(
+    x = "Damage risk",
+    y = "Probability"
+  )
+
+p_thermoreg_med <- ggplot(thermoreg_med, aes(x = damage_risk, y = probability, group = forage_pressure_index)) +
+  geom_line(size = 1) +  # Line plot for probability distribution
+  geom_point(size = 2) +  # Points on the curves
+  facet_grid(rows = vars(forage_pressure_index), 
+             cols = vars(connectivity_index), 
+             labeller = label_both) +  # Facet by both forage_pressure_index and thermoreg_index in rows
+  theme_bw() +
+  labs(
+    x = "Damage risk",
+    y = "Probability"
+  )
+
+p_thermoreg_high <- ggplot(thermoreg_high, aes(x = damage_risk, y = probability, group = forage_pressure_index)) +
+  geom_line(size = 1) +  # Line plot for probability distribution
+  geom_point(size = 2) +  # Points on the curves
+  facet_grid(rows = vars(forage_pressure_index), 
+             cols = vars(connectivity_index), 
+             labeller = label_both) +  # Facet by both forage_pressure_index and thermoreg_index in rows
+  theme_bw() +
+  labs(
+    x = "Damage risk",
+    y = "Probability"
+  )
+
+library(gridExtra)
+
+grid.arrange(p_thermoreg_low,p_thermoreg_med,p_thermoreg_high)
+
 
 #Create BBN structure#------------------------------------
 
@@ -1397,7 +1425,7 @@ dfit
 
 predict_dat <- df_cat %>%st_drop_geometry() %>% #drop geometry
   mutate(across(where(is.character), toupper)) %>% #convert characters to upper case
-  dplyr::select(-c("pixel_ID","x","y"))
+  dplyr::select(-c("x","y"))
 #Ensure variable names match those in BBN
 predict_dat<-predict_dat%>%rename(
   wood_edge_area_200m=Focal200_EDGE_AREA,
@@ -1432,6 +1460,7 @@ levels(predict_dat$damage_risk)<-c("LOW","LOW-MED","MED","MED-HIGH","HIGH")
 #Ensure predict_data is a data.frame
 predict_dat <- as.data.frame(predict_dat)
 
+#PREDICTIONS TAKE A LONG TIME, ABOUT 3 MINUTES PER LINE
 #Predict values for latent variables
 pred_thermoreg = predict(object=dfit,node="thermoreg_index",data=predict_dat, method = "exact")
 pred_fpi = predict(dfit,node="forage_pressure_index",data=predict_dat, method = "exact")
@@ -1458,7 +1487,9 @@ df_cat$pred_connect <- pred_connect
 
 # Make sf object
 df_sf <- st_as_sf(df_cat, coords = c("x", "y"), crs = st_crs(bng))
-df_sf <- st_transform(df_sf, crs = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs")
+#df_sf <- st_transform(df_sf, crs = "+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs")
+df_sf <- st_transform(df_sf, crs = bng)
+
 
 # Define the value mapping for pred_damage
 damage_values <- c("LOW" = 1, "LOW-MED" = 2, "MED" = 3, "MED-HIGH" = 4, "HIGH" = 5)
@@ -1471,8 +1502,16 @@ pal <- c("yellow", "#FED976", "#FD8D3C", "#FC4E2A", "#E31A1C")
 #Convert to raster
 r <- df_sf %>% dplyr::select(geometry, value) %>% stars::st_rasterize()
 
+r_rast <- terra::rast(r)
+#replace 0 with NA
+values(r_rast)[values(r_rast) <= 0] = NA
+
+#export raster to inspect in arcgis
+
+terra::writeRaster(r_rast, here("output/EW_datasets_2022/small_deer/updated_risk_test.tif"),overwrite=TRUE)
+
 # Convert the raster to a data frame for ggplot
-r_df <- as.data.frame(r, xy = TRUE)
+r_df <- as.data.frame(r_rast, xy = TRUE)
 
 # Create a factor for the value with all levels
 r_df$value <- factor(r_df$value, levels = val, labels = names(damage_values))
@@ -1533,3 +1572,7 @@ leaflet() %>%
       }
     )
   )
+
+#Overlay this raster on to the current risk raster
+
+#updated_risk_map <- overlay()
