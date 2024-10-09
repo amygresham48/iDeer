@@ -35,23 +35,31 @@ extent(nfi_lcm_map)
 
 #woodland connectivity within 200m
 Focal200_WOOD_CONNECT <- raster(here("output/EW_datasets_2022/small_deer/woodland_connectivity_200m_2022_EW_masked.tif"))
+plot(Focal200_WOOD_CONNECT)
 
 #edge area within 200m
-Focal200_EDGE_AREA <- raster(here("output/EW_datasets_2022/small_deer/sum_woodland_edges_200m_small_deer_EW_masked.tif"))
+Focal200_EDGE_AREA <- raster(here("output/EW_datasets_2022/small_deer/sum_woodland_edges_200m_small_deer_EW_reprojected.tif"))
+plot(Focal200_EDGE_AREA)
 
 #linear feature density within 200m
-Focal200_LF <- raster(here("output/EW_datasets_2022/small_deer/lf_density_200m_2022.tif"))
+Focal200_LF <- raster(here("output/EW_datasets_2022/small_deer/lf_density_200m_2022_EW_masked.tif"))
+plot(Focal200_LF)
 
 #woodland and linear feature area within 200m
 #made using script combine_lf_wood_area.R, then spatial_matching_200m_layers.R
 Focal200_WOOD_LF <- raster(here("output/EW_datasets_2022/small_deer/sum_woodland_and_LF_area_200m_small_deer_EW_masked.tif"))
+plot(Focal200_WOOD_LF)
 
 #perennial/arable forage quality map
 Focal200_PEREN_ARABLE_FORAGEQ <- raster(here("output/EW_datasets_2022/small_deer/sum_perennial_arable_forage_q_200m_small_deer_EW_masked.tif"))
+plot(Focal200_PEREN_ARABLE_FORAGEQ)
 
 #sum of DAMS within 200m
 Focal200_DAMS <- raster(here("output/EW_datasets_2022/small_deer/sum_dams_200_non_wood_2022_EW_masked.tif"))
+plot(Focal200_DAMS)
 
+#England-Wales 10k tiles
+ew10k <- st_read(here("data/derived-data/10k_tiles_EW.shp"))
 
 
 #Update layers #####-------------------------------------------------
@@ -59,160 +67,179 @@ Focal200_DAMS <- raster(here("output/EW_datasets_2022/small_deer/sum_dams_200_no
 #Extract raster values
 #Create a dataframe containing all extracted raster values
 
+#Use the Focal200_DAMS raster as the template, as it is the most complete (no gaps/NAs)
+
+template_raster <- Focal200_DAMS
+
 #EXTRACT LENGTH OF WOODLAND EDGE
 
 #try with a few tiles
 
-ew10k_test_tiles <- ew10k[866:888,]
-ew10k_test_tiles <- st_as_sf(ew10k_test_tiles)
+#ew10k_test_tiles <- ew10k[866:888,]
+#ew10k_test_tiles <- st_as_sf(ew10k_test_tiles)
+#ew10k_raster_test <- crop(template_raster, ew10k_test_tiles)
+#ew10k_raster_test <- mask(ew10k_raster_test, ew10k_test_tiles)
+#ew10k_edge_test <- crop(Focal200_EDGE_AREA, ew10k_test_tiles)
+#ew10k_edge_test  <- mask(ew10k_edge_test, ew10k_test_tiles)
 
-edgelen <- extract_raster(tiles = 
-                            ew10k_test_tiles,
-                          map_reclass = Focal200_EDGE_AREA,
-                          lcm = nfi_lcm_map)
+edgelen <- extract_raster(tiles = ew10k,
+                          map = Focal200_EDGE_AREA,
+                          lcm = template_raster)
 
-ggplot(edgelen) +
-  geom_tile(aes(x = x, y = y, fill = Focal200_EDGE_AREA)) +
-  scale_fill_viridis_c(option = "plasma") +  # Apply a continuous viridis color scale
-  theme_minimal() +
-  guides(fill = guide_colorbar(barwidth = 1, barheight = 10)) +  # Customize the colorbar appearance
-  labs(title = "Edge area within 200m",
-       fill = "") 
+#ggplot(edgelen) +
+#  geom_tile(aes(x = x, y = y, fill = Focal200_EDGE_AREA)) +
+#  scale_fill_viridis_c(option = "plasma") +  # Apply a continuous viridis color scale
+#  theme_minimal() +
+#  guides(fill = guide_colorbar(barwidth = 1, barheight = 10)) +  # Customize the colorbar appearance
+#  labs(title = "Edge area within 200m",
+#       fill = "") 
 
 #EXTRACT CONNECTIVITY
 
-connectpix <- extract_raster(map_reclass = Focal200_WOOD_CONNECT,
-                             lcm = nfi_lcm_map)
+connectpix <- extract_raster(tiles = ew10k,
+                             map = Focal200_WOOD_CONNECT,
+                             lcm = template_raster)
 
-ggplot(connectpix) +
-  geom_tile(aes(x = x, y = y, fill = Focal200_WOOD_CONNECT)) +
-  scale_fill_viridis_c(option = "plasma") +  # Apply a continuous viridis color scale
-  theme_minimal() +
-  guides(fill = guide_colorbar(barwidth = 1, barheight = 10)) +  # Customize the colorbar appearance
-  labs(title = "Total incoming connectivity from within 200m",
-       fill = "") 
+#ggplot(connectpix) +
+#  geom_tile(aes(x = x, y = y, fill = Focal200_WOOD_CONNECT)) +
+#  scale_fill_viridis_c(option = "plasma") +  # Apply a continuous viridis color scale
+#  theme_minimal() +
+#  guides(fill = guide_colorbar(barwidth = 1, barheight = 10)) +  # Customize the colorbar appearance
+#  labs(title = "Total incoming connectivity from within 200m",
+#       fill = "") 
 
 
 #EXTRACT LF DENSITY WITHIN 200M
 
-LFpix <- extract_raster(map_reclass = Focal200_LF_AREA,
-                          lcm = nfi_lcm_map)
+LFpix <- extract_raster(tiles = ew10k,
+                        map = Focal200_LF,
+                        lcm = template_raster)
 
-ggplot(LFpix) +
-  geom_tile(aes(x = x, y = y, fill = Focal200_LF_AREA)) +
-  scale_fill_viridis_c(option = "plasma") +  # Apply a continuous viridis color scale
-  theme_minimal() +
-  guides(fill = guide_colorbar(barwidth = 1, barheight = 10)) +  # Customize the colorbar appearance
-  labs(title = "Summed LF area within 200m",
-       fill = "") 
+#ggplot(LFpix) +
+#  geom_tile(aes(x = x, y = y, fill = Focal200_LF_AREA)) +
+#  scale_fill_viridis_c(option = "plasma") +  # Apply a continuous viridis color scale
+#  theme_minimal() +
+#  guides(fill = guide_colorbar(barwidth = 1, barheight = 10)) +  # Customize the colorbar appearance
+#  labs(title = "Summed LF area within 200m",
+#       fill = "") 
 
 #EXTRACT WOODLAND AND LF AREA WITHIN 200M
 
-woodpix <- extract_raster(map_reclass = Focal_200_WOOD_LF_AREA_SUM,
-                          lcm = nfi_lcm_map)
+woodpix <- extract_raster(tiles = ew10k,
+                          map = Focal200_WOOD_LF,
+                          lcm = template_raster)
 
-ggplot(woodpix) +
-  geom_tile(aes(x = x, y = y, fill = Focal_200_WOOD_LF_AREA_SUM)) +
-  scale_fill_viridis_c(option = "plasma") +  # Apply a continuous viridis color scale
-  theme_minimal() +
-  guides(fill = guide_colorbar(barwidth = 1, barheight = 10)) +  # Customize the colorbar appearance
-  labs(title = "Summed woodland area within 200m",
-       fill = "") 
+#ggplot(woodpix) +
+#  geom_tile(aes(x = x, y = y, fill = Focal_200_WOOD_LF_AREA_SUM)) +
+#  scale_fill_viridis_c(option = "plasma") +  # Apply a continuous viridis color scale
+#  theme_minimal() +
+#  guides(fill = guide_colorbar(barwidth = 1, barheight = 10)) +  # Customize the colorbar appearance
+#  labs(title = "Summed woodland area within 200m",
+#       fill = "") 
 
 
 #EXTRACT SUMMED DAMS
-damspix <- extract_raster(map_reclass = Focal200_DAMS,
-                          lcm = nfi_lcm_map)
+damspix <- extract_raster(tiles = ew10k,
+                          map = Focal200_DAMS,
+                          lcm = template_raster)
 
-ggplot(damspix) +
-  geom_tile(aes(x = x, y = y, fill = Focal200_DAMS)) +
-  scale_fill_viridis_c(option = "plasma") +  # Apply a continuous viridis color scale
-  theme_minimal() +
-  guides(fill = guide_colorbar(barwidth = 1, barheight = 10)) +  # Customize the colorbar appearance
-  labs(title = "Summed DAMS within 200m",
-       fill = "") 
+# ggplot(damspix) +
+#   geom_tile(aes(x = x, y = y, fill = Focal200_DAMS)) +
+#   scale_fill_viridis_c(option = "plasma") +  # Apply a continuous viridis color scale
+#   theme_minimal() +
+#   guides(fill = guide_colorbar(barwidth = 1, barheight = 10)) +  # Customize the colorbar appearance
+#   labs(title = "Summed DAMS within 200m",
+#        fill = "") 
 
 #EXTRACT PERENNIAL/ARABLE FORAGE QUALITY
 
-foragepix <- extract_raster(map_reclass = Focal200_PEREN_ARABLE_FORAGEQ,
-                          lcm = nfi_lcm_map)
+foragepix <- extract_raster(tiles = ew10k,
+                           map = Focal200_PEREN_ARABLE_FORAGEQ,
+                           lcm = template_raster)
 
-ggplot(foragepix) +
-  geom_tile(aes(x = x, y = y, fill = Focal200_PEREN_ARABLE_FORAGEQ)) +
-  scale_fill_viridis_c(option = "plasma") +  # Apply a continuous viridis color scale
-  theme_minimal() +
-  guides(fill = guide_colorbar(barwidth = 1, barheight = 10)) +  # Customize the colorbar appearance
-  labs(title = "Perennial and arable quality",
-       fill = "") 
+# ggplot(foragepix) +
+#   geom_tile(aes(x = x, y = y, fill = Focal200_PEREN_ARABLE_FORAGEQ)) +
+#   scale_fill_viridis_c(option = "plasma") +  # Apply a continuous viridis color scale
+#   theme_minimal() +
+#   guides(fill = guide_colorbar(barwidth = 1, barheight = 10)) +  # Customize the colorbar appearance
+#   labs(title = "Perennial and arable quality",
+#        fill = "") 
 
 #left_join the datasets together #---------------
 
-df <- left_join(edgelen, connectpix, by = c("pixel_ID","x","y"))
-df <- left_join(df,LFpix, by = c("pixel_ID","x","y"))
-df <- left_join(df,woodpix, by = c("pixel_ID","x","y"))
-df <- left_join(df,damspix, by = c("pixel_ID","x","y"))
-df <- left_join(df, foragepix, by = c("pixel_ID","x","y"))
+df <- left_join(edgelen, connectpix, by = c("x","y"))
+df <- left_join(df,LFpix, by = c("x","y"))
+df <- left_join(df,woodpix, by = c("x","y"))
+df <- left_join(df,damspix, by = c("x","y"))
+df <- left_join(df, foragepix, by = c("x","y"))
 
-#Remove the NAs
+#remove NAs
 
 df <- na.omit(df)
 
+#save dataframe
+
+saveRDS(df,here("output/EW_datasets_2022/small_deer/BBN_small_deer_dataset.rds"))
+
+#read
+
+df <- readRDS(here("output/EW_datasets_2022/small_deer/BBN_small_deer_dataset.rds"))
 
 #plot the maps
 
-#woodland + linear feature area
-ggplot(df) +
-  geom_tile(aes(x = x, y = y, fill = Focal_200_WOOD_LF_AREA_SUM)) +
-  scale_fill_viridis_c(option = "plasma") +  # Apply a continuous viridis color scale
-  theme_minimal() +
-  guides(fill = guide_colorbar(barwidth = 1, barheight = 10)) +  # Customize the colorbar appearance
-  labs(title = "woodland + linear feature area within 200m",
-       fill = "") 
-
-#woodland edge area
-ggplot(df) +
-  geom_tile(aes(x = x, y = y, fill = Focal200_EDGE_AREA)) +
-  scale_fill_viridis_c(option = "plasma") +  # Apply a continuous viridis color scale
-  theme_minimal() +
-  guides(fill = guide_colorbar(barwidth = 1, barheight = 10)) +  # Customize the colorbar appearance
-  labs(title = "woodland edge area within 200m",
-       fill = "") 
-
-#woodland connectivity
-ggplot(df) +
-  geom_tile(aes(x = x, y = y, fill = Focal200_WOOD_CONNECT)) +
-  scale_fill_viridis_c(option = "plasma") +  # Apply a continuous viridis color scale
-  theme_minimal() +
-  guides(fill = guide_colorbar(barwidth = 1, barheight = 10)) +  # Customize the colorbar appearance
-  labs(title = "woodland edge area within 200m",
-       fill = "") 
-
-#linear feature density
-ggplot(df) +
-  geom_tile(aes(x = x, y = y, fill = Focal200_LF)) +
-  scale_fill_viridis_c(option = "plasma") +  # Apply a continuous viridis color scale
-  theme_minimal() +
-  guides(fill = guide_colorbar(barwidth = 1, barheight = 10)) +  # Customize the colorbar appearance
-  labs(title = "linear feature density within 200m",
-       fill = "") 
-
-#dams
-ggplot(df) +
-  geom_tile(aes(x = x, y = y, fill = Focal200_DAMS)) +
-  scale_fill_viridis_c(option = "plasma") +  # Apply a continuous viridis color scale
-  theme_minimal() +
-  guides(fill = guide_colorbar(barwidth = 1, barheight = 10)) +  # Customize the colorbar appearance
-  labs(title = "summed dams within 200m",
-       fill = "") 
-
-#perennial and arable quality
-ggplot(df) +
-  geom_tile(aes(x = x, y = y, fill = Focal200_PEREN_ARABLE_FORAGEQ)) +
-  scale_fill_viridis_c(option = "plasma") +  # Apply a continuous viridis color scale
-  theme_minimal() +
-  guides(fill = guide_colorbar(barwidth = 1, barheight = 10)) +  # Customize the colorbar appearance
-  labs(title = "perennial and arable quality within 200m",
-       fill = "") 
+# #woodland + linear feature area
+# ggplot(df) +
+#   geom_tile(aes(x = x, y = y, fill = Focal200_WOOD_LF)) +
+#   scale_fill_viridis_c(option = "plasma") +  # Apply a continuous viridis color scale
+#   theme_minimal() +
+#   guides(fill = guide_colorbar(barwidth = 1, barheight = 10)) +  # Customize the colorbar appearance
+#   labs(title = "woodland + linear feature area within 200m",
+#        fill = "") 
+# 
+# #woodland edge area
+# ggplot(df) +
+#   geom_tile(aes(x = x, y = y, fill = Focal200_EDGE_AREA)) +
+#   scale_fill_viridis_c(option = "plasma") +  # Apply a continuous viridis color scale
+#   theme_minimal() +
+#   guides(fill = guide_colorbar(barwidth = 1, barheight = 10)) +  # Customize the colorbar appearance
+#   labs(title = "woodland edge area within 200m",
+#        fill = "") 
+# 
+# #woodland connectivity
+# ggplot(df) +
+#   geom_tile(aes(x = x, y = y, fill = Focal200_WOOD_CONNECT)) +
+#   scale_fill_viridis_c(option = "plasma") +  # Apply a continuous viridis color scale
+#   theme_minimal() +
+#   guides(fill = guide_colorbar(barwidth = 1, barheight = 10)) +  # Customize the colorbar appearance
+#   labs(title = "woodland edge area within 200m",
+#        fill = "") 
+# 
+# #linear feature density
+# ggplot(df) +
+#   geom_tile(aes(x = x, y = y, fill = Focal200_LF)) +
+#   scale_fill_viridis_c(option = "plasma") +  # Apply a continuous viridis color scale
+#   theme_minimal() +
+#   guides(fill = guide_colorbar(barwidth = 1, barheight = 10)) +  # Customize the colorbar appearance
+#   labs(title = "linear feature density within 200m",
+#        fill = "") 
+# 
+# #dams
+# ggplot(df) +
+#   geom_tile(aes(x = x, y = y, fill = Focal200_DAMS)) +
+#   scale_fill_viridis_c(option = "plasma") +  # Apply a continuous viridis color scale
+#   theme_minimal() +
+#   guides(fill = guide_colorbar(barwidth = 1, barheight = 10)) +  # Customize the colorbar appearance
+#   labs(title = "summed dams within 200m",
+#        fill = "") 
+# 
+# #perennial and arable quality
+# ggplot(df) +
+#   geom_tile(aes(x = x, y = y, fill = Focal200_PEREN_ARABLE_FORAGEQ)) +
+#   scale_fill_viridis_c(option = "plasma") +  # Apply a continuous viridis color scale
+#   theme_minimal() +
+#   guides(fill = guide_colorbar(barwidth = 1, barheight = 10)) +  # Customize the colorbar appearance
+#   labs(title = "perennial and arable quality within 200m",
+#        fill = "") 
 
 #------------------------------------
 
@@ -225,7 +252,7 @@ ggplot(df) +
 df_cat <- df
 
 #Linear features
-hist(df_cat$Focal200_LF_AREA)
+hist(df_cat$Focal200_LF)
 # Replace numeric values with cat labels
 df_cat$Focal200_LF_AREA <- ifelse(df_cat$Focal200_LF_AREA<= 500, "LOW",
                 ifelse(df_cat$Focal200_LF_AREA> 500 & df_cat$Focal200_LF_AREA <= 1000, "MED",
@@ -234,18 +261,20 @@ unique(df_cat$Focal200_LF_AREA)
 
 #Woodland connectivity
 
-hist(df_cat$connect_raster)
-df_cat$connect_raster <- ifelse(df_cat$connect_raster <= 50000, "LOW",
-                                        ifelse(df_cat$connect_raster > 50000 & df_cat$connect_raster <=100000, "MED",
-                                               ifelse(df_cat$connect_raster > 100000, "HIGH", NA)))
+hist(df_cat$Focal200_WOOD_CONNECT)
+boxplot(df_cat$Focal200_WOOD_CONNECT)
+
+df_cat$connect_raster <- ifelse(df_cat$Focal200_WOOD_CONNECT <= 50000, "LOW",
+                                        ifelse(df_cat$Focal200_WOOD_CONNECT > 50000 & df_cat$Focal200_WOOD_CONNECT <=100000, "MED",
+                                               ifelse(df_cat$Focal200_WOOD_CONNECT > 100000, "HIGH", NA)))
 unique(df_cat$connect_raster)
 
 #Summed woodland linear feature area
 
-hist(df_cat$Focal_200_WOOD_LF_AREA_SUM)
-df_cat$Focal_200_WOOD_LF_AREA_SUM <- ifelse(df_cat$Focal_200_WOOD_LF_AREA_SUM <= 1500, "LOW",
-                                ifelse(df_cat$Focal_200_WOOD_LF_AREA_SUM > 1500 & df_cat$Focal_200_WOOD_LF_AREA_SUM <=3000, "MED",
-                                       ifelse(df_cat$Focal_200_WOOD_LF_AREA_SUM > 3000, "HIGH", NA)))
+hist(df_cat$Focal200_WOOD_LF)
+df_cat$Focal_200_WOOD_LF_AREA_SUM <- ifelse(df_cat$Focal200_WOOD_LF <= 1500, "LOW",
+                                ifelse(df_cat$Focal200_WOOD_LF > 1500 & df_cat$Focal200_WOOD_LF <=3000, "MED",
+                                       ifelse(df_cat$Focal200_WOOD_LF > 3000, "HIGH", NA)))
 unique(df_cat$Focal_200_WOOD_LF_AREA_SUM)
 
 #DAMS
@@ -646,9 +675,9 @@ damage_risk_cpt["HIGH", "MED", "LOW", "MED"] <- 0
 
 damage_risk_cpt["LOW", "HIGH", "LOW", "MED"] <- 0
 damage_risk_cpt["LOW-MED", "HIGH", "LOW", "MED"] <- 0
-damage_risk_cpt["MED", "HIGH", "LOW", "MED"] <- 0.2
+damage_risk_cpt["MED", "HIGH", "LOW", "MED"] <- 0.1
 damage_risk_cpt["MED-HIGH", "HIGH", "LOW", "MED"] <- 0.8
-damage_risk_cpt["HIGH", "HIGH", "LOW", "MED"] <- 0.2
+damage_risk_cpt["HIGH", "HIGH", "LOW", "MED"] <- 0.1
 
 damage_risk_cpt["LOW", "LOW", "LOW", "HIGH"] <- 0.8
 damage_risk_cpt["LOW-MED", "LOW", "LOW", "HIGH"] <- 0.2
@@ -660,7 +689,7 @@ damage_risk_cpt["LOW", "MED", "LOW", "HIGH"] <- 0
 damage_risk_cpt["LOW-MED", "MED", "LOW", "HIGH"] <- 0.2
 damage_risk_cpt["MED", "MED", "LOW", "HIGH"] <- 0.2
 damage_risk_cpt["MED-HIGH", "MED", "LOW", "HIGH"] <- 0.6
-damage_risk_cpt["HIGH", "MED", "LOW", "HIGH"] <- 1
+damage_risk_cpt["HIGH", "MED", "LOW", "HIGH"] <- 0
 
 damage_risk_cpt["LOW", "HIGH", "LOW", "HIGH"] <- 0
 damage_risk_cpt["LOW-MED", "HIGH", "LOW", "HIGH"] <- 0
@@ -684,11 +713,11 @@ damage_risk_cpt["LOW", "HIGH", "MED", "LOW"] <- 0
 damage_risk_cpt["LOW-MED", "HIGH", "MED", "LOW"] <- 0.1
 damage_risk_cpt["MED", "HIGH", "MED", "LOW"] <- 0.8
 damage_risk_cpt["MED-HIGH", "HIGH", "MED", "LOW"] <- 0.1
-damage_risk_cpt["HIGH", "HIGH", "MED", "LOW"] <- 1
+damage_risk_cpt["HIGH", "HIGH", "MED", "LOW"] <- 0
 
-damage_risk_cpt["LOW", "LOW", "MED", "MED"] <- 0.2
+damage_risk_cpt["LOW", "LOW", "MED", "MED"] <- 0.1
 damage_risk_cpt["LOW-MED", "LOW", "MED", "MED"] <- 0.8
-damage_risk_cpt["MED", "LOW", "MED", "MED"] <- 0.2
+damage_risk_cpt["MED", "LOW", "MED", "MED"] <- 0.1
 damage_risk_cpt["MED-HIGH", "LOW", "MED", "MED"] <- 0
 damage_risk_cpt["HIGH", "LOW", "MED", "MED"] <- 0
 
@@ -906,7 +935,7 @@ dfit
 
 predict_dat <- df_cat %>%st_drop_geometry() %>% #drop geometry
   mutate(across(where(is.character), toupper)) %>% #convert characters to upper case
-  dplyr::select(-c("pixel_ID","x","y"))
+  dplyr::select(-c("x","y"))
 #Ensure variable names match those in BBN
 predict_dat<-predict_dat%>%rename(
   wood_edge_area_200m=Focal200_EDGE_AREA,

@@ -68,7 +68,7 @@ source(here("code/functions/extract_raster_pixels_func.R"))
 current.risk <- raster("C:/Users/ik929086/Documents/iDeer-tool/data/test.risk.map.tif")
 
 #England-Wales 10k tiles
-EW <- st_read(here("data/derived-data/10k_tiles_EW.shp"))
+#EW <- st_read(here("data/derived-data/10k_tiles_EW.shp"))
 
 #Add new woodland polygons to hab_patches_all #-----------------------
 
@@ -129,8 +129,8 @@ new_polygons_sf_types <- polygons_sf %>%
   mutate(woodland_type = c("Mainly broadleaf","Mainly conifer"))
 st_crs(new_polygons_sf_types) <- bng
 
-plot(EW$geometry)
-plot(new_polygons_sf_types$geometry,add=TRUE)
+#plot(EW$geometry)
+#plot(new_polygons_sf_types$geometry,add=TRUE)
 
 #Update layers #####-------------------------------------------------
 
@@ -1573,6 +1573,4 @@ leaflet() %>%
     )
   )
 
-#Overlay this raster on to the current risk raster
 
-#updated_risk_map <- overlay()
