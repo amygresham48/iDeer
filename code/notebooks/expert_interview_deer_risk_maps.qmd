@@ -1,0 +1,30 @@
+---
+title: "expert_interview_deer_risk_maps"
+format: html
+editor: visual
+---
+
+Each expert has areas where they have and have not worked on deer populations in the UK
+
+We need to ask them for these areas
+
+```{r}
+#Tom Logan familiar areas:
+
+#Borrowdale (Lakes) 54.51762549311087, -3.148665288562973
+
+#Centre risk map on this area
+#
+
+#Gair wood (Leeds) 53.87333542160211, -1.5788324024401497
+
+#Thorne moors 53.63131346257901, -0.8981366765395856
+
+#Adel Dam 53.86794131276967, -1.5869010247593411
+
+#Above Raven Crag (Lakes) 54.54878727845816, -3.102771158037833
+
+#Hole of Horcum 54.33134092965284, -0.6947728035262719
+
+
+```

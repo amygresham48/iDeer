@@ -1,3 +1,6 @@
+#This polygon set needs to include all polygons from England Scotland and Wales
+#So that the connectivity is correctly calculated for polygons on the Scottish borders
+
 #Import CEH 2022 polygons
 
 bng <- 27700
@@ -20,22 +23,17 @@ lcm_woods <- lcm2022 %>%
 #Import NFI polygons
 
 NFI2022 <- st_read(here("data/raw-data/nfi-2022-raw/National_Forest_Inventory_GB_2022.shp"))
+unique(NFI2022$CATEGORY)
 
-#Subset the polygons that are overlap England and Wales only
-
-ew <- st_read(here("data/derived-data/10k_tiles_EW.shp"))
-
-#using st_filter will prevent the polygons being cut
-NFI2022_EW <- st_filter(NFI2022, ew)
-lcm_woods_EW <- st_filter(lcm_woods,ew)
+#subset for "Woodland" in "CATEGORY"
 
 #Rename col
-lcm_woods_EW <- lcm_woods_EW %>% rename(ift_vals = X_mode)
+lcm_woods <- lcm_woods %>% rename(ift_vals = X_mode)
 #subset
-lcm_woods_cols <- lcm_woods_EW %>% select(ift_vals, geom)
+lcm_woods_cols <- lcm_woods %>% select(ift_vals, geom)
 
 #Get unique nfi categories
-ifts <- unique(NFI2022_EW$IFT_IOA)
+ifts <- unique(NFI2022$IFT_IOA)
 ifts
 n_cat <- length(ifts)
 
@@ -55,17 +53,32 @@ ift_df$ift_vals[ift_df$IFT_IOA == "Mixed mainly broadleaved"] <- 1 #classify as 
 ift_df$ift_vals[ift_df$IFT_IOA == "Mixed mainly conifer"] <- 2 #classify as Coniferous
 
 #Add values to NFI dataset
-nfi_vals <- dplyr::left_join(NFI2022_EW, ift_df, by = c("IFT_IOA" = "IFT_IOA"))
+nfi_vals <- dplyr::left_join(NFI2022, ift_df, by = c("IFT_IOA" = "IFT_IOA"))
 
 #Filter all other ift_vals out
-NFI2022_EW_WOODS <- nfi_vals %>% dplyr::filter(ift_vals %in% c(1,2))
-unique(NFI2022_EW_WOODS$ift_vals)
+NFI2022_WOODS <- nfi_vals %>% dplyr::filter(ift_vals %in% c(1,2))
+unique(NFI2022_WOODS$ift_vals)
 
 #filter columns out of nfi to match lcm
 
 nfi_val_cols <- nfi_vals %>% select(c("geometry","ift_vals"))
 
-#Find difference between datasets
-#Then add the difference to one of the datasets to get the full dataset
+#write shapefiles
 
-df_difference <- st_difference(nfi_vals, lcm_woods_EW)
+st_write(NFI2022_WOODS,here("data/derived-data/NFI2022_GB_WOODS.shp"))
+st_write(lcm_woods, here("data/derived-data/LCM2022_GB_WOODS.shp"))
+
+#Performed the remaining spatial processing in ArcGIS Pro as follows:
+
+#1. in the LCM 2022 dataset, delete all features that overlap with features in the NFI 2022 dataset using the
+# Select by Location tool --> select intersecting features --> delete intersecting features.
+
+#2. Merge the modified LCM 2022 dataset with the NFI 2022 dataset
+
+#3. Dissolve all woodland polygons contained within others (regardless of type) in the merged dataset
+#for connectivity analysis
+#using the Dissolve boundaries tool
+
+#
+
+#Read in:

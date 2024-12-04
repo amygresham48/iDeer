@@ -1,22 +1,37 @@
-#WOODLAND CONNECTIVITY WITHIN 200m OF WOODLAND - SMALL DEER ####
+library(ggplot2)
+library(raster)
+library(sf)
+library(progress)
+library(here)
+library(dplyr)
+
+#WOODLAND CONNECTIVITY WITHIN 400m OF WOODLAND - SMALL DEER ####
+#Using perceptual range of roe deer (~400m - citing Owain's paper)
+
+bng = 27700
   
 #Using GB woodland polygons
 #Read in woodland polygons from ArcGIS pro:
-#hab_patches_all <- st_read(here("data/derived-data/NFILCM_2022_GB_polys_arcgis.shp"))
-#st_crs(woodland_polys) <- bng
+hab_patches_all <- st_read(here("data/derived-data/LCM2023_GB_WOOD_ExportFeature.shp"))
+st_crs(hab_patches_all) <- bng
 
-#hab_patches_all <- hab_patches_all %>%
-#  select(-c(SHAPE_Leng, SHAPE_Area)) %>%
-#  mutate(Id = row_number(),
-#         Shape_Area = st_area(geometry))%>%
-#  mutate(Shape_Area = as.numeric(Shape_Area))
-  
+hab_patches_all <- hab_patches_all %>%
+  dplyr::select(-c(Shape_Leng, Shape_Area)) %>%
+  mutate(patch_ID = row_number(),
+         Shape_Area = st_area(geometry))%>%
+  mutate(Shape_Area = as.numeric(Shape_Area))
+
+uk10k_EW <- st_read("./data/derived-data/10k_tiles_EW.shp")
+
+lcm <- raster("./data/raw-data/lcm-2023/gblcm2023_25m.tif")
+
+
 #-----------------------------------------
   
   #### SET CONNECTIVITY PARAMETERS ####
   # connectivity parameters - % of dispersers reaching a set distance #
   percentage_dispersers <- 0.05 ### 5% - 95% of individuals will go to woodlands
-  dispersal_distance <- 100 #400 
+  dispersal_distance <- 180 #400 
   dispersal_contribution <-
     -((log(1 / percentage_dispersers)) / dispersal_distance)
   
@@ -25,7 +40,7 @@
   #buffer_cutoff <-
   #round(log(1 / (1 - dispersal_cutoff)) / (log(1 / percentage_dispersers) /
   #dispersal_distance), digits = 2)
-  buffer_cutoff = 200 #200m
+  buffer_cutoff = 400 #400m
   
   # test & plot of dispersal contribution for sequence of distance up to buffer_cutoff
   test <-
@@ -56,25 +71,25 @@ tiles <- uk10k_EW
   
   for (i in 1:length(tiles$tile_name)) { 
     tile <- tiles[i,]
-    #Buffer tile by 200m
-    tile.buff <- st_buffer(tile, 200)
+    #Buffer tile by 400m
+    tile.buff <- st_buffer(tile, 400)
     st_crs(tile.buff) <- bng
     #Filter for woods inside tile buffer
     hab_patches_tile <- st_filter(hab_patches_all, tile.buff)
     
     if(nrow(hab_patches_tile) >0) {
       
-    #Buffer all woods by 200m
-    buffered_woods_200m <- st_as_sf(st_buffer(hab_patches_tile, dist = 200))
+    #Buffer all woods by 400m
+    buffered_woods_400m <- st_as_sf(st_buffer(hab_patches_tile, dist = 400))
     #ensure crs of buffers is BNG
-    st_crs(buffered_woods_200m) <- bng
+    st_crs(buffered_woods_400m) <- bng
   
   #Connectivity for loop ####
   
   connectivity_results <- list()
   
-  # Use the 200m buffer as the source patches area
-  source_woods <- st_filter(hab_patches_tile, buffered_woods_200m, .predicate = st_intersects)
+  # Use the 400m buffer as the source patches area
+  source_woods <- st_filter(hab_patches_tile, buffered_woods_400m, .predicate = st_intersects)
   
   # Filter the woodlands in the original tile to get the focal patches
   focal_woods <- st_filter(hab_patches_tile, tile, .predicate = st_intersects)
@@ -91,7 +106,7 @@ tiles <- uk10k_EW
     # Focal patch in the 10km square square
     focal_patch <- focal_woods[j, ]
     
-    # Buffer 200m around the focal patch
+    # Buffer 400m around the focal patch
     focal_patch_buffer <- st_buffer(focal_patch, buffer_cutoff)
     
     # Find source patches within this buffer
@@ -190,7 +205,7 @@ incoming_connect_df_table <- do.call(rbind, incoming_connect_df)
 
 #save chunk of data
 
-saveRDS(incoming_connect_df_table, here("output/incoming_connect_small_deer_200m.rds"))
+saveRDS(incoming_connect_df_table, here("output/incoming_connect_2023_small_deer_400m.rds"))
 
 #----------------------------------------------------------------------#END OF LOOP ####
 #Get pixel scale connectivity scores from patch-scale data 
@@ -199,7 +214,7 @@ saveRDS(incoming_connect_df_table, here("output/incoming_connect_small_deer_200m
 
 #Read in
 
-incoming_connect_df_table <- readRDS(here("output/EW_datasets_2022/small_deer/incoming_connect_small_deer_200m.rds"))
+#incoming_connect_df_table <- readRDS(here("output/small_deer/incoming_connect_small_deer_400m.rds"))
 
 #incoming_connect_df_geom <- left_join(incoming_connect_df_table, hab_patches_all, by = "patch_ID")
 
@@ -218,100 +233,31 @@ incoming_connect_df_table <- readRDS(here("output/EW_datasets_2022/small_deer/in
     hab_patches_connect <- left_join(hab_patches_connect, incoming_connect_vals, by="patch_ID")
     hab_patches_connect<-st_as_sf(hab_patches_connect)
     
-    st_write(hab_patches_connect, here("output/woodland_connectivity_2022_GB.shp"))
+    st_write(hab_patches_connect, here("output/woodland_connectivity_2023_400m_EW.shp"))
+    
+    #FASTERIZE CONNECTIVITY DATA TO ASSIGN PATCH CONNECTIVITY TO PIXELS ####
+    
+    hab_patches_connect <- st_read("./output/woodland_connectivity_2023_400m_EW.shp")
+    
+    #subset hab_patches_all that have a connectivity value in incoming_connectivity_sum
+    hab_patches_connect_filter <- hab_patches_connect %>%
+      rename(patch_ID = ptch_ID,
+             total_connect = ttl_cnn) %>%
+      select(-c(Shap_Ar,total_connect)) %>%
+      filter(patch_ID %in% incoming_connect_df_table$patch_ID)
+    #filter(group %in% incoming_connectivity_sum$group)
+    #left_join the connectivity dataset to the geometry
+    incoming_connect_vals <- incoming_connect_df_table  %>%
+      dplyr::select(-c("n"))
+    
+    hab_patches_connect_joined <- left_join(hab_patches_connect_filter, incoming_connect_vals, by="patch_ID")
+    hab_patches_connect_joined<-st_as_sf(hab_patches_connect_joined)
     
     #fasterize, use land cover map as template
-    connect_raster <- fasterize::fasterize(hab_patches_connect, raster=nfi_lcm_map,field="total_connect")
+    connect_raster <- fasterize::fasterize(hab_patches_connect_joined, raster=lcm,field="total_connect")
     crs(connect_raster) <- bng
     
-    writeRaster(connect_raster, here("output/woodland_connectivity_200m_2022_GB.tif"))
+    writeRaster(connect_raster, "./output/woodland_connectivity_2023_400m_EW.tif")
     
-    connect_rast_square <- crop(connect_raster, tiles[1:10,])
-    plot(connect_rast_square)
+  
     
-    
-    #fasterize patch area
-    
-    patch_area_rast <- fasterize::fasterize(hab_patches_connect, raster=nfi_lcm_map, field="patch_area")
-    crs(patch_area_rast) <- bng
-    
-    patch_area_square <- crop(patch_area_rast, tiles[1:10,])
-    plot(patch_area_square)
-    
-    
-    #crop raster to tile
-    
-    #connect_raster_tiles <- crop(connect_raster, extent(uk10k_EW))
-    
-    pal <- colorRampPalette(c("red", "blue"))
-    plot(connect_raster, col = pal(100))
-    
-  #--------------------------
-    
-    #Raster Extraction
-    
-    # List to store extracted data
-    extraction_results <- list()
-    
-    # Loop through each buffered buffer and crop all rasters
-    #buffer_geometry <- buffered_woods_1km$geometry
-    
-    # Convert buffer geometry to a spatial object that raster can use
-    tile_extent <- as(extent(st_bbox(uk10k_EW)), "Extent")
-    
-    # Get the cell numbers within the extent
-    pixel_ID <- cellsFromExtent(nfi_lcm_map, tile_extent)
-    
-    # Get the coordinates for these cells
-    cell_coords <- as.data.frame(xyFromCell(nfi_lcm_map, pixel_ID))
-    
-    #Extract pixel values
-    pixel_values <- extract(connect_raster, cell_coords)
-    
-    # Create a data frame with the extracted values and cell indices
-    connect.vals <- data.frame(total_connect = pixel_values, 
-                               pixel_ID = pixel_ID,
-                               x = cell_coords$x,
-                               y = cell_coords$y)
-    
-    # Filter out NA values
-    connect.vals <- connect.vals[!is.na(connect.vals$total_connect), ]
-    
-
-#plot
-ggplot(data = hab_patches_all[1:10000,]) +
-geom_sf(aes(fill = patch_area)) +
-scale_fill_viridis_c() +  # Optional: for a nice color scale
-theme_minimal() 
-
-#Plot
-ggplot(connect.vals[1:1000000,]) +
-  geom_tile(aes(x = x, y = y, fill = total_connect)) +
-  scale_fill_viridis_c(option = "plasma") +  # Apply a continuous viridis color scale
-  theme_minimal() +
-  guides(fill = guide_colorbar(barwidth = 1, barheight = 10)) +  # Customize the colorbar appearance
-  labs(title = "Incoming connectivity",
-       fill = "Total connectivity")  # Adjust the legend title to be more descriptive
-
-#save connect.vals
-
-saveRDS(connect.vals, here("output/woodland_connectivity_2022.rds"))
-
-connect.vals <- readRDS(here("output/woodland_connectivity_2022.rds"))
-
-#convert rds to raster ####
-
-connect.vals <- connect.vals %>%
-  select(!c(pixel_ID))
-
-#make spatialpoints dataframe
-coordinates(connect.vals) <- ~x + y
-proj4string(connect.vals) <- "+init=epsg:27700"  # Set the CRS to British National Grid
-
-#make a template raster
-
-lcm_extent <- extent(lcm)
-template_raster <- raster(ext= lcm_extent,resolution = 25, crs = bng)
-
-connect.raster <- rasterize(connect.vals, template_raster, field = "total_connect", fun = mean, na.rm =TRUE)
-writeRaster(connect.raster,here("output/woodland_connectivity_2022.tif"))

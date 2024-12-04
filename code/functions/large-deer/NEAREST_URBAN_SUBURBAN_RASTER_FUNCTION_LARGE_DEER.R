@@ -4,34 +4,24 @@ bng=27700
 # England and Wales 10k squares
 ew10k <- sf::st_read(here("data/raw-data/os_bng_grids.gpkg"),layer="10km_grid")
 
-#This layer does NOT include woodland edge type
-nfi_lcm_map <- raster(here("output/EW_datasets_2022/nfi_lcm_2022_overlaid.tif"))
-crs(nfi_lcm_map) <- bng
+lcm_vector <- sf::st_read("data/raw-data/lcm-2023-vector/lcm-2023-vec_5670267.gpkg")
 
 #Get urban/suburban parcels
-#urb_suburb <- nfi_lcm_map
+urb_suburb <- lcm_vector
 #filter out everything except urban and suburban
-#urb_suburb[urb_suburb < 20] <- NA
+urb_suburb[urb_suburb$category < 20] <- NA
 #save
-#writeRaster(urb_suburb,here("output/urban_suburban_raster_GB_2022.tif"))
-#Make urban/suburban polygons
-#urban_polygons <- raster::rasterToPolygons(urb_suburb, dissolve = TRUE)
-
-#Making the polygons in R takes AGES - made in ArcGIS using raster to polygon function:
-urban_polygons <- st_read(here("data/derived-data/urban_suburban_2022_raster_to_poly.shp"))
+st_write(urb_suburb,here("output/urban_suburban_parcels_GB_2023.shp"))
 
 urban_polygons <- st_as_sf(urban_polygons)
 #urban_polygons<-sf::st_transform(urban_polygons,crs=bng)
 urban_parcels <- urban_polygons
 
 #Binary woodland raster
-wood_binary_rast <- raster(here("output/EW_datasets_2022/NFILCM_2022_binary_woodland_all_tiles_GB.tif"))
+wood_binary_rast <- raster("data/derived-data/LCM2023WOODSGB.tif")
 crs(wood_binary_rast) <- bng
 
-#project to ensure wood_binary_rast has same extent as ew10k
-wood_binary_rast <- projectRaster(wood_binary_rast, nfi_lcm_map)
-
-nearest_urb_suburb <- function(wood_binary_rast, nfi_lcm_map, tiles) {
+nearest_urb_suburb <- function(wood_binary_rast, urban_parcels, tiles) {
 
 #-------------------------------------------------
 

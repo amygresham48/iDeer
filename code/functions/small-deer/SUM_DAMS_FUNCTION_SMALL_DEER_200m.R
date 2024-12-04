@@ -1,9 +1,19 @@
-max_dams <- function(wood_binary_rast, dams, nfi_lcm_map,tiles){
+sum_dams <- function(wood_binary_rast, dams, nfi_lcm_map,tiles){
 
 bng <- 27700
 
-# Crop dams to match the extent of nfi_lcm_map
-dams_crop <- crop(dams, extent(nfi_lcm_map))
+#DAMS
+#Interpolated from 50m resolution to 25m resolution
+#To match the resolution of other raster layers
+#Interpolation method = bilinear
+dams <- raster(here("data/raw-data/DAMS/dams_25m_bng.tif"))
+crs(dams) <- bng
+
+#GB land cover map
+lcm <- raster("./data/raw-data/lcm-2023/gblcm2023_25m.tif")
+
+# Crop dams to match the extent of lcm
+dams_crop <- crop(dams, extent(lcm))
 
 #Reclass nfi/lcm land cover map so all woodland habitat set to 0
 #All non-woodland habitat set to 1
@@ -11,7 +21,7 @@ dams_crop <- crop(dams, extent(nfi_lcm_map))
 reclass <- data.frame(is = c(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,
                              18,19,20,21), becomes = c(0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1))
 
-open_raster_GB <- reclassify(nfi_lcm_map, reclass)
+open_raster_GB <- reclassify(lcm, reclass)
 
 #Multiply DAMs and binary LCM together - woodlands will be set to 0 DAMS
 
@@ -25,7 +35,7 @@ plot(DAMS_open_raster)
 #DAMS_open_raster_EW <- mask(DAMS_open_raster_EW,uk10k_EW)
 #crs(DAMS_open_raster_EW) <- bng
 
-writeRaster(DAMS_open_raster, here("output/EW_datasets_2022/DAMS_open_raster_GB_2022.tif"),overwrite=TRUE)
+writeRaster(DAMS_open_raster, here("output/GB_datasets_2023/DAMS_open_raster_GB_2023.tif"),overwrite=TRUE)
 
 #-------------------------------------
 
@@ -39,7 +49,7 @@ writeRaster(DAMS_open_raster, here("output/EW_datasets_2022/DAMS_open_raster_GB_
 circle.buff = raster::focalWeight(DAMS_open_raster, d=200, type="circle",fillNA=T )#Create buffer
 circle.buff[circle.buff > 0] <- 1   # replacing weights by 1
 Focal200= raster::focal(x=DAMS_open_raster, w=circle.buff, fun=sum, na.rm=T, pad=TRUE, padValue=NA,
-                         filename = here("output/sum_dams_200_non_wood_2022.tif"), 
+                         filename = here("output/GB_datasets_2023/small_deer/sum_dams_200_non_wood_2023.tif"), 
                          overwrite=T)#do focal window analysis with weights matrix
 
 plot(Focal200)

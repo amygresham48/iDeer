@@ -1,5 +1,5 @@
 ---
-title: "current_deer_impact_risk_EW_small_deer"
+title: "current_deer_impact_risk_EW_large_deer"
 format: html
 editor: visual
 ---
@@ -9,9 +9,8 @@ This code will produce a current deer impact risk map for the whole of England a
 ```{r}
 #Load packages
 
-library(plyr)
+library(plyr); library(dplyr)
 library(ggplot2)
-library(dplyr)
 library(sf)
 library(raster)
 library(terra)
@@ -22,257 +21,562 @@ library(RColorBrewer)
 library(rasterVis)
 library(ggmap)
 library(gRain)
+library(BAMMtools)
+
+bng <- 27700
 
 ```
 
 ```{r}
 
-#Load latest spatial layers, made in update_spatial_layers.R with associated functions
+#Load datasets needed to produce the large deer risk raster ####
 
-#All these layers have been calculated using a combined NFI/CEHLCM raster made using the 2022 maps.
+#GB land cover map
+lcm <- raster("C:/Users/ik929086/Documents/iDeer/data/raw-data/lcm-2023/gblcm2023_25m.tif")
 
-#Load nearest urban within 200m
-nearest_urban <- raster(here("data/derived-data/2015-spatial-layers/nearest_urban_raster_2015_all_tiles_corrected.tif"))
-crs(nearest_urban) <- bng
-nearest_suburb <- raster(here("data/derived-data/2015-spatial-layers/nearest_suburban_raster_2015_all_tiles_corrected.tif"))
-crs(nearest_suburb) <- bng
+#England-Wales 10k tiles
+ew10k <- st_read(here("data/derived-data/10k_tiles_EW.shp"))
 
-#Load linear feature density at 1km scale
-lf <- raster(here("data/derived-data/2015-spatial-layers/linear_features/lf_1000_mosaic_all_tiles_corrected.tif"))
-crs(lf) <- bng
+#nearest urban/suburban
+urb_suburb <- raster()
 
-#Load MAX DAMS calculated at 1km scale
-dams <- raster(here("data/derived-data/2015-spatial-layers/Max_DAMS/focal.dams.1000.max.non_wood_EW.tif"))
+#woodland edges within 1km
+edges_1000m <- raster()
 
-#Woodland edge/core land cover raster (2022)
-edge_core_rast <- raster::raster(here("data/derived-data/edge_core_raster_2022_all_tiles_EW.tif"))
-crs(edge_core_rast) <- bng
+#summed dams within 1km
+dams_1000m <- raster()
 
-#This layer does NOT include woodland edge type
-nfi_lcm_map <- raster(here("data/derived-data/nfi_lcm_2022_overlaid.tif"))
-crs(nfi_lcm_map) <- bng
+#arable land within 1km
+arable_1000m <- raster()
 
-#Binary woodland raster
-NFI_LCM_woods_only <- raster(here("output/NFILCM_2022_binary_woodland_all_tiles_EW.tif"))
-crs(NFI_LCM_woods_only) <- bng
+#summed quality perennial + woodland within 1km
+perennial_wood_1000m <- raster()
 
-#Read in woodland polygon dataset
-#Combined NFI 2022 and LCM 2022 woodlands
-#These polygons will be used to calculate the connectivity, they are unified
-#All touching polygons have been unified
-#hab_patches_all <- st_read(here("outputs/NFI_LCM_2022_polys_made_in_R.shp"))
+#Woodland connectivity within 1km
+connect_1km <- raster()
 
-#Read in woodland polygons from ArcGIS pro:
-wood_polys <- st_read(here("data/derived-data/NFILCM_2022_GB_polys_arcgis.shp"))
-st_crs(woodland_polys) <- bng
-
-hab_patches_all <- wood_polys %>%
-  dplyr::select(-c(SHAPE_Leng, SHAPE_Area)) %>%
-  mutate(patch_ID = dplyr::row_number(),
-         Shape_Area = st_area(geometry))%>%
-  mutate(Shape_Area = as.numeric(Shape_Area))
-
-#Incoming connectivity dataset
-#STILL TO BE SAVED
-connect_df <- readRDS(here("data/derived-data/incoming-connect-2022-woods.rds"))
-
-
-```
-
-```{r}
 #Load custom functions ####
 
 #function to extract pixel values from raster layers
 source(here("code/functions/extract_raster_pixels_func.R"))
+
+#Conditional probability tables ####
+
+#Disturbance Index
+large_disturbance_cpt_df <- read.csv("./data/CPTs/Largedeer_Disturbance_Index_Distance_urban_Amy.csv") 
+
+#Foraging pressure index
+large_fpi_cpt_df <- read.csv("data/CPTs/Largedeer_Foraging_presure_index_Woodland_edge_1000m.Summed_quality_alt_forage_within_1000m.Arable_area_1000m_Amy.csv")
+
+#Thermoregulation Index
+large_thermoreg_cpt_df <- read.csv("./data/CPTs/Largedeer_Thermoregulation_Index_Summed_exposure_1000m_Amy.csv") 
+
+#Connectivity Index
+large_connectivity_cpt_df <- read.csv("./data/CPTs/Largedeer_Connectivity_Index_Connectivity_1000m_Amy_EDITED.csv")
+
+#Large deer impact risk
+large_risk_cpt_df <- read.csv("./data/CPTs/Largedeer_Deer_Damage_Risk_Disturbance_Index.Thermoregulation_Index.Foraging_presure_index_Becks_EDITED.csv") 
 ```
 
 ```{r}
-#----------------------- EXTRACT NUTRITIONAL LANDSCAPE QUALITY VALUES ####
+#Create a dataframe containing all extracted raster values within user's landscape
 
-#LAND COVER EXTRACTION AT 1KM AROUND WOODLAND PIXELS ####
+#EXTRACT LENGTH OF WOODLAND EDGE
 
-edge.val.types <- read.csv(here("data/raw-data/Expert_Qnaire/Forage_Q_medians_large_small_deer.csv"))
+edgelen <- extract_raster(map = edges_1000m,
+                          lcm = lcm,
+                          tiles = ew10k)
 
-#filter for large deer scores
+saveRDS(edgelen, "C:/Users/ik929086/Documents/iDeer/output/edgelen_1000m_df_EW.RDS")
 
-edge.val.types.large <- edge.val.types %>%
-  filter(species_group %in% c("large"))
+#read
+#edgelen <- readRDS("C:/Users/ik929086/Documents/iDeer/output/edgelen_1000m_df_EW.RDS")
+
+#EXTRACT CONNECTIVITY
+
+connectpix <- extract_raster(map = wood_connect_1000m,
+                             lcm = lcm,
+                             tiles = ew10k)
+
+saveRDS(connectpix, "C:/Users/ik929086/Documents/iDeer/output/connectpix_1000m_df_EW.RDS")
+
+#read
+#connectpix <- readRDS("C:/Users/ik929086/Documents/iDeer/output/connectpix_1000m_df_EW.RDS")
+
+#EXTRACT summed DAMS
+damspix <- extract_raster(map = dams_1000m,
+                          lcm = lcm,
+                          tiles = ew10k)
+
+saveRDS(damspix, "C:/Users/ik929086/Documents/iDeer/output/dams_1000m_df_EW.RDS")
+
+#read
+#damspix <- readRDS("C:/Users/ik929086/Documents/iDeer/output/dams_1000m_df_EW.RDS")
+
+#EXTRACT nearest urban
+
+urbanpix <- extract_raster(map = urb_suburb,
+                          lcm = lcm,
+                          tiles = ew10k)
+
+saveRDS(urbanpix, "C:/Users/ik929086/Documents/iDeer/output/nearest_urban_suburban_df_EW.RDS")
+
+#read
+#urbanpix <- readRDS("C:/Users/ik929086/Documents/iDeer/output/nearest_urban_suburban_df_EW.RDS")
+
+#EXTRACT arable land within 1000m
+
+arablepix <- extract_raster(map = arable_1000m,
+                          lcm = lcm,
+                          tiles = ew10k)
+
+saveRDS(arablepix, "C:/Users/ik929086/Documents/iDeer/output/arablepix_1000m_df_EW.RDS")
+
+#read
+#arablepix <- readRDS("C:/Users/ik929086/Documents/iDeer/output/nearest_urban_suburban_df_EW.RDS")
+
+#EXTRACT PERENNIAL/ARABLE/WOODLAND/HEDGEROW FORAGE QUALITY
+
+foragepix <- extract_raster(map = perennial_wood_1000m,
+                            lcm = lcm,
+                            tiles = ew10k)
+
+saveRDS(foragepix, "C:/Users/ik929086/Documents/iDeer/output/foragepix_1000m_df_EW.RDS")
+
+#read
+#foragepix <- readRDS("C:/Users/ik929086/Documents/iDeer/output/foragepix_1000m_df_EW.RDS")
+
+#left_join the datasets together #---------------
+
+df <- left_join(edgelen, connectpix, by = c("x","y"))
+df <- left_join(df,arablepix, by = c("x","y"))
+df <- left_join(df,damspix, by = c("x","y"))
+df <- left_join(df, foragepix, by = c("x","y"))
+df <- left_join(df, urbanpix, by = c("x","y"))
+
+#make any NAs zeros apart from the connect raster
+#The connect raster has the correct woodland pixels
+
+df.no.nas <- df %>%
+  mutate(across(c(edges_1000m,  
+                  dams_1000m, urb_suburb, arable_1000m, perennial_wood_1000m), 
+                ~ tidyr::replace_na(., 0)))
+
+#Remove the NAs
+
+df.no.nas <- na.omit(df.no.nas)
+
+#save
+
+saveRDS(df.no.nas, "C:/Users/ik929086/Documents/iDeer/output/large_deer_full_df_no_nas.RDS")
+
+#read
+df.no.nas <- readRDS("C:/Users/ik929086/Documents/iDeer/output/large_deer_full_df_no_nas.RDS")
+```
+
+```{r}
+
+#calculate the optimum breakpoints using Jenks natural breaks optimization.
+#to convert variables into categorical
+
+#k = number of breaks = 2
+#need to introduce subsets - dataset too large
+
+#Edge density
+hist(df.no.nas$edges_1000m)
+#subset 5% - around 1 million data points
+edge_1000m_breaks <- BAMMtools::getJenksBreaks(df.no.nas$edges_1000m, k = 3, subset = 100)
+
+#Nearest urban/suburban
+hist(df.no.nas$urb_suburb)
+urb_suburb_breaks <- BAMMtools::getJenksBreaks(df.no.nas$urb_suburb, k = 3, subset = 100)
+
+#Summed DAMS
+hist(df.no.nas$dams_1000m)
+dams_1000m_breaks <- BAMMtools::getJenksBreaks(df.no.nas$dams_1000m, k = 3, subset = 100)
+
+#Connectivity
+hist(df.no.nas$connect_1km)
+connect_1km_breaks <- BAMMtools::getJenksBreaks(df.no.nas$connect_1km, k = 3, subset = 100)
+
+#Alternative forage (perennial and woodland)
+hist(df.no.nas$perennial_wood_1000m)
+forage_1000m_breaks <- BAMMtools::getJenksBreaks(df.no.nas$Alt_forage_1000m, k = 3, subset = 100)
+
+#Arable
+hist(df.no.nas$arable_1000m)
+arable_1000m_breaks <- BAMMtools::getJenksBreaks(df.no.nas$arable_1000m_breaks, k = 3, subset = 100)
+```
+
+```{r}
+
+#Reclassify continuous data into pre-specified Low,Medium,High categories using breaks from JenksBreaks
+
+#Edges within 1000m
+
+#Connectivity within 1000m
+
+#Arable within 1000m
+
+#Perennial/wood summed quality within 1000m
+
+#Summed DAMS within 1000m
+
+#Nearest urban/suburban area
+
+```
+
+#Set up conditional probability tables for BBN
+
+```{r}
+#CPTS for measured nodes
+
+#nearest urban/suburban
+urban_cpt <-matrix(c(0.333333,0.333333,0.333333),ncol = 3,dimnames = list(NULL, c("Near (< 100 metres)", "Medium (100-250 metres)","Far (> 250 metres)")))
+#alternative forage quality within 1000m
+#includes woodland and perennial 
+alt_forage_cpt <- matrix(c(0.333333,0.333333,0.333333),ncol = 3,dimnames = list(NULL, c("Low", "Medium","High")))
+#woodland edge area within 1000m
+edge_cpt <-matrix(c(0.333333,0.333333,0.333333),ncol = 3,dimnames = list(NULL, c("Low", "Medium","High")))
+#dams within 1000m
+dams_cpt<-matrix(c(0.333333,0.333333,0.333333),ncol = 3,dimnames = list(NULL, c("Low", "Medium","High")))
+#woodland connectivity within 1000m
+wood_connect_cpt <- matrix(c(0.333333,0.333333,0.333333),ncol = 3,dimnames = list(NULL, c("Low", "Medium","High")))
+#arable area within 1000m
+arable_cpt <- matrix(c(0.333333,0.333333,0.333333),ncol = 3,dimnames = list(NULL, c("Low", "Medium","High")))
+```
+
+```{r}
+#CPT for Connectivity Index ---------------#
+
+large_connectivity_cpt_df <- large_connectivity_cpt_df %>%
+  dplyr::select(-c("X","Expertise","Confidence","Total"))
   
-  #Reclassify land cover map using forage quality scores
+# Define the dimensions
+connect_index_levels <- c("Low", "Medium", "High")
+wood_connectivity_1000m_levels <- unique(large_connectivity_cpt_df$Woodland_connectivity_1000m)
+
+# Initialize the array with dimensions and names
+connectivity_index_cpt <- array(
+  NA,  # Placeholder value
+  dim = c(length(connect_index_levels), 
+          length(wood_connectivity_1000m_levels)), 
+  dimnames = list(
+    connect_index = connect_index_levels,
+    Woodland_connectivity_1000m = wood_connectivity_1000m_levels)
+  )
+
+
+# Populate the array with values from the DataFrame
+for (i in 1:nrow(large_connectivity_cpt_df)) {
+  # Get the indices for each dimension
+  connect_idx <- which(dimnames(connectivity_index_cpt)$Woodland_connectivity_1000m == large_connectivity_cpt_df$Woodland_connectivity_1000m[i])
+
+
+  # Assign values for each connectivity index level
+  connectivity_index_cpt["Low", connect_idx] <- large_connectivity_cpt_df$Low[i]
+  connectivity_index_cpt["Medium", connect_idx] <- large_connectivity_cpt_df$Medium[i]
+  connectivity_index_cpt["High", connect_idx] <- large_connectivity_cpt_df$High[i]
+}
+connectivity_index_cpt <- connectivity_index_cpt / 100
+```
+
+```{r}
+#CPT for Foraging pressure index ---------------#
+
+fpi_cpt_df <- large_fpi_cpt_df %>%
+  dplyr::select(-c("X","Expertise","Confidence","Total"))
   
-  #make is-becomes matrix
-  reclass_vals <- edge.val.types.large %>%
-  dplyr::select(Median, Land.cover) %>%
-  rename(Forage_Q = Median, cover = Land.cover)
+head(fpi_cpt_df)
+
+# Define the dimensions
+forage_pressure_index_levels <- c("Low", "Medium", "High")
+alt_forage_qual_levels <- unique(fpi_cpt_df$Summed_quality_alt_forage_within_1000m)
+wood_edge_area_levels <- unique(fpi_cpt_df$Woodland_edge_1000m)
+arable_area_levels <- unique(fpt_cpt_df$Arable_area_1000m)
+
+# Initialize the array with dimensions and names
+forage_pressure_index_cpt <- array(
+  NA,  # Placeholder value
+  dim = c(length(forage_pressure_index_levels), 
+          length(alt_forage_qual_levels), 
+          length(wood_edge_area_levels)),
+  dimnames = list(
+    forage_pressure_index = forage_pressure_index_levels,
+    alt_forage_qual_1000m = alt_forage_qual_levels,
+    edges_1000m = wood_edge_area_levels,
+    arable_1000m = arable_area_levels
+  )
+)
+
+# Populate the array with values from the DataFrame
+for (i in 1:nrow(fpi_cpt_df)) {
+  # Get the indices for each dimension
+  edge_idx <- which(dimnames(forage_pressure_index_cpt)$edges_1000m == fpi_cpt_df$Woodland_edge_1000[i])
+  qual_idx <- which(dimnames(forage_pressure_index_cpt)$alt_forage_qual_1000m == fpi_cpt_df$Summed_quality_alt_forage_within_1000m[i])
+  arable_idx <- which(dimnames(forage_pressure_index_cpt$arable_1000m ==
+fpi_cpt_df$Arable_area_1000m[i]))
   
-  reclass_vals
+  # Assign values for each forage pressure index level
+  forage_pressure_index_cpt["Low", qual_idx, edge_idx, arable_idx] <- fpi_cpt_df$Low[i]
+  forage_pressure_index_cpt["Medium", qual_idx, edge_idx, arable_idx] <- fpi_cpt_df$Medium[i]
+  forage_pressure_index_cpt["High", qual_idx, edge_idx, arable_idx] <- fpi_cpt_df$High[i]
+}
+forage_pressure_index_cpt <- forage_pressure_index_cpt / 100
+```
+
+```{r}
+#CPT for thermoregulation index --------------------------------####
+
+thermoreg_cpt_df<- large_thermoreg_cpt_df %>%
+  dplyr::select(-c("X","Expertise","Confidence","Total"))
+
+# Define the dimensions
+thermoreg_index_levels <- c("Low", "Medium", "High")
+sum_dams_1000m_levels <- unique(thermoreg_cpt_df$Summed_exposure_1000m)
+
+# Initialize the array with dimensions and names
+thermoreg_index_cpt <- array(
+  NA,  # Placeholder value
+  dim = c(length(thermoreg_index_levels), 
+          length(sum_dams_1000m_levels)),
+  dimnames = list(
+    thermoreg_index = thermoreg_index_levels,
+    sum_dams_1000m = sum_dams_1000m_levels
+  )
+)
+
+# Populate the array with values from the DataFrame
+for (i in 1:nrow(thermoreg_cpt_df)) {
+  # Get the indices for each dimension
+  dams_idx <- which(dimnames(thermoreg_index_cpt)$sum_dams_1000m == thermoreg_cpt_df$Summed_exposure_1000m[i])
+
+  # Assign values for each forage pressure index level
+  thermoreg_index_cpt["Low", dams_idx] <- thermoreg_cpt_df$Low[i]
+  thermoreg_index_cpt["Medium", dams_idx] <- thermoreg_cpt_df$Medium[i]
+  thermoreg_index_cpt["High", dams_idx] <- thermoreg_cpt_df$High[i]
+}
+thermoreg_index_cpt <- thermoreg_index_cpt / 100
+
+```
+
+```{r}
+#CPT for disturbance index --------------------------------####
+
+disturbance_cpt_df<- large_disturbance_cpt_df %>%
+  dplyr::select(-c("X","Expertise","Confidence","Total"))
+
+# Define the dimensions
+disturbance_index_levels <- c("Low", "Medium", "High")
+distance_to_urban_levels <- unique(disturbance_cpt_df$Distance_to_urban)
+
+# Initialize the array with dimensions and names
+disturbance_index_cpt <- array(
+  NA,  # Placeholder value
+  dim = c(length(disturbance_index_levels), 
+          length(distance_to_urban_levels)),
+  dimnames = list(
+    disturbance_index = disturbance_index_levels,
+    dist_to_urban = distance_to_urban_levels
+  )
+)
+
+# Populate the array with values from the DataFrame
+for (i in 1:nrow(disturbance_cpt_df)) {
+  # Get the indices for each dimension
+  dams_idx <- which(dimnames(disturbance_index_cpt)$dist_to_urban == disturbance_cpt_df$Distance_to_urban[i])
+
+  # Assign values for each forage pressure index level
+  disturbance_index_cpt["Low", dams_idx] <- disturbance_cpt_df$Low[i]
+  disturbance_index_cpt["Medium", dams_idx] <- disturbance_cpt_df$Medium[i]
+  disturbance_index_cpt["High", dams_idx] <- disturbance_cpt_df$High[i]
+}
+disturbance_index_cpt <- disturbance_index_cpt / 100
+```
+
+```{r}
+#Final CPT: deer damage risk -----------------------------------####
+
+large_risk_cpt_df<- large_risk_cpt_df %>%
+  dplyr::select(-c("X","Expertise","Confidence","Total")) %>%
+  rename(forage_pressure_index=Foraging_presure_Index,
+         connect_index=Connectivity_Index,
+         thermoreg_index=Thermoregulation_Index,
+         disturb_index=Disturbance_Index)
+
+# Replace '..' with '_' in column names
+colnames(large_risk_cpt_df) <- gsub("\\.\\.", "_", colnames(large_risk_cpt_df))
   
-  #Reclassify
-  map_reclass <- raster::reclassify(edge_core_rast, reclass_vals)
+head(large_risk_cpt_df)
 
-  #create circular buffers around every pixel
-  circle.buff = raster::focalWeight (map_reclass, d=1000, type="circle",fillNA=T )#Create buffer
-  circle.buff[circle.buff > 0] <- 1   # replacing weights by 1
-  Focal1000= raster::focal(map_reclass, w=circle.buff, fun=mean, na.rm=T,pad=TRUE, padValue=NA,)#do focal
+# Define the dimensions
+large_risk_index_levels <- c("Low", "Low_Medium" ,"Medium", "Medium_High" , "High")
+connectivity_index_levels <- unique(large_risk_cpt_df$connect_index)
+forage_pressure_index_levels <- unique(large_risk_cpt_df$forage_pressure_index)
+thermoreg_index_levels <- unique(large_risk_cpt_df$thermoreg_index)
+disturb_index_levels <- unique(large_risk_cpt_df$disturb_index)
+
+# Initialize the array with dimensions and names
+large_risk_index_cpt <- array(
+  NA,  # Placeholder value
+  dim = c(length(large_risk_index_levels), 
+          length(connectivity_index_levels), 
+          length(forage_pressure_index_levels), 
+          length(thermoreg_index_levels )),
+  dimnames = list(
+    large_risk_index = large_risk_index_levels,
+    connect_index = connectivity_index_levels,
+    forage_pressure_index = forage_pressure_index_levels,
+    thermoreg_index = thermoreg_index_levels,
+    disturb_index = disturb_index_levels
+  )
+)
+
+# Populate the array with values from the DataFrame
+for (i in 1:nrow(large_risk_cpt_df)) {
+  # Get the indices for each dimension
+  connect_idx <- which(dimnames(large_risk_index_cpt)$connect_index == large_risk_cpt_df$connect_index[i])
+  fpi_idx <- which(dimnames(large_risk_index_cpt)$forage_pressure_index == large_risk_cpt_df$forage_pressure_index[i])
+  thermoreg_idx <- which(dimnames(large_risk_index_cpt)$thermoreg_index == large_risk_cpt_df$thermoreg_index[i])
+  disturb_idx <- which(dimnames(large_risk_index_cpt$disturb_index ==
+large_risk_cpt_df$thermoreg_index[i]))
   
-  plot(Focal1000)
-  crs(Focal1000) <- bng
-  
- #Extract the landscape quality values into a dataframe ####
-
-  
- lcpix <- extract_pixel_vals(map_reclass = map_reclass,
-                             woodland_polys = woodland_polys,
-                             raster = Focal1000,
-                             landscape = landscape
-                             )
-
-  
+  # Assign values for each forage pressure index level
+  large_risk_index_cpt["Low", connect_idx, fpi_idx, thermoreg_idx, disturb_idx] <- large_risk_cpt_df$Low[i]
+  large_risk_index_cpt["Low_Medium", connect_idx, fpi_idx, thermoreg_idx, disturb_idx] <- large_risk_cpt_df$Low_Medium[i]
+  large_risk_index_cpt["Medium", connect_idx, fpi_idx, thermoreg_idx, disturb_idx] <- large_risk_cpt_df$Medium[i]
+  large_risk_index_cpt["Medium_High", connect_idx, fpi_idx, thermoreg_idx, disturb_idx] <- large_risk_cpt_df$Medium_High[i]
+  large_risk_index_cpt["High", connect_idx, fpi_idx, thermoreg_idx, disturb_idx] <- large_risk_cpt_df$High[i]
+}
+large_risk_index_cpt <- large_risk_index_cpt / 100
 ```
 
 ```{r}
-#------------- Extract woodland pixel forage scores values from land cover map
-  
-  woodpix <- extract_pixel_vals(map_reclass = map_reclass,
-                                woodland_polys = woodland_polys,
-                                raster = map_reclass,
-                                landscape = landscape)
-  #Plot
-  ggplot(woodpix) +
-    geom_tile(aes(x = x, y = y, fill = class)) +
-    scale_fill_viridis_c(option = "plasma") +  # Apply a continuous viridis color scale
-    theme_minimal() +
-    guides(fill = guide_colorbar(barwidth = 1, barheight = 10)) +  # Customize the colorbar appearance
-    labs(title = "Land cover",
-         fill = "Pixel class")  
+#Create BBN structure#------------------------------------
+
+# Step 1: Explicitly define the nodes in the network
+nodes <- c(
+  "Woodland_connectivity_1000m",
+  "dist_to_urban",
+  "alt_forage_qual_1000m",
+  "edges_1000m",
+  "sum_dams_1000m",
+  "forage_pressure_index",
+  "thermoreg_index",
+  "connect_index",
+  "arable_1000m",
+  "disturb_index",
+  "large_risk_index"
+)
+
+#empty graph
+library(bnlearn)
+e = empty.graph(nodes)
+
+arc.set = matrix(c("Woodland_connectivity_1000m", "connect_index",
+                   "dist_to_urban", "disturb_index", 
+                   "alt_forage_qual_1000m", "forage_pressure_index",
+                   "arable_1000m", "forage_pressure_index",
+                   "edges_1000m","forage_pressure_index",
+                   "sum_dams_1000m","thermoreg_index",
+                   "thermoreg_index","large_risk_index",
+                   "connect_index","large_risk_index",
+                   "forage_pressure_index","large_risk_index",
+                   "disturb_index", "large_risk_index"),
+                 ncol = 2, byrow = TRUE,
+                 dimnames = list(NULL, c("from", "to")))
+
+arcs(e) <- arc.set
+
+model_string <- modelstring(e) 
+
+net<-model2network(model_string) 
+# You dont need to repeat the names of the nodes with parents (child nodes) 
+
+# Custom fitting network (matching up the nodes to their CPTs)
+dfit = custom.fit(net, dist = list(Woodland_connectivity_1000m = wood_connect_cpt, 
+                                   dist_to_urban = urban_cpt,
+                                   alt_forage_qual_1000m = alt_forage_cpt,
+                                   arable_1000 = arable_cpt,
+                                   edges_1000m = edge_cpt,
+                                   sum_dams_1000m = dams_cpt,
+                                   connect_index = connectivity_index_cpt,
+                                   thermoreg_index = thermoreg_index_cpt,
+                                   forage_pressure_index =forage_pressure_index_cpt,
+                                   large_risk_index=large_risk_index_cpt))
+
+#Plot BN structure ####
+graphviz.plot(net)
+
+#Check parameters ####
+dfit
 ```
 
 ```{r}
-#----------------------Make sf points of all woodland pixels ####
+predict_dat <- df_cat %>%st_drop_geometry() %>% #drop geometry
+  #mutate(across(where(is.character), toupper)) %>% #convert characters to upper case
+  dplyr::select(-c("x","y"))
 
-#Get woodland pixels as sf points
+#Ensure variable names match those in BBN
+predict_dat<-predict_dat%>%rename(
+  edges_1000m=edges_1000m,
+  arable_1000m=arable_1000m,
+  dist_to_urban=dist_to_urban,
+  alt_forage_qual_1000m=alt_forage_qual_1000m,
+  sum_dams_1000m=dams_1000m,
+  Woodland_connectivity_1000m=Woodland_connectivity_1000m)
 
-chunked.wood <- crop(woods_binary, map_ext)
-chunked.wood[chunked.wood == 0] <- NA #make zeros NAs
-chunked.wood.points <- rasterToPoints(chunked.wood, spatial = TRUE) #Raster to point
-chunked.wood.points <- st_as_sf(chunked.wood.points, crs = bng)
-chunked.wood.points <- sf::st_transform(chunked.wood.points, crs = bng)
+#Make empty columns for the latent (unobserved) variables
+
+predict_dat$forage_pressure_index <- NA
+predict_dat$connect_index <- NA
+predict_dat$thermoreg_index <- NA
+predict_dat$disturb_index <- NA
+predict_dat$small_risk <- NA
+
+head(predict_dat)
+
+#Ensure all columns are factors, not characters
+predict_dat <- predict_dat %>% mutate_all(as.factor)
+
+#Ensure factor levels are in correct order
+levels(predict_dat$Woodland_connectivity_1000m)<-c("Low", "Medium", "High")
+levels(predict_dat$alt_forage_qual_1000m)<-c("Low", "Medium", "High")
+levels(predict_dat$dist_to_urban) <- c("Near (< 100 metres)", "Medium (100-250 metres)","Far (> 250 metres)")
+levels(predict_dat$arable_1000m)<-c("Low", "Medium", "High")
+levels(predict_dat$sum_dams_1000m)<-c("Low", "Medium", "High")
+levels(predict_dat$edges_1000m)<-c("Low", "Medium", "High")
+levels(predict_dat$forage_pressure_index)<-c("Low", "Medium", "High")
+levels(predict_dat$connect_index)<-c("Low", "Medium", "High")
+levels(predict_dat$thermoreg_index)<-c("Low", "Medium", "High")
+levels(predict_dat$disturb_index)<-c("Low", "Medium", "High")
+levels(predict_dat$small_risk)<-c("Low","Low-Medium","Medium","Medium-High","High")
+
+#Ensure predict_data is a data.frame
+predict_dat <- as.data.frame(predict_dat)
+
+#PREDICTIONS TAKE A LONG TIME, ABOUT 3 MINUTES PER LINE
+#Predict values for latent variables
+pred_thermoreg = predict(object=dfit,node="thermoreg_index",data=predict_dat, method = "parents")
+pred_fpi = predict(dfit,node="forage_pressure_index",data=predict_dat, method = "parents")
+pred_connect = predict(dfit,node="connect_index",data=predict_dat, method = "parents")
+pred_disturb =predict(dfit, node="disturb_index",data=predict_dat, method = "parents")
+
+#fill the columns
+predict_dat$thermoreg_index <- pred_thermoreg
+predict_dat$forage_pressure_index <- pred_fpi
+predict_dat$connect_index <- pred_connect
+predict_dat$disturb_index <- pred_disturb
+
+#Predict damage
+pred_damage = predict(dfit,node = "small_risk_index",data = predict_dat,method = "parents")
+predict_dat$small_risk <- pred_damage
+
+#Add damage risk back into spatial dataset
+
+df_cat$pred_damage <- pred_damage
+df_cat$pred_thermoreg <- pred_thermoreg
+df_cat$pred_forage_pressure_index <- pred_fpi
+df_cat$pred_connect <- pred_connect
+df_cat$pred_disturb <- pred_disturb
 ```
-
-```{r}
-#------EXTRACT NEAREST MAIN ROAD RASTER
-road_pix <- extract_pixel_vals(map_reclass = map_reclass,
-                   woodland_polys = hab_patches_all,
-                   raster = road_dist_raster,
-                   landscape = landscape
-                   )
-
-#Plot
-ggplot(road_pix) +
-  geom_tile(aes(x = x, y = y, fill = class)) +
-  scale_fill_viridis_c(option = "plasma") +  # Apply a continuous viridis color scale
-  theme_minimal() +
-  guides(fill = guide_colorbar(barwidth = 1, barheight = 10)) +  # Customize the colorbar appearance
-  labs(title = "Distance to nearest main road",
-       fill = "")
-```
-
-```{r}
-#-------EXTRACT NEAREST URBAN/SUBURBAN RASTER
-urbanpix <- extract_pixel_vals(map_reclass = map_reclass,
-                               woodland_polys = woodland_polys,
-                               raster = urban_dist_raster,
-                               landscape = landscape)
-
-
-#Plot
-ggplot(urbanpix) +
-  geom_tile(aes(x = x, y = y, fill = class)) +
-  scale_fill_viridis_c(option = "plasma") +  # Apply a continuous viridis color scale
-  theme_minimal() +
-  guides(fill = guide_colorbar(barwidth = 1, barheight = 10)) +  # Customize the colorbar appearance
-  labs(title = "Distance to nearest urban/suburban area",
-       fill = "") 
-```
-
-```{r}
-#-------EXTRACT LINEAR FEATURE DENSITY WITHIN 1KM RASTER
-lfpix <- extract_pixel_vals(map_reclass = map_reclass,
-                               woodland_polys = woodland_polys,
-                               raster = lf_raster,
-                               landscape = landscape)
-
-#Plot
-ggplot(lfpix) +
-  geom_tile(aes(x = x, y = y, fill = class)) +
-  scale_fill_viridis_c(option = "plasma") +  # Apply a continuous viridis color scale
-  theme_minimal() +
-  guides(fill = guide_colorbar(barwidth = 1, barheight = 10)) +  # Customize the colorbar appearance
-  labs(title = "Linear feature length within 1km",
-       fill = "") 
-```
-
-```{r}
-#--------EXTRACT MAX DAMS WITHIN 1KM RASTER
-damspix <- extract_pixel_vals(map_reclass = map_reclass,
-                            woodland_polys = woodland_polys,
-                            raster = Focal1000_dams,
-                            landscape = landscape)
-
-ggplot(damspix) +
-  geom_tile(aes(x = x, y = y, fill = class)) +
-  scale_fill_viridis_c(option = "plasma") +  # Apply a continuous viridis color scale
-  theme_minimal() +
-  guides(fill = guide_colorbar(barwidth = 1, barheight = 10)) +  # Customize the colorbar appearance
-  labs(title = "Maximum DAMS within 1km",
-       fill = "") 
-```
-
-```{r}
-#--------COMBINE THE SPATIAL DATASETS INTO ONE
-
-#Rename class columns to all be unique for left_join
-damspix <- damspix %>% rename(max_dams = class)
-road_pix <- road_pix %>% rename (dist_nearest_road = class)
-urbanpix <- urbanpix %>% rename(dist_nearest_urb = class)
-lfpix <- lfpix %>% rename(lf_density_1km = class)
-lcpix <- lcpix %>% rename(lc_q = class)
-woodpix <- woodpix %>% rename(wood_q = class)
-
-#left_join the datasets by pixel_ID and coordinates
-df <- left_join(lcpix, woodpix, by = c("pixel_ID","x","y"))
-df <- left_join(df,damspix,by = c("pixel_ID","x","y"))
-df <- left_join(df,road_pix,by=c("pixel_ID","x","y"))
-df <- left_join(df,lfpix,by=c("pixel_ID","x","y"))
-df <- left_join(df,urbanpix,by=c("pixel_ID","x","y"))
-df <- left_join(df,connect_df,by=c("pixel_ID","x","y"))
-```
-
-```{r}
-#-------Reclassify continuous data into pre-specified LOW,MED,HIGH categories
-
-```
-
-```{r}
-#-------Set up conditional probability tables for BBN
-```
-
-```{r}
-#----Create BBN structure ####
-```
-
-```{r}
-#------Predict values for 4 indices using BBN
-#Indices: Disturbance Index, Thermoregulation Index, Nutritional landscape Index, Nutritional woodland index
-
-```
-
-```{r}
-#------Predict values for deer damage risk, add to final dataframe
-```
-
-```{r}
-#---------Draw maps
-```
-
-`{#--------Add predicted damage data to an interactive leaflet map ####}`

@@ -2,8 +2,11 @@ sum_perennial <- function(wood_binary_rast, nfi_lcm_map,tiles){
 
 bng <- 27700
 
-#land cover map with edges
-map <- raster(here("output/EW_datasets_2022/edge_core_raster_2022_all_tiles_EW.tif"))
+#GB land cover map
+
+lcm <- raster("./data/raw-data/lcm-2023/gblcm2023_25m.tif")
+
+crs(lcm) <- bng
 
 #land cover map
 #This layer does NOT include woodland edge type
@@ -20,14 +23,14 @@ map <- raster(here("output/EW_datasets_2022/edge_core_raster_2022_all_tiles_EW.t
 reclass_peren_arable <- data.frame(is = c(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,
                                     18,19,20,21), becomes = c(0,0,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,1,0,0))
 
-peren_arable_raster_EW <- reclassify(nfi_lcm_map, reclass_peren_arable)
-crs(peren_raster_GB) <- bng
+peren_arable_raster_GB <- reclassify(lcm, reclass_peren_arable)
+crs(peren_arable_raster_GB) <- bng
 
-writeRaster(peren_arable_raster_GB, here("output/EW_datasets_2022/perennial_arable_raster_GB_2022.tif"),overwrite=TRUE)
+writeRaster(peren_arable_raster_GB, here("output/GB_datasets_2023/perennial_arable_raster_GB_2023.tif"),overwrite=TRUE)
 
 #-------------------------------------
 
-peren_arable_raster_GB <- raster(here("output/EW_datasets_2022/perennial_arable_raster_GB_2022.tif"))
+peren_arable_raster_GB <- raster(here("output/GB_datasets_2023/perennial_arable_raster_GB_2023.tif"))
 
 #UPDATE FORAGE QUALITY MAP ####
 
@@ -66,7 +69,7 @@ reclass_vals <- forage.q.vals %>%
 reclass_vals
 
 #Reclassify
-map_reclass <- raster::reclassify(map, reclass_vals)
+map_reclass <- raster::reclassify(lcm, reclass_vals)
 
 #create circular buffers around every pixel of 200 metres
 circle.buff = raster::focalWeight (map_reclass, d=200, type="circle",fillNA=T )#Create buffer
@@ -76,7 +79,7 @@ Focal200_FORAGE_QUAL= raster::focal(map_reclass, w=circle.buff, fun=sum, na.rm=T
 plot(Focal200_FORAGE_QUAL)
 crs(Focal200_FORAGE_QUAL) <- bng
 
-writeRaster(Focal200_FORAGE_QUAL, here("output/EW_datasets_2022/small_deer/sum_perennial_arable_forage_q_200m_small_deer_GB.tif"))
+writeRaster(Focal200_FORAGE_QUAL, here("output/GB_datasets_2023/small_deer/sum_perennial_arable_forage_q_200m_small_deer_GB_2023.tif"))
 
 
 }

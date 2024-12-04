@@ -25,33 +25,40 @@ here()
 
 #Read in CPTs
 
-sd_damage <- read.csv("C:/Users/ik929086/Documents/iDeer/data/BBN-cpts/post-interviews/small-deer/CPT_damage_risk_small_deer_final.csv")
+sd_damage <- read.csv("C:/Users/ik929086/Documents/iDeer/data/BBN-cpts/post-interviews/small-deer/CPT_damage_risk_small_deer_final_with_numbers.csv")
 
-#Recode to numbers
-recode_mapping <- c("LOW" = 1, "MED" = 2, "HIGH" = 3)
-# Recode the first four columns
-CPT_sd <- sd_damage %>%
-  mutate(across(1:3, ~ recode(., !!!recode_mapping)))
+# #Recode to numbers
+# recode_mapping <- c("LOW" = 1, "MED" = 2, "HIGH" = 3)
+# # Recode the first four columns
+# CPT_sd <- sd_damage %>%
+#   mutate(across(1:3, ~ recode(., !!!recode_mapping)))
+# 
+# #recode impact column
+# recode_mapping <- c("LOW" = 1, "LOW-MED" = 2, "MED" =3,"MED-HIGH" = 4,"HIGH"=5)
+# # Recode the first four columns
+# CPT_sd <- CPT_sd %>%
+#   mutate(across(4, ~ recode(., !!!recode_mapping)))
+# unique(CPT_sd$damage_risk)
+
+sd_damage <- sd_damage %>%
+  mutate(
+    forage_pressure_index = factor(forage_pressure_index, levels = c("LOW", "MED", "HIGH")),
+    thermoreg_index = factor(thermoreg_index, levels = c("LOW", "MED", "HIGH")),
+    connect_index = factor(connect_index, levels = c("LOW", "MED", "HIGH")),
+    damage_risk = factor(damage_risk, levels = c("LOW","LOW-MED","MED","MED-HIGH","HIGH"))
+  )
 
 
-#recode impact column
+ggplot(sd_damage, aes(x = damage_risk, y = probability, group = forage_pressure_index, color = forage_pressure_index)) +
+  geom_point(size = 3) +
+  geom_line() +  # Add lines to connect the points
+  facet_grid(connect_index ~ thermoreg_index,
+             labeller = labeller(connect_index = label_both, thermoreg_index = label_both)) +
+  labs(x = "Deer Damage Level", y = "Deer Damage CP", color = "Foraging Pressure Index") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))  
 
-recode_mapping <- c("LOW" = 1, "LOW-MED" = 2, "MED" =3,"MED-HIGH" = 4,"HIGH"=5)
-# Recode the first four columns
-CPT_sd <- CPT_sd %>%
-  mutate(across(4, ~ recode(., !!!recode_mapping)))
 
-
-ggplot(CPT_sd, aes(x = alt_forage_availability_index, y = damage_risk, group = thermoreg_index)) +  
-  geom_line() +
-  geom_point() + 
-  facet_grid(rows = vars(thermoreg_index), cols = vars(connect_index)) +  
-  theme_bw() +  
-  labs(x = "Alternative Forage Availability Index", col = "Connectivity Index") +
-  scale_y_continuous(sec.axis = sec_axis(~ . , name = "Thermoregulation Index", breaks = NULL, labels = NULL)) +
-  scale_x_continuous(sec.axis = sec_axis(~ . , name = "Connectivity_Index", breaks = NULL, labels = NULL), 
-                     lim = c(1, 3), 
-                     breaks = seq(1, 3, 1))
 
 #2. Large bodied deer -----------####
 #Less sensitive to climatic extremes, less need of woodlands for thermoregulation
