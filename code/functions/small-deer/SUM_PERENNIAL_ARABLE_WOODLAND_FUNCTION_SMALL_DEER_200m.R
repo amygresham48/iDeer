@@ -2,6 +2,10 @@ sum_perennial <- function(wood_binary_rast, nfi_lcm_map,tiles){
 
 bng <- 27700
 
+library(raster)
+library(sf)
+library(tidyverse)
+
 #GB land cover map
 
 lcm <- raster("./data/raw-data/lcm-2023/gblcm2023_25m.tif")
@@ -30,7 +34,7 @@ writeRaster(peren_arable_woods_raster_GB, "C:/Users/ik929086/Documents/iDeer/out
 
 #-------------------------------------
 
-#peren_arable_woods_raster_GB <- raster(here("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/perennial_arable_raster_GB_2023.tif"))
+peren_arable_woods_raster_GB <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/perennial_arable_raster_GB_2023.tif")
 
 #UPDATE FORAGE QUALITY MAP ####
 
@@ -64,7 +68,7 @@ reclass_vals <- forage.q.vals %>%
   # Set becomes to NA for rows where Land.cover does not match the valid types
   mutate(becomes = if_else(Land.cover %in% valid_land_cover, becomes, NA_real_)) %>%
   filter(!is.na(is)) %>%
-  select(-c(Land.cover))
+  dplyr::select(-c(Land.cover))
 
 reclass_vals
 
@@ -86,7 +90,7 @@ Focal200_FORAGE_QUAL= raster::focal(map_reclass, w=circle.buff, fun=sum, na.rm=T
 plot(Focal200_FORAGE_QUAL)
 crs(Focal200_FORAGE_QUAL) <- bng
 
-writeRaster(Focal200_FORAGE_QUAL, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/small_deer/sum_perennial_arable_woodland_forage_q_200m_small_deer_GB_2023.tif")
+writeRaster(Focal200_FORAGE_QUAL, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/small_deer/sum_perennial_arable_woodland_forage_q_200m_small_deer_GB_2023_all_woods.tif")
 
 
 }

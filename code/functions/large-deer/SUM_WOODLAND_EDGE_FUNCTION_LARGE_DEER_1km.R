@@ -22,17 +22,22 @@ plot(boundaries_wood)
 #save boundaries raster
 writeRaster(boundaries_wood, "./output/GB_datasets_2023/LCMWOOD2023_GB_EDGES.tif")
 
+#Read
+boundaries_wood <- raster("./output/GB_datasets_2023/LCMWOOD2023_GB_EDGES.tif")
+
+#edges_test <- crop(boundaries_wood, ew10k[1300,])
+
 #create circular buffers around every pixel of 1000 metres
 circle.buff = raster::focalWeight (boundaries_wood, d=1000, type="circle",fillNA=T )#Create buffer
 circle.buff[circle.buff > 0] <- 1   # replacing weights by 1
-Focal1000_EDGES= raster::focal(boundaries_wood, w=circle.buff, fun=sum, na.rm=T,pad=TRUE, padValue=NA)
+Focal1000_EDGES= raster::focal(boundaries_wood, w=circle.buff, fun=sum, na.rm=F,pad=TRUE, padValue=NA)
 
 #plot(Focal1000_EDGES)
 crs(Focal1000_EDGES) <- bng
 
 Focal1000_EDGES <- Focal1000_EDGES*25
 
-writeRaster(Focal1000_EDGES, here("output/GB_datasets_2023/large_deer/sum_woodland_edges_1000m_2023_large_deer_GB.tif"))
+writeRaster(Focal1000_EDGES, here("output/GB_datasets_2023/large_deer/sum_woodland_edge_area_1000m_2023_large_deer_GB.tif"))
 
 }
 

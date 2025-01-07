@@ -20,7 +20,7 @@ writeRaster(arable_raster_GB, here("output/GB_datasets_2023/2023/arable_raster_G
 
 #-------------------------------------
 
-arable_raster_GB <- raster(here"output/GB_datasets_2023/2023/arable_raster_GB_2023.tif"))
+arable_raster_GB <- raster("output/GB_datasets_2023/arable_raster_GB_2023.tif")
 
 #focal statistics, moving window
 #Sum of arable land up to 1km away
@@ -28,7 +28,7 @@ arable_raster_GB <- raster(here"output/GB_datasets_2023/2023/arable_raster_GB_20
 #if na.rm = F, edges become cropped.
 
 #test
-#arable_raster_GB_test <- crop(arable_raster_GB, uk10k[8586,])
+#arable_raster_GB_test <- crop(arable_raster_GB, ew10k[1300,])
 
 circle.buff = raster::focalWeight(arable_raster_GB, d=1000, type="circle",fillNA=T )#Create buffer
 circle.buff[circle.buff > 0] <- 1   # replacing weights by 1
@@ -38,7 +38,9 @@ Focal1000= raster::focal(x=arable_raster_GB, w=circle.buff, fun=sum, na.rm=T, pa
 
 #plot(Focal1000)
 
-
+#IN THE SCRIPT TO MAKE THE CURRENT RISK MAP, I MULTIPLE THIS LAYER BY 25 TO GET THE TRUE AREA
+#FORGOT TO DO THIS HERE
+#SEE current_deer_impact_risk_EW_large_deer.qmd
 
 }
 

@@ -23,7 +23,7 @@ boundaries_wood = boundaries(wood, type='inner') # edge raster
 boundaries_wood[is.na(boundaries_wood[])] <- 0 
 plot(boundaries_wood)
 #save boundaries raster
-writeRaster(boundaries_wood, "./output/GB_datasets_2023/LCMWOOD2023_GB_EDGES.tif")
+writeRaster(boundaries_wood, "./output/GB_datasets_2023/LCMWOOD2023_GB_EDGES.tif",overwrite=TRUE)
 
 #create circular buffers around every pixel of 200 metres
 circle.buff = raster::focalWeight (boundaries_wood, d=200, type="circle",fillNA=T )#Create buffer

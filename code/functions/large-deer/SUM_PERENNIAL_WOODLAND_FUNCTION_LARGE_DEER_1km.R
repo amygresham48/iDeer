@@ -30,7 +30,7 @@ writeRaster(peren_woods_raster_GB, "C:/Users/ik929086/Documents/iDeer/output/GB_
 
 #-------------------------------------
 
-peren_woods_raster_GB <- raster(here(""C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/perennial_woods_raster_GB_2023.tif"))
+peren_woods_raster_GB <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/perennial_woods_raster_GB_2023.tif")
 
 #UPDATE FORAGE QUALITY MAP ####
 
@@ -74,7 +74,7 @@ reclass_vals$becomes[reclass_vals$is == 1.000] <- 10
 reclass_vals$becomes[reclass_vals$is == 2.000] <- 10
 
 #Reclassify
-map_reclass <- raster::reclassify(map, reclass_vals)
+map_reclass <- raster::reclassify(lcm, reclass_vals)
 
 #focal statistics, moving window
 #Sum of perennial land up to 1km away

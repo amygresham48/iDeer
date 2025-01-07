@@ -42,6 +42,7 @@ wood_connect_400m <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_dataset
 
 #linear features within 400m
 LF_400m <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/small_deer/lf_density_400m_2023_GB_projected.tif")
+LF_400m <- LF_400m * 25 #forgot to do this when making the initial raster - necessary to get true area
 
 #linear features within 200m + Woodland area within 200m
 #LF density calculated using a binary map which was then * by 10 to reflect the forage quality score of LFs (10)
@@ -86,7 +87,7 @@ small_risk_cpt_df <- read.csv("C:/Users/ik929086/Documents/iDeer/data/CPTs/Small
 ```{r}
 #ADD FORAGE QUAL + HEDGEROWS WITHIN 200m TOGETHER
 
-Alt_forage_200m <- peren_arable_wood_200m + LF_200m
+Alt_forage_200m <- mosaic(peren_arable_wood_200m, LF_200m, fun = sum)
 
 #save
 #writeRaster(Alt_forage_200m, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/small_deer/alt_forage_Q_woodland_peren_arable_LF_200m.tif",overwrite=TRUE)
@@ -143,10 +144,10 @@ LFpix <- extract_raster(map = LF_400m,
                         lcm = lcm,
                         tiles = ew10k)
 
-saveRDS(LFpix, "C:/Users/ik929086/Documents/iDeer/output/LFpix_400m_df_EW.RDS")
+saveRDS(LFpix, "C:/Users/ik929086/Documents/iDeer/output/LFpix_area_400m_df_EW.RDS")
 
 #read
-LFpix <- readRDS("C:/Users/ik929086/Documents/iDeer/output/LFpix_400m_df_EW.RDS")
+LFpix <- readRDS("C:/Users/ik929086/Documents/iDeer/output/LFpix_area_400m_df_EW.RDS")
 
 # ggplot(LFpix) +
 #   geom_tile(aes(x = x, y = y, fill = LF_200m)) +
@@ -643,6 +644,13 @@ par(mfrow = c(1, 1))
  # Use the template raster for extent, resolution, and CRS
  r <- stars::st_rasterize(sf = df_sf_selected, template = stars_template)
  r_rast <- terra::rast(r)
+ 
+ #Finally, crop the raster to the England-Wales shapefile
+ 
+ EW <- st_read("C:/Users/ik929086/Documents/iDeer/data/raw-data/GB shapefile/England_Wales_combined.shp")
+ 
+ r_rast_EW <- crop(r_rast, EW)
+ r_rast_EW <- mask(r_rast_EW, EW)
  
  writeRaster(r_rast, "C:/Users/ik929086/Documents/iDeer/output/small_deer_risk_raster.tif",overwrite=TRUE)
 

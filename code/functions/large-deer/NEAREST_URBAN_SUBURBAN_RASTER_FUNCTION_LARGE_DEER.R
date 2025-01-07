@@ -2,24 +2,36 @@
 bng=27700
 
 # England and Wales 10k squares
-ew10k <- sf::st_read(here("data/raw-data/os_bng_grids.gpkg"),layer="10km_grid")
+ew10k <- sf::st_read("data/derived-data/10k_tiles_EW.shp")
+
+#GB land cover map
+lcm <- raster("C:/Users/ik929086/Documents/iDeer/data/raw-data/lcm-2023/gblcm2023_25m.tif")
 
 lcm_vector <- sf::st_read("data/raw-data/lcm-2023-vector/lcm-2023-vec_5670267.gpkg")
 
-#Get urban/suburban parcels
-urb_suburb <- lcm_vector
-#filter out everything except urban and suburban
-urb_suburb[urb_suburb$category < 20] <- NA
-#save
-st_write(urb_suburb,here("output/urban_suburban_parcels_GB_2023.shp"))
+ #Get urban/suburban parcels
+ urb_suburb <- lcm_vector
+ #Filter out everything except urban and suburban
+ urb_suburb <- urb_suburb %>% filter(X_mode %in% c("20","21"))
+# #save
+st_write(urb_suburb,"./output/urban_suburban_parcels_GB_2023.shp",append=FALSE)
 
-urban_polygons <- st_as_sf(urban_polygons)
-#urban_polygons<-sf::st_transform(urban_polygons,crs=bng)
-urban_parcels <- urban_polygons
+#read
+urban_parcels <- st_read("C:/Users/ik929086/Documents/iDeer/output/urban_suburban_parcels_GB_2023.shp")
+st_crs(urban_parcels) <- bng
 
-#Binary woodland raster
-wood_binary_rast <- raster("data/derived-data/LCM2023WOODSGB.tif")
-crs(wood_binary_rast) <- bng
+#make woodland map only
+# reclass_woodland <- data.frame(is = c(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,
+#                                     18,19,20,21), becomes = c(1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0))
+# 
+# wood_raster_GB <- reclassify(lcm, reclass_woodland)
+# crs(wood_raster_GB) <- bng
+#writeRaster(wood_raster_GB, "output/wood_raster_GB.tif")
+
+#read in small deer risk raster as woodland raster
+#wood_binary_rast <- raster("output/wood_raster_GB.tif")
+#made from small deer risk raster in ArcGIS pro to ensure pixels line up
+wood_binary_rast <- raster("C:/Users/ik929086/Documents/iDeer/output/wood_binary_rast_2023.tif")
 
 nearest_urb_suburb <- function(wood_binary_rast, urban_parcels, tiles) {
 
@@ -27,7 +39,9 @@ nearest_urb_suburb <- function(wood_binary_rast, urban_parcels, tiles) {
 
 # NEAREST URBAN FEATURE LOOP ####
   
-tiles <- ew10k[7501,]
+#tiles <- ew10k[7501,]
+  
+tiles <- ew10k
 
 #tiles <- tiles[1:2,]
 
@@ -38,7 +52,7 @@ for (i in 1:length(tiles$tile_name)) {
   tile <- tiles[i,] #select tile
   
   #Make points from woodland raster pixels
-  chunked.wood <- crop(wood_binary_rast, tile)
+  chunked.wood <- raster::crop(wood_binary_rast, tile)
   chunked.wood[chunked.wood == 0] <- NA #make zeros NAs
   chunked.wood.points <- rasterToPoints(chunked.wood, spatial = TRUE) #Raster to point
   chunked.wood.points <- st_as_sf(chunked.wood.points, crs = bng)
@@ -52,11 +66,11 @@ for (i in 1:length(tiles$tile_name)) {
     # Add to chunked.wood.points
     chunked.wood.points$nearest_urban <- nearest
     # Make template raster
-    template_raster <- crop(nfi_lcm_map, tile)
+    template_raster <- raster::crop(lcm, tile)
     # Rasterize these data
     urban_dist_raster <- rasterize(chunked.wood.points, template_raster, field = "nearest_urban")
     # Save to list
-    nearest_urban_list[[i]] <- urban_dist_raster
+    nearest_urban_suburban_list[[i]] <- urban_dist_raster
     
   } else {
     nearest_urban_suburban_list[[i]] <- NA
@@ -69,11 +83,11 @@ for (i in 1:length(tiles$tile_name)) {
 print("Urban raster list complete")
 
 # Save list
-saveRDS(nearest_urban_list, file = here("output/nearest_urban_suburban_raster_tile_list_EW_2022.rds"))
+saveRDS(nearest_urban_suburban_list, file = here("output/nearest_urban_suburban_raster_tile_list_EW_2023.rds"))
 print("Urban raster list saved")
 
 # Label elements that are not RasterLayers or are empty
-valid_urban_rasters <- lapply(nearest_urban_list, function(raster_layer) {
+valid_urban_rasters <- lapply(nearest_urban_suburban_list, function(raster_layer) {
   if (inherits(raster_layer, "RasterLayer") && any(!is.na(values(raster_layer)))) {
     return(raster_layer)
   } else {
@@ -92,7 +106,7 @@ urban_distance_mosaic <- do.call(mosaic, c(valid_urban_rasters, fun = mean))
 crs(urban_distance_mosaic) <- bng
 
 # Save raster
-writeRaster(urban_distance_mosaic, here("output/nearest_urban_suburban_raster_2022_EW.tif"),overwrite=TRUE)
+writeRaster(urban_distance_mosaic, here("output/nearest_urban_suburban_raster_2023_EW.tif"),overwrite=TRUE)
 print("Urban raster mosaic complete and saved")
 
 }

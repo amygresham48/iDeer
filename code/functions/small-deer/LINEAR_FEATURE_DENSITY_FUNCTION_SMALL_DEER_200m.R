@@ -21,7 +21,6 @@ circle.buff[circle.buff > 0] <- 1   # replacing weights by 1
 Focal200= raster::focal(x=lf, w=circle.buff, fun=sum, na.rm=T, pad=TRUE, padValue=NA)
 
 #Give all LF a forage score of 10
-
 Focal200_quality <- Focal200*10
 
 # Save raster

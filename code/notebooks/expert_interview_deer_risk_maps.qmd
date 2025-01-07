@@ -9,22 +9,102 @@ Each expert has areas where they have and have not worked on deer populations in
 We need to ask them for these areas
 
 ```{r}
-#Tom Logan familiar areas:
+#Read in current deer risk maps
 
-#Borrowdale (Lakes) 54.51762549311087, -3.148665288562973
+bng <- "EPSG:27700"
 
-#Centre risk map on this area
-#
+small_deer_risk <- terra::rast("C:/Users/ik929086/Documents/iDeer/output/Final_risk_maps/small_deer_risk_raster_EW.tif")
+crs(small_deer_risk) <- bng
 
-#Gair wood (Leeds) 53.87333542160211, -1.5788324024401497
+large_deer_risk <- raster()
+```
 
-#Thorne moors 53.63131346257901, -0.8981366765395856
+```{r}
+#Make a 5km2 bounding box to crop the risk maps
 
-#Adel Dam 53.86794131276967, -1.5869010247593411
+library(terra)
 
-#Above Raven Crag (Lakes) 54.54878727845816, -3.102771158037833
+buffer_distance <- 2500  # Distance in meters (half of 5 km² side)
 
-#Hole of Horcum 54.33134092965284, -0.6947728035262719
+create_bbox <- function(lat, lon, buffer_distance) {
+  # Calculate the min and max coordinates for the extent
+  xmin <- lon - buffer_distance / 111320  # Approx. meters to degrees longitude
+  xmax <- lon + buffer_distance / 111320
+  ymin <- lat - buffer_distance / 111320  # Approx. meters to degrees latitude
+  ymax <- lat + buffer_distance / 111320
+  
+  # Create and return a SpatExtent object
+  ext(xmin, xmax, ymin, ymax)
+}
 
+```
 
+```{r}
+#Function to save rasters ####
+
+save_rasters <- function(raster_list, output_folder, prefix = "", suffix = "", overwrite = TRUE) {
+  # Ensure the output folder exists
+  if (!dir.exists(output_folder)) {
+    dir.create(output_folder, recursive = TRUE)
+  }
+  
+  # Save each raster in the list to the output folder
+  for (raster_name in names(raster_list)) {
+    # Construct the file name with prefix and suffix
+    file_name <- paste0(prefix, raster_name, suffix, ".tif")
+    file_path <- file.path(output_folder, file_name)
+    
+    # Write the raster to disk
+    writeRaster(raster_list[[raster_name]], file_path, format = "GTiff", overwrite = overwrite)
+  }
+}
+
+```
+
+```{r}
+# Tom Logan familiar areas
+tom_coords <- data.frame(
+  lat = c(54.51762549311087, 53.87333542160211, 53.63131346257901, 53.86794131276967, 54.54878727845816, 54.33134092965284),
+  lon = c(-3.148665288562973, -1.5788324024401497, -0.8981366765395856, -1.5869010247593411, -3.102771158037833, -0.6947728035262719),
+  sites = c("Borrowdale", "Gair wood", "Thorne moors", "Adel Dam", "Above Raven Crag", "Hole of Horcum")
+)
+
+# Create bounding boxes for Tom's sites
+buffer_distance <- 2500  # Buffer distance in meters
+tom_bboxes <- lapply(1:nrow(tom_coords), function(i) {
+  create_bbox(tom_coords$lat[i], tom_coords$lon[i], buffer_distance)
+})
+
+tom_bboxes <- lapply(st_as_sf(tom_bboxes))
+
+# Reproject each bounding box in tom_bboxes
+tom_bboxes <- lapply(tom_bboxes, function(bbox) {
+  project(bbox, crs(small_deer_risk))  # Reproject to raster CRS
+})
+
+# Small deer risk rasters (assuming small_deer_risk is loaded and in the correct CRS)
+borrowdale_small_risk_map <- crop(small_deer_risk, tom_bboxes[[1]])
+gairwood_small_risk_map <- crop(small_deer_risk, tom_bboxes[[2]])
+thornemoors_small_risk_map <- crop(small_deer_risk, tom_bboxes[[3]])
+adeldam_small_risk_map <- crop(small_deer_risk, tom_bboxes[[4]])
+ravencrag_small_risk_map <- crop(small_deer_risk, tom_bboxes[[5]])
+holeofhorcum_small_risk_map <- crop(small_deer_risk, tom_bboxes[[6]])
+
+# List of cropped small risk maps
+small_risk_maps_tom <- list(
+  Borrowdale = borrowdale_small_risk_map,
+  GairWood = gairwood_small_risk_map,
+  ThorneMoors = thornemoors_small_risk_map,
+  AdelDam = adeldam_small_risk_map,
+  RavenCrag = ravencrag_small_risk_map,
+  HoleOfHorcum = holeofhorcum_small_risk_map
+)
+
+# Save rasters
+save_rasters(
+  raster_list = small_risk_maps_tom,
+  output_folder = "./output/Expert_maps/Logan_T",
+  prefix = "current_small_risk_",  # Optional prefix
+  suffix = "_2023"                # Optional suffix
+)
 ```
