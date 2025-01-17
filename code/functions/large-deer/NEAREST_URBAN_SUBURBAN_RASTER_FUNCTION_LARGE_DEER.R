@@ -83,7 +83,7 @@ for (i in 1:length(tiles$tile_name)) {
 print("Urban raster list complete")
 
 # Save list
-saveRDS(nearest_urban_suburban_list, file = here("output/nearest_urban_suburban_raster_tile_list_EW_2023.rds"))
+saveRDS(nearest_urban_suburban_list, file = here("output/nearest_urban_suburban_raster_tile_list_EW_2023_1_434.rds"))
 print("Urban raster list saved")
 
 # Label elements that are not RasterLayers or are empty
@@ -106,7 +106,7 @@ urban_distance_mosaic <- do.call(mosaic, c(valid_urban_rasters, fun = mean))
 crs(urban_distance_mosaic) <- bng
 
 # Save raster
-writeRaster(urban_distance_mosaic, here("output/nearest_urban_suburban_raster_2023_EW.tif"),overwrite=TRUE)
+writeRaster(urban_distance_mosaic, here("output/nearest_urban_suburban_raster_2023_EW_1_434.tif"),overwrite=TRUE)
 print("Urban raster mosaic complete and saved")
 
 }
