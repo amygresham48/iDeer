@@ -19,7 +19,8 @@ bng <- "EPSG:27700"
 lcm <- raster("C:/Users/ik929086/Documents/iDeer/data/raw-data/lcm-2023/gblcm2023_25m.tif")
 
 #Read in large deer predicted indices with point geometry
-df_sf <- readRDS("C:/Users/ik929086/Documents/iDeer/output/large_deer_full_df_cat_point_geometry_wood_edge_arable_combo.RDS")
+#df_sf <- readRDS("C:/Users/ik929086/Documents/iDeer/output/large_deer_full_df_cat_point_geometry_wood_edge_arable_combo.RDS")
+df_sf <- readRDS("C:/Users/ik929086/Documents/iDeer/output/large_deer_full_df_cat_point_geometry_wood_edge_arable_combo_wood_area.RDS")
 
 unique(df_sf$pred_thermoreg)
 unique(df_sf$pred_forage_pressure_index)
@@ -48,7 +49,9 @@ connect_sf <- df_sf %>% dplyr::select(geometry, pred_connect)
  connect_r <- stars::st_rasterize(sf = connect_sf, template = stars_template)
  #connect_rast <- terra::rast(connect_r)
  
- stars::write_stars(connect_r, "C:/Users/ik929086/Documents/BBN_CPT_elicitation/output/large_deer_predicted_connectivity_EW.tif",overwrite=TRUE)
+# stars::write_stars(connect_r, "C:/Users/ik929086/Documents/BBN_CPT_elicitation/output/large_deer_predicted_connectivity_EW.tif",overwrite=TRUE)
+ 
+ stars::write_stars(connect_r, "C:/Users/ik929086/Documents/BBN_CPT_elicitation/output/large_deer_predicted_connectivity_wood_area_EW.tif",overwrite=TRUE)
 ```
 
 ```{r}
@@ -70,7 +73,7 @@ thermoreg_r <- stars::st_rasterize(sf = thermoreg_sf, template = stars_template)
  #thermoreg_rast_EW <- crop(thermoreg_rast, EW)
  #thermoreg_rast_EW <- mask(thermoreg_rast_EW, EW)
  
- stars::write_stars(thermoreg_r, "C:/Users/ik929086/Documents/BBN_CPT_elicitation/output/large_deer_thermoreg_index_raster_EW.tif",overwrite=TRUE)
+ stars::write_stars(thermoreg_r, "C:/Users/ik929086/Documents/BBN_CPT_elicitation/output/large_deer_thermoreg_index_raster_wood_area_EW.tif",overwrite=TRUE)
 ```
 
 ```{r}
@@ -92,7 +95,7 @@ fpi_r <- stars::st_rasterize(sf = fpi_sf, template = stars_template)
  #fpi_rast_EW <- crop(fpi_rast, EW)
  #fpi_rast_EW <- mask(fpi_rast_EW, EW)
  
- stars::write_stars(fpi_r, "C:/Users/ik929086/Documents/BBN_CPT_elicitation/output/large_deer_fpi_index_raster_EW.tif",overwrite=TRUE)
+ stars::write_stars(fpi_r, "C:/Users/ik929086/Documents/BBN_CPT_elicitation/output/large_deer_fpi_index_raster_wood_area_EW.tif",overwrite=TRUE)
 ```
 
 ```{r}
@@ -114,5 +117,5 @@ disturb_r <- stars::st_rasterize(sf = disturb_sf, template = stars_template)
  #fpi_rast_EW <- crop(fpi_rast, EW)
  #fpi_rast_EW <- mask(fpi_rast_EW, EW)
  
- stars::write_stars(disturb_r, "C:/Users/ik929086/Documents/BBN_CPT_elicitation/output/large_deer_disturbance_index_raster_EW.tif",overwrite=TRUE)
+ stars::write_stars(disturb_r, "C:/Users/ik929086/Documents/BBN_CPT_elicitation/output/large_deer_disturbance_index_raster_wood_area_EW.tif",overwrite=TRUE)
 ```
