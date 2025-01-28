@@ -40,7 +40,10 @@ lcm <- raster("C:/Users/ik929086/Documents/iDeer/data/raw-data/lcm-2023/gblcm202
 ew10k <- st_read("C:/Users/ik929086/Documents/iDeer/data/derived-data/10k_tiles_EW.shp")
 
 #woodland connectivity within 400m
-wood_connect_400m <- raster("C:/Users/ik929086/Documents/iDeer/data/derived-data/woodland_connectivity_2023_400m_EW.tif")
+#wood_connect_400m <- raster("C:/Users/ik929086/Documents/iDeer/data/derived-data/woodland_connectivity_2023_400m_EW.tif")
+
+#woodland area within 400m - used as proxy for connectivity
+wood_area_400m <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/small_deer/sum_woodland_area_400m_small_deer_GB_2023.tif")
 
 #linear features within 400m
 #Masked lf_density_400m_2023_GB_projected.tif to England-Wales 10km tiles in ArcGIS
@@ -83,10 +86,10 @@ peren_arable_wood_200m <- raster("C:/Users/ik929086/Documents/iDeer/data/derived
 source("C:/Users/ik929086/Documents/iDeer/code/functions/extract_raster_pixels_func_10km_chunks.R")
 
 #Woodland polygons
-wood_polys <- st_read("C:/Users/ik929086/Documents/iDeer/data/derived-data/LCM2023_GB_WOODS_polygons.shp")
+#wood_polys <- st_read("C:/Users/ik929086/Documents/iDeer/data/derived-data/LCM2023_GB_WOODS_polygons.shp")
 
 #subset to woodlands in England and Wales
-wood_polys_EW <- st_filter(wood_polys, ew10k)
+#wood_polys_EW <- st_filter(wood_polys, ew10k)
 
 ```
 
@@ -143,15 +146,20 @@ edgelen <- readRDS("C:/Users/ik929086/Documents/iDeer/output/edgelen_200m_df_EW.
 #        fill = "")
 
 #EXTRACT CONNECTIVITY
-
 #connectpix <- extract_raster(map = wood_connect_400m,
 #                             lcm = lcm,
 #                             tiles = ew10k)
-
 #saveRDS(connectpix, "./outputs/connectpix_400m_df_EW.RDS")
 
+#connectpix <- extract_raster(map = wood_area_400m,
+#                             lcm = lcm,
+#                             tiles = ew10k)
+
+#saveRDS(connectpix, "C:/Users/ik929086/Documents/iDeer/output/connectpix_wood_area_400m_df_EW.RDS")
+
 #read
-connectpix <- readRDS("C:/Users/ik929086/Documents/iDeer/output/connectpix_400m_df_EW.RDS")
+#connectpix <- readRDS("C:/Users/ik929086/Documents/iDeer/output/connectpix_400m_df_EW.RDS")
+connectpix <- readRDS("C:/Users/ik929086/Documents/iDeer/output/connectpix_wood_area_400m_df_EW.RDS")
 
 # ggplot(connectpix) +
 #   geom_tile(aes(x = x, y = y, fill = connect_raster)) +
@@ -240,21 +248,32 @@ df.no.nas <- na.omit(df)
 
 #save
 
-saveRDS(df.no.nas, "C:/Users/ik929086/Documents/iDeer/output/small_deer_full_df_no_nas.RDS")
+saveRDS(df.no.nas, "C:/Users/ik929086/Documents/iDeer/output/small_deer_full_df_no_nas_wood_area.RDS")
 
 #read
-df.no.nas <- readRDS("C:/Users/ik929086/Documents/iDeer/output/small_deer_full_df_no_nas.RDS")
+df.no.nas <- readRDS("C:/Users/ik929086/Documents/iDeer/output/small_deer_full_df_no_nas_wood_area.RDS")
 
 # #FOR TESTING: TAKE SUBSET
 # #read
-# df.no.nas.full <- readRDS("C:/Users/ik929086/Documents/iDeer/output/small_deer_full_df_no_nas.RDS")
-# df.no.nas <- df.no.nas.full %>%
-#   slice(1:100000) %>%
-#   st_as_sf(coords = c("x","y"))
+ #df.no.nas.full <- readRDS("C:/Users/ik929086/Documents/iDeer/output/small_deer_full_df_no_nas.RDS")
+ df.no.nas <- df.no.nas.full %>%
+   slice(1:100000) %>%
+   st_as_sf(coords = c("x","y"))
 # #save test df
-# saveRDS(df.no.nas, "C:/Users/ik929086/Documents/iDeer/output/small_deer_full_df_no_nas_TEST.RDS")
+# saveRDS(df.no.nas, "C:/Users/ik929086/Documents/iDeer/output/small_deer_full_df_no_nas_wood_area_TEST.RDS")
 #read test df
 #df.no.nas <- readRDS("C:/Users/ik929086/Documents/iDeer/output/small_deer_full_df_no_nas_TEST.RDS")
+```
+
+```{r}
+# #Connectivity
+# connect_tert <- quantile(df.no.nas$wood_connect_400m, c(0:3/3))
+# hist(df.no.nas$wood_connect_400m)
+# abline(v = 1.5e+04, col = "red")
+# abline(v = 1.7e+05, col = "red")
+# abline(v = 5.7e+08, col = "red")
+# #connect_400m_breaks <- BAMMtools::getJenksBreaks(df.no.nas$wood_connect_400m, k = 3, subset = 100)
+# #[1]        0 8850237 83654560
 ```
 
 ```{r}
@@ -294,7 +313,7 @@ abline(v = 4131, col = "red")
 #[1]    0 1039 2609
 
 #Connectivity
-connect_tert <- quantile(df.no.nas$wood_connect_400m, c(0:3/3))
+connect_tert <- quantile(df.no.nas.full$wood_area_400m, c(0:3/3))
 hist(df.no.nas$wood_connect_400m)
 abline(v = 1.5e+04, col = "red")
 abline(v = 1.7e+05, col = "red")
@@ -331,10 +350,16 @@ df_cat$LF_400m <- ifelse(df_cat$LF_400m<=341, "Low",
                        ifelse(df_cat$LF_400m> 1301, "High", NA)))
 
 #Woodland connectivity
- df_cat$wood_connect_400m <- ifelse(
-  df_cat$wood_connect_400m <= 1.51e+04, "Low",
-  ifelse(df_cat$wood_connect_400m > 1.5e+04 & df_cat$wood_connect_400m <= 1.70e+05, "Medium",
-    ifelse(df_cat$wood_connect_400m > 1.70e+05, "High", NA)))
+# df_cat$wood_connect_400m <- ifelse(
+#  df_cat$wood_connect_400m <= 1.51e+04, "Low",
+#  ifelse(df_cat$wood_connect_400m > 1.5e+04 & df_cat$wood_connect_400m <= 1.70e+05, #"Medium",
+#    ifelse(df_cat$wood_connect_400m > 1.70e+05, "High", NA)))
+ 
+ #Woodland connectivity
+ df_cat$wood_area_400m <- ifelse(
+  df_cat$wood_area_400m <= 1.51e+04, "Low",
+  ifelse(df_cat$wood_area_400m > 1.5e+04 & df_cat$wood_area_400m <= 1.70e+05, "Medium",
+    ifelse(df_cat$wood_area_400m > 1.70e+05, "High", NA)))
   
 
 #Edge density
@@ -355,7 +380,8 @@ df_cat$Alt_forage_200m <- ifelse(df_cat$Alt_forage_200m <= 1153, "Low",
 
 
 df_cat$dams_200m <- factor(df_cat$dams_200m, levels = c("Low","Medium","High"))
-df_cat$wood_connect_400m <- factor(df_cat$wood_connect_400m, levels= c("Low","Medium","High"))
+#df_cat$wood_connect_400m <- factor(df_cat$wood_connect_400m, levels= c("Low","Medium","High"))
+df_cat$wood_area_400m <- factor(df_cat$wood_connect_400m, levels= c("Low","Medium","High"))
 df_cat$LF_400m <- factor(df_cat$LF_400m, levels = c("Low","Medium","High"))
 df_cat$edges_200m <- factor(df_cat$edges_200m, levels = c("Low","Medium","High"))
 df_cat$Alt_forage_200m <- factor(df_cat$Alt_forage_200m, levels = c("Low","Medium","High"))
@@ -363,7 +389,8 @@ df_cat$Alt_forage_200m <- factor(df_cat$Alt_forage_200m, levels = c("Low","Mediu
 unique(df_cat$Alt_forage_200m)
 unique(df_cat$dams_200m)
 unique(df_cat$edges_200m)
-unique(df_cat$wood_connect_400m)
+#unique(df_cat$wood_connect_400m)
+unique(df_cat$wood_area_400m)
 unique(df_cat$LF_400m)
 
 #------------------------------------
@@ -385,7 +412,8 @@ lf_cpt <-matrix(c(0.333333,0.333333,0.333333),ncol = 3,dimnames = list(NULL, c("
 #dams within 200m
 dams_cpt<-matrix(c(0.333333,0.333333,0.333333),ncol = 3,dimnames = list(NULL, c("Low", "Medium","High")))
 #woodland connectivity within 400m
-wood_connect_cpt <- matrix(c(0.333333,0.333333,0.333333),ncol = 3,dimnames = list(NULL, c("Low", "Medium","High")))
+#wood_connect_cpt <- matrix(c(0.333333,0.333333,0.333333),ncol = 3,dimnames = list(NULL, c("Low", "Medium","High")))
+wood_area_cpt <- matrix(c(0.333333,0.333333,0.333333),ncol = 3,dimnames = list(NULL, c("Low", "Medium","High")))
 
 
 ```

@@ -38,6 +38,10 @@ lcm <- raster("C:/Users/ik929086/Documents/iDeer/data/raw-data/lcm-2023/gblcm202
 #England-Wales 10k tiles
 ew10k <- st_read(here("data/derived-data/10k_tiles_EW.shp"))
 
+
+```
+
+```{r}
 #nearest urban/suburban
 urb_suburb <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/nearest_urban_suburban_raster_2023_EW_projected.tif")
 
@@ -56,8 +60,16 @@ arable_1000m <- arable_1000m * 25 #forgot to do this when making original raster
 perennial_wood_1000m <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/sum_perennial_woodland_quality_1000m_large_deer_GB_2023.tif")
 
 #Woodland connectivity within 1km
-wood_connect_1000m <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/woodland_connectivity_2023_1000m_EW.tif")
+#wood_connect_1000m <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/woodland_connectivity_2023_1000m_EW.tif")
 
+#Woodland area within 1km 
+#wood_area_1000m <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/sum_woodland_area_1000m_large_deer_GB_2023.tif")
+#Using woodland area as a proxy for connectivity
+#Connectivity metric difficult to understand and doesn't seem to reflect reality
+#Found average area within 1km for each merged GB wood polygon 
+#See script "SUM_WOODLAND_FUNCTION_LARGE_DEER_1km.R" 
+#and function "extract_raster_pixels_to_wood_polys_func_10km_chunks_mean_poly_values.R"
+wood_area_polys_1000m <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/focal_area_woods_extracted_to_polys_1000m.tif")
 
 ```
 
@@ -114,12 +126,23 @@ wood_edge_arable_1000m <- raster("C:/Users/ik929086/Documents/iDeer/output/wood_
 #edgelen <- extract_raster(map = edges_1000m,
 #                          lcm = lcm,
 #                          tiles = ew10k)
-
-
 #saveRDS(edgelen, "C:/Users/ik929086/Documents/iDeer/output/edgelen_1000m_df_EW.RDS")
-
 #read
 #edgelen <- readRDS("C:/Users/ik929086/Documents/iDeer/output/edgelen_1000m_df_EW.RDS")
+
+#EXTRACT arable land within 1000m
+
+#arablepix <- extract_raster(map = arable_1000m,
+#                          lcm = lcm,
+#                          tiles = ew10k)
+#saveRDS(arablepix, "C:/Users/ik929086/Documents/iDeer/output/arablepix_1000m_df_EW.RDS")
+#read
+# arablepix <- readRDS("C:/Users/ik929086/Documents/iDeer/output/arablepix_1000m_df_EW.RDS")
+```
+
+```{r}
+
+#Create a dataframe containing all extracted raster values within user's landscape
 
 #EXTRACT WOOD EDGE / ARABLE AREA
 
@@ -134,17 +157,21 @@ wood_edge_arable_pix <- readRDS("C:/Users/ik929086/Documents/iDeer/output/edge_a
 
 
 #EXTRACT CONNECTIVITY
-
 #connectpix <- extract_raster(map = wood_connect_1000m,
 #                             lcm = lcm,
 #                             tiles = ew10k)
-
 #saveRDS(connectpix, "C:/Users/ik929086/Documents/iDeer/output/connectpix_1000m_df_EW.RDS")
-
 #read
-connectpix <- readRDS("C:/Users/ik929086/Documents/iDeer/output/connectpix_1000m_df_EW.RDS")
+#connectpix <- readRDS("C:/Users/ik929086/Documents/iDeer/output/connectpix_1000m_df_EW.RDS")
 
+#EXTRACT WOODLAND AREA WITHIN 1km
 
+#connectpix <- extract_raster(map = wood_area_polys_1000m,
+#                             lcm = lcm,
+#                             tiles = ew10k)
+#saveRDS(connectpix, "C:/Users/ik929086/Documents/iDeer/output/connectpix_wood_area_polys_1000m_df_EW.RDS")
+#read
+connectpix <- readRDS("C:/Users/ik929086/Documents/iDeer/output/connectpix_wood_area_polys_1000m_df_EW.RDS")
 
 #EXTRACT summed DAMS
 #damspix <- extract_raster(map = dams_1000m,
@@ -167,19 +194,6 @@ damspix <- readRDS("C:/Users/ik929086/Documents/iDeer/output/dams_1000m_df_EW.RD
 #read
 urbanpix <- readRDS("C:/Users/ik929086/Documents/iDeer/output/nearest_urban_suburban_df_EW.RDS")
 
-
-#EXTRACT arable land within 1000m
-
-#arablepix <- extract_raster(map = arable_1000m,
-#                          lcm = lcm,
-#                          tiles = ew10k)
-
-#saveRDS(arablepix, "C:/Users/ik929086/Documents/iDeer/output/arablepix_1000m_df_EW.RDS")
-
-#read
-# arablepix <- readRDS("C:/Users/ik929086/Documents/iDeer/output/arablepix_1000m_df_EW.RDS")
-
-
 #EXTRACT PERENNIAL/WOODLAND FORAGE QUALITY
 
 #foragepix <- extract_raster(map = perennial_wood_1000m,
@@ -193,12 +207,6 @@ foragepix <- readRDS("C:/Users/ik929086/Documents/iDeer/output/foragepix_1000m_d
 
 #left_join the datasets together #---------------
 
-# df <- left_join(edgelen, connectpix, by = c("x","y")) %>%
-#   left_join(arablepix, by = c("x","y")) %>%
-#   left_join(damspix, by = c("x","y")) %>%
-#   left_join(foragepix, by = c("x","y")) %>%
-#   left_join(urbanpix, by = c("x","y"))
-
 df <- left_join(wood_edge_arable_pix, connectpix, by = c("x","y")) %>%
   left_join(damspix, by = c("x","y")) %>%
   left_join(foragepix, by = c("x","y")) %>%
@@ -211,25 +219,28 @@ df.no.nas <- na.omit(df)
 #save
 
 #saveRDS(df.no.nas, "C:/Users/ik929086/Documents/iDeer/output/large_deer_full_df_no_nas.RDS")
+#saveRDS(df.no.nas, "C:/Users/ik929086/Documents/iDeer/output/large_deer_full_df_no_nas_arable_edges_combo.RDS")
 
-saveRDS(df.no.nas, "C:/Users/ik929086/Documents/iDeer/output/large_deer_full_df_no_nas_arable_edges_combo.RDS")
+saveRDS(df.no.nas, "C:/Users/ik929086/Documents/iDeer/output/large_deer_full_df_no_nas_arable_edges_combo_wood_area.RDS")
 
 #read
-
 #df.no.nas <- readRDS("C:/Users/ik929086/Documents/iDeer/output/large_deer_full_df_no_nas.RDS")
+#df.no.nas <- readRDS("C:/Users/ik929086/Documents/iDeer/output/large_deer_full_df_no_nas_arable_edges_combo.RDS")
 
-df.no.nas <- readRDS("C:/Users/ik929086/Documents/iDeer/output/large_deer_full_df_no_nas_arable_edges_combo.RDS")
+df.no.nas <- readRDS("C:/Users/ik929086/Documents/iDeer/output/large_deer_full_df_no_nas_arable_edges_combo_wood_area.RDS")
 
 #FOR TESTING: TAKE SUBSET
 #read
 # df.no.nas.full <- readRDS("C:/Users/ik929086/Documents/iDeer/output/large_deer_full_df_no_nas.RDS")
 #  df.no.nas.full <- readRDS("C:/Users/ik929086/Documents/iDeer/output/large_deer_full_df_no_nas_arable_edges_combo.RDS")
+#df.no.nas.full <- readRDS("C:/Users/ik929086/Documents/iDeer/output/large_deer_full_df_no_nas_arable_edges_combo_wood_area.RDS")
+# df.no.nas.full <- df.no.nas
 #  df.no.nas <- df.no.nas.full %>%
 #    slice(1:100000) %>%
 #    st_as_sf(coords = c("x","y"))
-# saveRDS(df.no.nas, "C:/Users/ik929086/Documents/iDeer/output/large_deer_full_df_no_nas_arable_edges_combo_TEST.RDS")
+# saveRDS(df.no.nas, "C:/Users/ik929086/Documents/iDeer/output/large_deer_full_df_no_nas_arable_edges_combo_wood_area_TEST.RDS")
 #read test df
-#df.no.nas <- readRDS("C:/Users/ik929086/Documents/iDeer/output/large_deer_full_df_no_nas_TEST.RDS")
+#df.no.nas <- readRDS("C:/Users/ik929086/Documents/iDeer/output/large_deer_full_df_no_nas_arable_edges_combo_wood_area_TEST.RDS")
 ```
 
 ```{r}
@@ -260,14 +271,14 @@ abline(v = 32850, col = "red")
 
 #Nearest urban/suburban
 #Predetermined using literature - don't need to use JenksBreaks
-hist(df.no.nas$urb_suburb)
+hist(df.no.nas.full$urb_suburb)
 abline(v = 100, col = "red")
 abline(v = 250, col = "red")
 
 #urb_suburb_breaks <- BAMMtools::getJenksBreaks(df.no.nas$urb_suburb, k = 3, subset = 100)
 
 #Summed DAMS
-dams_tert <- quantile(df.no.nas$dams_1000m, c(0:3/3))
+dams_tert <- quantile(df.no.nas.full$dams_1000m, c(0:3/3))
 hist(df.no.nas$dams_1000m)
 abline(v = 38400, col = "red")
 abline(v = 52296, col = "red")
@@ -277,18 +288,23 @@ dams_1000m_breaks <- BAMMtools::getJenksBreaks(df.no.nas$dams_1000m, k = 3, subs
 #[1]  3138.249 40021.195 84997.758 (LOW/MED/MED-HIGH/HIGH)
 
 #Connectivity
-connect_tert <- quantile(df.no.nas$wood_connect_1000m, c(0:3/3))
-hist(df.no.nas$wood_connect_1000m, ylim = c(0,100000))
-abline(v = 8.33e+04, col = "red")
-abline(v = 5.27e+05, col = "red")
-abline(v = 6.15e+08, col = "red")
+# connect_tert <- quantile(df.no.nas$wood_connect_1000m, c(0:3/3))
+# hist(df.no.nas$wood_connect_1000m, ylim = c(0,100000))
+# abline(v = 8.33e+04, col = "red")
+# abline(v = 5.27e+05, col = "red")
+# abline(v = 6.15e+08, col = "red")
+
+connect_tert <- quantile(df.no.nas.full$wood_area_polys_1000m, c(0:3/3))
+hist(df.no.nas.full$wood_area_polys_1000m)
+abline(v = 22965, col = "red")
+abline(v = 73073, col = "red")
 
 #connect_1km_breaks <- BAMMtools::getJenksBreaks(df.no.nas$wood_connect_1000m, k = 3, subset = 100)
 #[1] 1.057911e+03 3.973864e+07 1.188407e+08 (LOW/MED/MED-HIGH/HIGH)
 
 #Alternative forage (perennial and woodland)
-peren_wood_tert <- quantile(df.no.nas$perennial_wood_1000m, c(0:3/3))
-hist(df.no.nas$perennial_wood_1000m)
+peren_wood_tert <- quantile(df.no.nas.full$perennial_wood_1000m, c(0:3/3))
+hist(df.no.nas$perennial_wood_1000m, xlim=c(0,100000))
 abline(v = 21540, col = "red")
 abline(v = 29785, col = "red")
 abline(v = 50250, col = "red")
@@ -326,14 +342,22 @@ df_cat$wood_edge_arable_1000m <- ifelse(df_cat$wood_edge_arable_1000m  <= 13750,
           ifelse(df_cat$wood_edge_arable_1000m  > 13750 & df_cat$wood_edge_arable_1000m  <=32850, "Medium",
           ifelse(df_cat$wood_edge_arable_1000m >32850, "High", NA)))#)
 
-#Connectivity within 1000m 
+# #Connectivity within 1000m 
+# #LOW/MED/HIGH
+# #Woodland connectivity
+#  df_cat$wood_connect_1000m <- ifelse(
+#   df_cat$wood_connect_1000m <= 8.33e+04, "Low",
+#   ifelse(df_cat$wood_connect_1000m > 8.33e+04 & df_cat$wood_connect_1000m <= 5.27e+05, "Medium",
+#          #ifelse(df_cat$wood_connect_1000m > 3.973864e+07 & df_cat$wood_connect_1000m <=1.188407e+08, "Medium_High",
+#     ifelse(df_cat$wood_connect_1000m > 5.27e+05, "High", NA)))#)
+ 
+ #Connectivity within 1000m 
 #LOW/MED/HIGH
 #Woodland connectivity
- df_cat$wood_connect_1000m <- ifelse(
-  df_cat$wood_connect_1000m <= 8.33e+04, "Low",
-  ifelse(df_cat$wood_connect_1000m > 8.33e+04 & df_cat$wood_connect_1000m <= 5.27e+05, "Medium",
-         #ifelse(df_cat$wood_connect_1000m > 3.973864e+07 & df_cat$wood_connect_1000m <=1.188407e+08, "Medium_High",
-    ifelse(df_cat$wood_connect_1000m > 5.27e+05, "High", NA)))#)
+ df_cat$wood_area_polys_1000m <- ifelse(
+  df_cat$wood_area_polys_1000m <= 22965, "Low",
+  ifelse(df_cat$wood_area_polys_1000m > 22965 & df_cat$wood_area_polys_1000m <= 73073, "Medium",
+    ifelse(df_cat$wood_area_polys_1000m > 73073, "High", NA)))#)
   
 
 #Arable within 1000m
@@ -368,7 +392,8 @@ df_cat$urb_suburb <- ifelse(df_cat$urb_suburb  <= 100, "Near",
 
 #ensure factor levels in correct order 
 df_cat$dams_1000m <- factor(df_cat$dams_1000m, levels = c("Low","Medium","High"))
-df_cat$wood_connect_1000m <- factor(df_cat$wood_connect_1000m, levels= c("Low","Medium","High"))
+#df_cat$wood_connect_1000m <- factor(df_cat$wood_connect_1000m, levels= c("Low","Medium","High"))
+df_cat$wood_area_polys_1000m <- factor(df_cat$wood_area_polys_1000m, levels= c("Low","Medium","High"))
 #df_cat$arable_1000m <- factor(df_cat$arable_1000m, levels = c("Low","Medium","High"))
 #df_cat$edges_1000m <- factor(df_cat$edges_1000m, levels = c("Low","Medium","High"))
 df_cat$wood_edge_arable_1000m <- factor(df_cat$wood_edge_arable_1000m, levels = c("Low","Medium","High"))
@@ -379,14 +404,15 @@ unique(df_cat$urb_suburb)
 unique(df_cat$dams_1000m)
 unique(df_cat$perennial_wood_1000m)
 #unique(df_cat$arable_1000m)
-unique(df_cat$wood_connect_1000m)
+#unique(df_cat$wood_connect_1000m)
+unique(df_cat$wood_area_polys_1000m)
 #unique(df_cat$edges_1000m)
 unique(df_cat$wood_edge_arable_1000m)
 
 
 #save df_cat
 
-saveRDS(df_cat, "C:/Users/ik929086/Documents/iDeer/output/large_deer_full_df_cat_wood_edge_arable_combo.RDS")
+saveRDS(df_cat, "C:/Users/ik929086/Documents/iDeer/output/large_deer_full_df_cat_wood_edge_arable_combo_wood_area.RDS")
 
 #rm(df.no.nas)
 ```
@@ -737,7 +763,7 @@ predict_dat<-predict_dat%>%rename(
   dist_to_urban=urb_suburb,
   alt_forage_qual_1000m=perennial_wood_1000m,
   sum_dams_1000m=dams_1000m,
-  Woodland_connectivity_1000m=wood_connect_1000m)
+  Woodland_connectivity_1000m=wood_area_polys_1000m)
 
 #Make empty columns for the latent (unobserved) variables
 
@@ -838,7 +864,10 @@ df_cat$pred_disturb <- pred_disturb
  df_sf <- st_as_sf(df_cat, coords = c("x", "y"), crs = st_crs(bng))
 
  #save sf object
- saveRDS(df_sf, "C:/Users/ik929086/Documents/iDeer/output/large_deer_full_df_cat_point_geometry_wood_edge_arable_combo.RDS")
+ saveRDS(df_sf, "C:/Users/ik929086/Documents/iDeer/output/large_deer_full_df_cat_point_geometry_wood_edge_arable_combo_wood_area.RDS")
+ 
+ #save sf object
+ #saveRDS(df_sf, "C:/Users/ik929086/Documents/iDeer/output/large_deer_full_df_cat_point_geometry_wood_edge_arable_combo_wood_area_TEST.RDS")
  
 # #Make large deer predict_dat rasters to check layers
 # # Define the color palette
@@ -880,8 +909,8 @@ df_cat$pred_disturb <- pred_disturb
 # plot(disturbance_r, col = index_palette)
 
  # Define the value mapping for pred_damage
- damage_values <- c("Low" = 1, "Low_Medium" = 2, "Medium" = 3, "Medium_High" = 4, "High" = 5)
- df_sf$value <- damage_values[df_sf$pred_damage]
+damage_values <- c("Low" = 1, "Low_Medium" = 2, "Medium" = 3, "Medium_High" = 4, "High" = 5)
+df_sf$value <- damage_values[df_sf$pred_damage]
 
  #Convert to raster
  # Select the geometry and value column
@@ -893,7 +922,7 @@ df_cat$pred_disturb <- pred_disturb
  #r <- stars::st_rasterize(sf = df_sf_selected, template = stars_template)
  r <- stars::st_rasterize(sf = df_sf_selected)
 
-stars::write_stars(r, "C:/Users/ik929086/Documents/iDeer/output/large_deer_risk_raster_wood_edge_arable_combo.tif",overwrite=TRUE)
+stars::write_stars(r, "C:/Users/ik929086/Documents/iDeer/output/large_deer_risk_raster_wood_edge_arable_combo_wood_area.tif",overwrite=TRUE)
 
 #r_rast <- raster("C:/Users/ik929086/Documents/iDeer/output/large_deer_risk_raster.tif")
   
