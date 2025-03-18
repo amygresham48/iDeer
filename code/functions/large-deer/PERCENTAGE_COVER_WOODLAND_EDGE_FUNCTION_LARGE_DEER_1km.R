@@ -1,4 +1,4 @@
-sum_edge <- function(wood_binary_rast, nfi_lcm_map,tiles){
+#sum_edge <- function(wood_binary_rast, nfi_lcm_map,tiles){
 
 bng <- 27700
 
@@ -35,9 +35,12 @@ Focal1000_EDGES= raster::focal(boundaries_wood, w=circle.buff, fun=sum, na.rm=F,
 #plot(Focal1000_EDGES)
 crs(Focal1000_EDGES) <- bng
 
-Focal1000_EDGES <- Focal1000_EDGES*25
+writeRaster(Focal1000_EDGES, here("output/GB_datasets_2023/large_deer/sum_woodland_edge_1000m_2023_large_deer_GB.tif"))
 
-writeRaster(Focal1000_EDGES, here("output/GB_datasets_2023/large_deer/sum_woodland_edge_area_1000m_2023_large_deer_GB.tif"))
+Focal1000_EDGES <- raster("./output/GB_datasets_2023/large_deer/sum_woodland_edge_area_1000m_2023_large_deer_GB.tif")
+#Divide number of pixels by the total number of 25m2 pixels in a buffer*100 = percentage woodland edge
+Focal1000_EDGES_PERC <- (Focal1000_EDGES/5027)*100
+writeRaster(Focal1000_EDGES_PERC, here("output/GB_datasets_2023/large_deer/percentage_cover_woodland_edge_1000m_2023_large_deer_GB.tif"))
 
-}
+#}
 

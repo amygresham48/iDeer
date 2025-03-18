@@ -9,6 +9,11 @@ bng <- 27700
 dams <- raster(here("data/raw-data/DAMS/dams_25m_bng.tif"))
 crs(dams) <- bng
 
+#Merged woodland polygons
+GB_polys_merged <- st_read("C:/Users/ik929086/Documents/iDeer/data/derived-data/LCM2023_GB_WOOD_ExportFeature.shp")
+st_crs(GB_polys_merged) <- bng
+GB_polys_merged$patch_ID <- 1:nrow(GB_polys_merged)
+
 #GB land cover map
 lcm <- raster("./data/raw-data/lcm-2023/gblcm2023_25m.tif")
 
@@ -40,7 +45,7 @@ writeRaster(DAMS_open_raster, here("output/GB_datasets_2023/DAMS_open_raster_GB_
 #-------------------------------------
 
 #focal statistics, moving window
-#Calculate maximum DAMS up to 200m away from each woodland pixel
+#Calculate maximum DAMS up to 1000m away from each woodland pixel
 
 #if na.rm = F, edges become cropped.
 
@@ -55,7 +60,30 @@ Focal1000= raster::focal(x=DAMS_open_raster, w=circle.buff, fun=sum, na.rm=T, pa
 plot(Focal1000)
 print("MAX DAMS 1km raster saved")
 
+Focal1000 <- raster("./output/GB_datasets_2023/large_deer/sum_dams_1000_non_wood_2023.tif")
 
+#Normalise summed DAMS scores from 0-1
+# Normalize summed DAMS scores (0-1 range)
+Focal1000_normalized <- (Focal1000 - min(Focal1000[], na.rm=TRUE)) / 
+  (max(Focal1000[], na.rm=TRUE) - min(Focal1000[], na.rm=TRUE))
+
+#Aggregate to patch, where the score for each patch is the normalised maximum summed DAMS score for any pixel in patch
+# Assuming you have a patch identifier, e.g., 'patch_id' in your woodland polygons
+patch_agg <- raster::extract(Focal1000_normalized, GB_polys_merged, fun=max, na.rm=TRUE, df=TRUE)
+
+patch_agg <- patch_agg %>% rename(patch_ID = ID)
+
+#left_join the max summed DAMS score to GB_polys_merged
+
+GB_polys_merged_max_summed_DAMS <- left_join(patch_agg, GB_polys_merged, by = c("patch_ID"))
+
+#Rasterize
+
+GB_polys_merged_max_summed_DAMS_raster <- fasterize::fasterize(sf = GB_polys_merged_max_summed_DAMS,
+                                                               raster = lcm,
+                                                               field = "sum_dams_1000_non_wood_2023")
+#save raster
+writeRaster(GB_polys_merged_max_summed_DAMS_raster, "./output/GB_datasets_2023/large_deer/max_summed_DAMS_1000m_large_deer_GB_2023.tif")
 
 }
 

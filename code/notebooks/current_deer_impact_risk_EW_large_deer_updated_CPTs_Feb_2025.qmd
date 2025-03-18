@@ -1,0 +1,930 @@
+---
+title: "current_deer_impact_risk_EW_large_deer"
+format: html
+editor: visual
+---
+
+This code will produce a current deer impact risk map for the whole of England and Wales, using the latest spatial layers. This is for the "large deer" model (fallow, red, sika)
+
+```{r}
+#Load packages
+
+library(plyr); library(dplyr)
+library(ggplot2)
+library(sf)
+library(raster)
+library(terra)
+library(here)
+library(progress)
+library(bnlearn)
+library(RColorBrewer)
+library(rasterVis)
+library(ggmap)
+library(gRain)
+library(BAMMtools)
+library(purrr)
+library(beepr)
+
+bng <- 27700
+
+```
+
+```{r}
+
+#Load datasets needed to produce the large deer risk raster ####
+
+#GB land cover map
+lcm <- raster("C:/Users/ik929086/Documents/iDeer/data/raw-data/lcm-2023/gblcm2023_25m.tif")
+
+#England-Wales 10k tiles
+ew10k <- st_read("C:/Users/ik929086/Documents/iDeer/data/derived-data/10k_tiles_EW.shp")
+
+
+```
+
+```{r}
+#nearest urban/suburban
+NEAREST_URB_SUBURB <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/nearest_urban_suburban_raster_2023_EW_projected.tif")
+
+#percentage cover woodland edges within 1km
+Focal1000_EDGE_AREA_PERC <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/percentage_cover_woodland_edge_1000m_2023_large_deer_GB.tif")
+
+#maximum summed dams within 1km
+Focal1000_MAX_SUMMED_DAMS <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/max_summed_DAMS_1000m_large_deer_GB_2023_normalized.tif")
+
+#percentage cover woodland area within 1km
+Focal1000_WOODS_PERC  <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/mean_percentage_focal_area_woods_extracted_to_polys_1000m.tif")
+
+#percentage arable cover within 1km
+Focal1000_ARABLE_PERC <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/percentage_cover_arable_1000_2023.tif")
+
+#percentage perennial cover within 1km
+Focal1000_PEREN_PERC <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/percentage_cover_perennial_1000m_2023.tif")
+
+```
+
+```{r}
+
+#Load custom functions ####
+
+#function to extract pixel values from raster layers
+source(here("code/functions/extract_raster_pixels_func_10km_chunks.R"))
+
+# #Woodland polygons
+# wood_polys <- st_read("C:/Users/ik929086/Documents/iDeer/data/derived-data/LCM2023_GB_WOODS_polygons.shp")
+# 
+# #subset to woodlands in England and Wales
+# wood_polys_EW <- st_filter(wood_polys, ew10k)
+
+#GB woodland polygons - unmerged
+GB_polys_unmerged <- st_read("C:/Users/ik929086/Documents/iDeer/data/derived-data/LCM2023_GB_WOODS_polygons.shp")
+```
+
+```{r}
+#Conditional probability tables ####
+
+large_attraction_cpt_df <- read.csv("C:/Users/ik929086/Documents/iDeer/output/CPTs/Large_Deer_Attraction_Index_CPT.csv")
+#Thermoregulation Index
+large_thermoreg_cpt_df <- read.csv("C:/Users/ik929086/Documents/iDeer/data/CPTs/Largedeer_Thermoregulation_Index_Max_Summed_DAMS_1000m_Amy.csv")
+#Connectivity Index
+large_connectivity_cpt_df <- read.csv("C:/Users/ik929086/Documents/iDeer/data/CPTs/Largedeer_Connectivity_Index_Woodland_cover_1000m_Amy_EDITED.csv")
+#Large deer impact risk
+large_risk_cpt_df <- read.csv("C:/Users/ik929086/Documents/iDeer/output/CPTs/Large_Deer_Damage_Risk_CPT.csv")
+#Disturbance Index
+large_urban_dist_cpt_df <- read.csv("C:/Users/ik929086/Documents/iDeer/data/CPTs/Largedeer_Urban_Distance_Index_Urban_proximity_Amy_EDITED.csv")
+
+```
+
+```{r}
+
+#Create a dataframe containing all extracted raster values within user's landscape
+
+#EXTRACT WOOD EDGE / ARABLE AREA
+
+edgepix <- extract_raster(map= Focal1000_EDGE_AREA_PERC,
+                          lcm = lcm,
+                          tiles = ew10k)
+
+saveRDS(edgepix, "C:/Users/ik929086/Documents/iDeer/output/edge_pix_1000m_df_EW.RDS")
+#read
+#edgepix<- readRDS("C:/Users/ik929086/Documents/iDeer/output/edge_pix_1000m_df_EW.RDS")
+
+
+#EXTRACT WOODLAND AREA WITHIN 1km
+woodpix <- extract_raster(map = Focal1000_WOODS_PERC,
+                          lcm = lcm,
+                          tiles = ew10k)
+saveRDS(woodpix, "C:/Users/ik929086/Documents/iDeer/output/woodpix_1000m_df_EW.RDS")
+#read
+#woodpix <- readRDS("C:/Users/ik929086/Documents/iDeer/output/woodpix_1000m_df_EW.RDS")
+
+#EXTRACT summed DAMS
+#damspix <- extract_raster(map = Focal1000_MAX_SUMMED_DAMS,
+#                          lcm = lcm,
+#                          tiles = ew10k)
+
+#saveRDS(damspix, "C:/Users/ik929086/Documents/iDeer/output/dams_1000m_df_EW.RDS")
+#read
+damspix <- readRDS("C:/Users/ik929086/Documents/iDeer/output/dams_1000m_df_EW.RDS")
+
+#EXTRACT nearest urban
+
+urbanpix <- extract_raster(map = NEAREST_URB_SUBURB,
+                          lcm = lcm,
+                         tiles = ew10k)
+
+saveRDS(urbanpix, "C:/Users/ik929086/Documents/iDeer/output/urbanpix_df_EW.RDS")
+#read
+#urbanpix <- readRDS("C:/Users/ik929086/Documents/iDeer/output/urbanpix_df_EW.RDS")
+
+#EXTRACT PERENNIAL COVER
+
+perenpix <- extract_raster(map = Focal1000_PEREN_PERC,
+                          lcm = lcm_updated,
+                          tiles = ew10k)
+
+saveRDS(perenpix, "C:/Users/ik929086/Documents/iDeer/output/perenpix_1000m_df_EW.RDS")
+#read
+#perenpix <- readRDS("C:/Users/ik929086/Documents/iDeer/output/perenpix_1000m_df_EW.RDS")
+
+#EXTRACT ARABLE AREA WITHIN 1000M
+
+arablepix <- extract_raster(map = Focal1000_ARABLE_PERC,
+                          lcm = lcm,
+                          tiles = ew10k)
+saveRDS(arablepix, "C:/Users/ik929086/Documents/iDeer/output/arablepix_1000m_df_EW.RDS")
+#read
+#arablepix <- readRDS("C:/Users/ik929086/Documents/iDeer/output/arablepix_1000m_df_EW.RDS")
+
+#left_join the datasets together #---------------
+
+df <- left_join(edgepix, woodpix, by = c("x","y")) %>%
+  left_join(damspix, by = c("x","y")) %>%
+  left_join(perenpix, by = c("x","y")) %>%
+  left_join(urbanpix, by = c("x","y")) %>%
+  left_join(arablepix, by = c("x","y"))
+               
+#make any NAs zeros apart DAMS, woodland cover and urban distance
+#these contain correct pixel IDs
+df.no.nas <- df %>%
+  mutate(across(c(Focal1000_EDGE_AREA_PERC, Focal1000_ARABLE_PERC,
+                  Focal1000_PEREN_PERC),
+                ~ tidyr::replace_na(., 0)))
+
+#Remove the NAs
+
+df.no.nas <- na.omit(df.no.nas)
+
+#save
+
+saveRDS(df.no.nas, "C:/Users/ik929086/Documents/iDeer/output/large_deer_full_df_no_nas.RDS")
+
+#read
+df.no.nas <- readRDS("C:/Users/ik929086/Documents/iDeer/output/large_deer_full_df_no_nas.RDS")
+
+ #FOR TESTING: TAKE SUBSET
+ df.no.nas.full <- df.no.nas
+   df.no.nas <- df.no.nas.full %>%
+     slice(1:100000) %>%
+     st_as_sf(coords = c("x","y"))
+   
+beep()
+
+```
+
+```{r}
+
+#calculate the optimum breakpoints using Jenks natural breaks optimization.
+#to convert variables into categorical
+
+#k = number of breaks = 3
+#need to introduce subsets - dataset too large
+
+#Nearest urban/suburban
+#Predetermined using literature
+#Low <=100  metres
+#Medium >=100 - 250 metres
+#High > 250 metres
+hist(df.no.nas.full$NEAREST_URB_SUBURB)
+abline(v = 100, col = "red")
+abline(v = 250, col = "red")
+
+#Summed DAMS
+dams_tert <- quantile(df.no.nas.full$Focal1000_MAX_SUMMED_DAMS, c(0:3/3))
+hist(df.no.nas.full$Focal1000_MAX_SUMMED_DAMS)
+abline(v = 0.45, col = "red")
+abline(v = 0.60, col = "red")
+
+#Connectivity
+connect_tert <- quantile(df.no.nas.full$Focal1000_WOODS_PERC, c(0:3/3))
+hist(df.no.nas.full$Focal1000_WOODS_PERC)
+abline(v = 20, col = "red")
+abline(v = 40, col = "red")
+
+#Edge density
+edge_Tert = quantile(df.no.nas.full$Focal1000_EDGE_AREA_PERC, c(0:3/3))
+hist(df.no.nas.full$Focal1000_EDGE_AREA_PERC)
+abline(v = 5, col = "red")
+abline(v = 10, col = "red")
+
+#Perennial cover
+peren_tert <- quantile(df.no.nas.full$Focal1000_PEREN_PERC, c(0:3/3))
+hist(df.no.nas.full$Focal1000_PEREN_PERC)
+abline(v = 30, col = "red")
+abline(v = 60, col = "red")
+
+#Arable cover
+arable_tert <- quantile(df.no.nas.full$Focal1000_ARABLE_PERC, c(0:3/3))
+hist(df.no.nas.full$Focal1000_ARABLE_PERC)
+abline(v = 0, col = "red")
+abline(v = 10, col = "red")
+
+```
+
+```{r}
+
+#Reclassify continuous data into pre-specified Low,Medium,High categories using breaks from JenksBreaks
+
+df_cat <- df.no.nas 
+
+#Edges within 1000m
+#LOW/MED/HIGH
+df_cat$Focal1000_EDGE_AREA_PERC <- ifelse(df_cat$Focal1000_EDGE_AREA_PERC  <= 5, "Low",
+          ifelse(df_cat$Focal1000_EDGE_AREA_PERC  > 5 & df_cat$Focal1000_EDGE_AREA_PERC  <=10, "Medium",
+          ifelse(df_cat$Focal1000_EDGE_AREA_PERC >10, "High", NA)))#)
+
+ 
+#Percentage woodland cover within 1000m 
+#LOW/MED/HIGH
+ df_cat$Focal1000_WOODS_PERC<- ifelse(
+  df_cat$Focal1000_WOODS_PERC<= 20, "Low",
+  ifelse(df_cat$Focal1000_WOODS_PERC> 20 & df_cat$Focal1000_WOODS_PERC<= 40, "Medium",
+    ifelse(df_cat$Focal1000_WOODS_PERC> 40, "High", NA)))#)
+  
+
+#Arable within 1000m
+#LOW/MED/HIGH
+#Manually adjusted
+df_cat$Focal1000_ARABLE_PERC <- ifelse(df_cat$Focal1000_ARABLE_PERC <=0, "Low",
+           ifelse(df_cat$Focal1000_ARABLE_PERC > 0 & df_cat$Focal1000_ARABLE_PERC <=10, "Medium",
+           ifelse(df_cat$Focal1000_ARABLE_PERC >10, "High", NA)))
+
+#Perennial cover within 1000m
+df_cat$Focal1000_PEREN_PERC <- ifelse(df_cat$Focal1000_PEREN_PERC <=30, "Low",
+          ifelse(df_cat$Focal1000_PEREN_PERC > 30 & df_cat$Focal1000_PEREN_PERC <=60, "Medium",
+          ifelse(df_cat$Focal1000_PEREN_PERC >60, "High", NA)))#)
+
+#Max summed DAMS within 1000m
+df_cat$Focal1000_MAX_SUMMED_DAMS <- ifelse(df_cat$Focal1000_MAX_SUMMED_DAMS <= 0.45, "Low",
+                      ifelse(df_cat$Focal1000_MAX_SUMMED_DAMS > 0.45  & df_cat$Focal1000_MAX_SUMMED_DAMS <=0.60, "Medium",
+                      ifelse(df_cat$Focal1000_MAX_SUMMED_DAMS > 0.60, "High", NA)))#)
+
+#Nearest urban/suburban area
+df_cat$NEAREST_URB_SUBURB <- ifelse(df_cat$NEAREST_URB_SUBURB  <= 100, "High",
+                      ifelse(df_cat$NEAREST_URB_SUBURB> 100 & df_cat$NEAREST_URB_SUBURB  <=250, "Medium",
+                      ifelse(df_cat$NEAREST_URB_SUBURB  > 250, "Low", NA)))
+
+#ensure factor levels in correct order 
+df_cat$Focal1000_MAX_SUMMED_DAMS <- factor(df_cat$Focal1000_MAX_SUMMED_DAMS, levels = c("Low","Medium","High"))
+
+df_cat$Focal1000_WOODS_PERC<- factor(df_cat$Focal1000_WOODS_PERC, levels= c("Low","Medium","High"))
+
+df_cat$Focal1000_ARABLE_PERC <- factor(df_cat$Focal1000_ARABLE_PERC, levels = c("Low","Medium","High"))
+
+df_cat$Focal1000_EDGE_AREA_PERC <- factor(df_cat$Focal1000_EDGE_AREA_PERC, levels = c("Low","Medium","High"))
+
+df_cat$NEAREST_URB_SUBURB <- factor(df_cat$NEAREST_URB_SUBURB, levels = c("Low","Medium","High"))
+
+df_cat$Focal1000_PEREN_PERC <- factor(df_cat$Focal1000_PEREN_PERC, levels = c("Low","Medium","High"))
+
+unique(df_cat$NEAREST_URB_SUBURB)
+unique(df_cat$Focal1000_MAX_SUMMED_DAMS)
+unique(df_cat$Focal1000_PEREN_PERC)
+unique(df_cat$Focal1000_ARABLE_PERC)
+unique(df_cat$Focal1000_EDGE_AREA_PERC)
+unique(df_cat$Focal1000_WOODS_PERC)
+
+```
+
+#Set up conditional probability tables for BBN
+
+```{r}
+#CPTS for measured nodes
+
+#nearest urban/suburban
+urban_cpt <-matrix(c(0.333333,0.333333,0.333333),ncol = 3,dimnames = list(NULL, c("Low","Medium","High")))
+#perennial cover within 1000m
+peren_cpt <- matrix(c(0.333333,0.333333,0.333333),ncol = 3,dimnames = list(NULL, c("Low", "Medium","High")))
+#arable area within 1000m
+arable_cpt <- matrix(c(0.333333,0.333333,0.333333),ncol = 3,dimnames = list(NULL, c("Low", "Medium","High")))
+#Max summed dams within 1000m
+dams_cpt<-matrix(c(0.333333,0.333333,0.333333),ncol = 3,dimnames = list(NULL, c("Low", "Medium","High")))
+#woodland connectivity within 1000m
+wood_connect_cpt <- matrix(c(0.333333,0.333333,0.333333),ncol = 3,dimnames = list(NULL, c("Low", "Medium","High")))
+#woodland edge area within 1000m
+edge_cpt <-matrix(c(0.333333,0.333333,0.333333),ncol = 3,dimnames = list(NULL, c("Low", "Medium","High")))
+```
+
+```{r}
+#CPT for Connectivity Index ---------------#
+
+connectivity_cpt_df <- large_connectivity_cpt_df %>%
+  dplyr::select(-c("X","Expertise","Confidence","Total"))
+  
+# Define the dimensions
+connect_index_levels <- c("Low", "Medium", "High")
+wood_cover_1000m_levels <- unique(connectivity_cpt_df$Woodland_cover_1000m)
+
+# Initialize the array with dimensions and names
+connectivity_index_cpt <- array(
+  NA,  # Placeholder value
+  dim = c(length(connect_index_levels), 
+          length(wood_cover_1000m_levels)), 
+  dimnames = list(
+    connect_index = connect_index_levels,
+    Woodland_cover_1000m = wood_cover_1000m_levels)
+  )
+
+
+# Populate the array with values from the DataFrame
+for (i in 1:nrow(connectivity_cpt_df)) {
+  # Get the indices for each dimension
+  connect_idx <- which(dimnames(connectivity_index_cpt)$Woodland_cover_1000m == connectivity_cpt_df$Woodland_cover_1000m[i])
+
+
+  # Assign values for each connectivity index level
+  connectivity_index_cpt["Low", connect_idx] <- connectivity_cpt_df$Low[i]
+  connectivity_index_cpt["Medium", connect_idx] <- connectivity_cpt_df$Medium[i]
+  connectivity_index_cpt["High", connect_idx] <- connectivity_cpt_df$High[i]
+}
+connectivity_index_cpt
+```
+
+```{r}
+#CPT for Attraction index ---------------#
+
+attraction_cpt_df <- large_attraction_cpt_df %>%
+  #dplyr::select(-c("X","Expertise","Confidence","Total"))
+  dplyr::select(-c("X","total_score"))
+head(attraction_cpt_df)
+
+# Define the dimensions
+attraction_index_levels <- c("Low", "Medium", "High")
+peren_area_levels <- unique(attraction_cpt_df$Perennial_cover_1000m)
+arable_area_levels <- unique(attraction_cpt_df$Arable_cover_1000m)
+edge_levels <- unique(attraction_cpt_df$Woodland_edge_cover_1000m)
+
+# Initialize the array with dimensions and names
+attraction_index_cpt <- array(
+  NA,  # Placeholder value
+  dim = c(length(attraction_index_levels),
+          length(peren_area_levels),
+          length(edge_levels),
+          length(arable_area_levels)),
+  dimnames = list(
+    attraction_index = attraction_index_levels,
+    Focal1000_PEREN_PERC = peren_area_levels,
+    Focal1000_EDGE_AREA_PERC = edge_levels,
+    Focal1000_ARABLE_PERC = arable_area_levels
+  )
+)
+
+# Populate the array
+for (i in 1:nrow(attraction_cpt_df)) {
+  peren_val <- attraction_cpt_df$Perennial_cover_1000m[i]
+  edge_val <- attraction_cpt_df$Woodland_edge_cover_1000m[i]
+  arable_val <- attraction_cpt_df$Arable_cover_1000m[i]
+
+  attraction_index_cpt["Low", as.character(peren_val), as.character(edge_val), as.character(arable_val)] <- attraction_cpt_df$Low[i]
+  attraction_index_cpt["Medium", as.character(peren_val), as.character(edge_val), as.character(arable_val)] <- attraction_cpt_df$Medium[i]
+  attraction_index_cpt["High", as.character(peren_val), as.character(edge_val), as.character(arable_val)] <- attraction_cpt_df$High[i]
+
+}
+
+#attraction_index_cpt <- attraction_index_cpt / 100
+attraction_index_cpt
+```
+
+```{r}
+#CPT for thermoregulation index --------------------------------####
+
+thermoreg_cpt_df<- large_thermoreg_cpt_df %>%
+  dplyr::select(-c("X","Expertise","Confidence","Total"))
+
+# Define the dimensions
+thermoreg_index_levels <- c("Low", "Medium", "High")
+sum_dams_1000m_levels <- unique(thermoreg_cpt_df$Max_summed_DAMS_1000m)
+
+# Initialize the array
+thermoreg_index_cpt <- array(
+  NA,
+  dim = c(length(thermoreg_index_levels), length(sum_dams_1000m_levels)),
+  dimnames = list(
+    thermoreg_index = thermoreg_index_levels,
+    sum_dams_1000m = sum_dams_1000m_levels
+  )
+)
+
+# Populate the array with values from the DataFrame
+for (i in 1:nrow(thermoreg_cpt_df)) {
+  dams_val <- thermoreg_cpt_df$Max_summed_DAMS_1000m[i]
+
+  thermoreg_index_cpt["Low", as.character(dams_val)] <- thermoreg_cpt_df$Low[i]
+  thermoreg_index_cpt["Medium", as.character(dams_val)] <- thermoreg_cpt_df$Medium[i]
+  thermoreg_index_cpt["High", as.character(dams_val)] <- thermoreg_cpt_df$High[i]
+}
+
+thermoreg_index_cpt
+```
+
+```{r}
+#CPT for disturbance index --------------------------------####
+
+disturbance_cpt_df<- large_urban_dist_cpt_df %>%
+  dplyr::select(-c("X","Expertise","Confidence","Total"))
+
+# Define the dimensions
+disturbance_index_levels <- c("Low", "Medium", "High")
+distance_to_urban_levels <- unique(large_urban_dist_cpt_df$Urban_proximity)
+
+# Initialize the array with dimensions and names
+disturbance_index_cpt <- array(
+  NA,  # Placeholder value
+  dim = c(length(disturbance_index_levels), 
+          length(distance_to_urban_levels)),
+  dimnames = list(
+    urban_dist_index = disturbance_index_levels,
+    dist_to_urban = distance_to_urban_levels
+  )
+)
+
+# Populate the array with values from the DataFrame
+for (i in 1:nrow(disturbance_cpt_df)) {
+  urban_val <- disturbance_cpt_df$Urban_proximity[i] 
+  disturbance_index_cpt["Low", as.character(urban_val)] <- disturbance_cpt_df$Low[i]
+  disturbance_index_cpt["Medium", as.character(urban_val)] <- disturbance_cpt_df$Medium[i]
+  disturbance_index_cpt["High", as.character(urban_val)] <- disturbance_cpt_df$High[i]
+}
+
+disturbance_index_cpt
+```
+
+```{r}
+#Final CPT: deer damage risk -----------------------------------####
+
+risk_cpt_df<- large_risk_cpt_df %>%
+  dplyr::select(-c("X","total_score")) %>%
+  rename(attraction_index=Attraction_Index,
+         connect_index=Connectivity_Index,
+         thermoreg_index=Thermoregulation_Index,
+         urban_dist_index= Urban_Distance_Index)
+
+# Replace '..' with '_' in column names
+#colnames(risk_cpt_df) <- gsub("\\.\\.", "_", colnames(risk_cpt_df))
+  
+head(risk_cpt_df)
+
+# Define the dimensions
+large_risk_index_levels <- c("Low", "Low_Medium" ,"Medium", "Medium_High" , "High")
+connectivity_index_levels <- unique(risk_cpt_df$connect_index)
+attraction_index_levels <- unique(risk_cpt_df$attraction_index)
+thermoreg_index_levels <- unique(risk_cpt_df$thermoreg_index)
+urban_dist_levels <- unique(risk_cpt_df$urban_dist_index)
+
+# Initialize the array with dimensions and names
+large_risk_index_cpt <- array(
+  NA,  # Placeholder value
+  dim = c(length(large_risk_index_levels), 
+          length(connectivity_index_levels), 
+          length(attraction_index_levels), 
+          length(thermoreg_index_levels),
+          length(urban_dist_levels)),
+  dimnames = list(
+    large_risk_index = large_risk_index_levels,
+    connect_index = connectivity_index_levels,
+    attraction_index = attraction_index_levels,
+    thermoreg_index = thermoreg_index_levels,
+    urban_dist_index = urban_dist_levels
+  )
+)
+
+# Populate the array with values from the DataFrame
+for (i in 1:nrow(risk_cpt_df)) {
+  connect_val <- risk_cpt_df$connect_index[i]
+  attract_val <- risk_cpt_df$attraction_index[i]
+  thermoreg_val <- risk_cpt_df$thermoreg_index[i]
+  urban_dist_val <- risk_cpt_df$urban_dist_index[i]
+
+  large_risk_index_cpt["Low", as.character(connect_val), as.character(attract_val), as.character(thermoreg_val), as.character(urban_dist_val)] <- risk_cpt_df$Low[i]
+  large_risk_index_cpt["Low_Medium", as.character(connect_val), as.character(attract_val), as.character(thermoreg_val), as.character(urban_dist_val)] <- risk_cpt_df$Low_Medium[i]
+  large_risk_index_cpt["Medium", as.character(connect_val), as.character(attract_val), as.character(thermoreg_val), as.character(urban_dist_val)] <- risk_cpt_df$Medium[i]
+  large_risk_index_cpt["Medium_High", as.character(connect_val), as.character(attract_val), as.character(thermoreg_val), as.character(urban_dist_val)] <- risk_cpt_df$Medium_High[i]
+  large_risk_index_cpt["High", as.character(connect_val), as.character(attract_val), as.character(thermoreg_val), as.character(urban_dist_val)] <- risk_cpt_df$High[i]
+}
+large_risk_index_cpt 
+```
+
+```{r}
+#Create BBN structure#------------------------------------
+
+# Step 1: Explicitly define the nodes in the network
+nodes <- c(
+  "Woodland_cover_1000m",
+  "dist_to_urban",
+  "Focal1000_PEREN_PERC",
+  "Focal1000_ARABLE_PERC",
+  "sum_dams_1000m",
+  "Focal1000_EDGE_AREA_PERC",
+  "attraction_index",
+  "thermoreg_index",
+  "connect_index",
+  "urban_dist_index",
+  "large_risk_index"
+)
+
+#empty graph
+library(bnlearn)
+e = empty.graph(nodes)
+
+arc.set = matrix(c("Woodland_cover_1000m", "connect_index",
+                   "dist_to_urban", "urban_dist_index", 
+                   "Focal1000_PEREN_PERC", "attraction_index",
+                   "Focal1000_EDGE_AREA_PERC", "attraction_index",
+                   "Focal1000_ARABLE_PERC", "attraction_index",
+                   "sum_dams_1000m","thermoreg_index",
+                   "thermoreg_index","large_risk_index",
+                   "connect_index","large_risk_index",
+                   "attraction_index","large_risk_index",
+                   "urban_dist_index", "large_risk_index"),
+                 ncol = 2, byrow = TRUE,
+                 dimnames = list(NULL, c("from", "to")))
+
+arcs(e) <- arc.set
+
+model_string <- modelstring(e) 
+
+net<-model2network(model_string) 
+# You dont need to repeat the names of the nodes with parents (child nodes) 
+
+# Custom fitting network (matching up the nodes to their CPTs)
+dfit = custom.fit(net, dist = list(Woodland_cover_1000m = wood_connect_cpt, 
+                                   dist_to_urban = urban_cpt,
+                                   Focal1000_PEREN_PERC = peren_cpt,
+                                   Focal1000_EDGE_AREA_PERC = edge_cpt,
+                                   sum_dams_1000m = dams_cpt,
+                                   Focal1000_ARABLE_PERC = arable_cpt,
+                                   connect_index = connectivity_index_cpt,
+                                   thermoreg_index = thermoreg_index_cpt,
+                                   urban_dist_index = disturbance_index_cpt,
+                                   attraction_index =attraction_index_cpt,
+                                   large_risk_index=large_risk_index_cpt))
+
+#Plot BN structure ####
+#graphviz.plot(net)
+
+#Check parameters ####
+dfit
+```
+
+```{r}
+predict_dat <- df_cat %>%st_drop_geometry() #%>% #drop geometry
+  #mutate(across(where(is.character), toupper)) %>% #convert characters to upper case
+  #dplyr::select(-c("x","y"))
+
+#Ensure variable names match those in BBN
+predict_dat<-predict_dat%>%rename(
+  Focal1000_ARABLE_PERC=Focal1000_ARABLE_PERC,
+  Focal1000_PEREN_PERC=Focal1000_PEREN_PERC,
+  sum_dams_1000m=Focal1000_MAX_SUMMED_DAMS,
+  Woodland_cover_1000m=Focal1000_WOODS_PERC,
+  dist_to_urban = NEAREST_URB_SUBURB,
+  Focal1000_EDGE_AREA_PERC = Focal1000_EDGE_AREA_PERC)
+
+#Make empty columns for the latent (unobserved) variables
+
+predict_dat$attraction_index <- NA
+predict_dat$connect_index <- NA
+predict_dat$thermoreg_index <- NA
+predict_dat$urban_dist_index <- NA
+predict_dat$large_risk <- NA
+
+head(predict_dat)
+
+#Ensure all columns are factors, not characters
+predict_dat <- predict_dat %>% mutate_all(as.factor)
+
+#Ensure factor levels are in correct order
+levels(predict_dat$Woodland_cover_1000m)<-c("Low", "Medium", "High")
+levels(predict_dat$Focal1000_PEREN_PERC)<-c("Low", "Medium", "High")
+levels(predict_dat$Focal1000_ARABLE_PERC)<-c("Low", "Medium", "High")
+levels(predict_dat$dist_to_urban) <- c("Low", "Medium", "High")
+levels(predict_dat$sum_dams_1000m)<-c("Low", "Medium", "High")
+levels(predict_dat$Focal1000_EDGE_AREA_PERC)<-c("Low", "Medium", "High")
+levels(predict_dat$attraction_index)<-c("Low", "Medium", "High")
+levels(predict_dat$connect_index)<-c("Low", "Medium", "High")
+levels(predict_dat$thermoreg_index)<-c("Low", "Medium", "High")
+levels(predict_dat$urban_dist_index)<-c("Low", "Medium", "High")
+levels(predict_dat$large_risk)<-c("Low", "Low_Medium" , "Medium", "Medium_High", "High")
+
+all_nodes <- names(dfit)
+
+# #check levels match in dfit and predict_dat
+# data_check <- sapply(all_nodes, function(node) { identical(levels(predict_dat[[node]]), names(dfit[[node]]$prob)) })
+# print(data_check)
+# #For any variables where match is FALSE,
+# #Update factor levels in `predict_dat` to match `dfit`
+# # Identify mismatched nodes
+# mismatched_nodes <- names(data_check[data_check == FALSE])
+# for (node in mismatched_nodes) {
+# correct_levels <- names(dfit[[node]]$prob)
+# predict_dat[[node]] <- factor(predict_dat[[node]], levels = correct_levels)
+# }
+# 
+# #Ensure predict_data is a data.frame
+# predict_dat <- as.data.frame(predict_dat)
+
+# #Ensure factor levels are in correct order
+# levels(predict_dat$Woodland_cover_1000m)<-c("Low", "Medium", "High")
+# levels(predict_dat$alt_forage_qual_1000m)<-c("Low", "Medium", "High")
+# levels(predict_dat$dist_to_urban) <- c("Near","Medium","Far")
+# levels(predict_dat$wood_edge_Focal1000_ARABLE_PERC)<-c("Low", "Medium", "High")
+# levels(predict_dat$sum_dams_1000m)<-c("Low", "Medium", "High")
+# levels(predict_dat$attraction_index)<-c("Low", "Medium", "High")
+# levels(predict_dat$connect_index)<-c("Low", "Medium", "High")
+# levels(predict_dat$thermoreg_index)<-c("Low", "Medium", "High")
+# levels(predict_dat$urban_dist_index)<-c("Low", "Medium", "High")
+# levels(predict_dat$large_risk)<-c("Low","Low_Medium", "Medium", "Medium_High", "High")
+
+#PREDICTIONS TAKE A LONG TIME, ABOUT 3 MINUTES PER LINE
+#Predict values for latent variables
+pred_thermoreg = predict(object=dfit,node="thermoreg_index",data=predict_dat, method = "parents")
+pred_fpi = predict(dfit,node="attraction_index",data=predict_dat, method = "parents")
+pred_connect = predict(dfit,node="connect_index",data=predict_dat, method = "parents")
+pred_disturb =predict(dfit, node="urban_dist_index",data=predict_dat, method = "parents")
+
+#fill the columns
+predict_dat$thermoreg_index <- pred_thermoreg
+predict_dat$attraction_index <- pred_fpi
+predict_dat$connect_index <- pred_connect
+predict_dat$urban_dist_index <- pred_disturb
+
+#Predict damage
+pred_damage = predict(dfit,node = "large_risk_index",data = predict_dat,method = "parents")
+predict_dat$large_risk <- pred_damage
+
+# # scatter plot of forage pressure index and alt forage quality
+# predict_dat_sample <- predict_dat[sample(nrow(predict_dat), 10000), ]
+# ggplot(predict_dat_sample, aes(x = alt_forage_qual_1000m, y = attraction_index)) +
+#   geom_jitter(width = 0.2, height = 0.2, size = 3, color = "blue") +
+#   labs(x = "Alt forage Q", y = "Index") +
+#   theme_minimal()
+
+#Add damage risk back into spatial dataset
+
+df_cat$pred_damage <- pred_damage
+df_cat$pred_thermoreg <- pred_thermoreg
+df_cat$pred_attraction_index <- pred_fpi
+df_cat$pred_connect <- pred_connect
+df_cat$pred_disturb <- pred_disturb
+
+beep()
+
+
+```
+
+```{r}
+
+#Make risk raster #------------------------
+
+#par(mfrow = c(1, 1))
+
+ # Make sf object
+ df_sf <- st_as_sf(df_cat, coords = c("x", "y"), crs = st_crs(bng))
+
+ #save sf object
+ saveRDS(df_sf, "C:/Users/ik929086/Documents/iDeer/output/large_deer_full_df_cat_point_geometry.RDS")
+ 
+df_sf <- readRDS("C:/Users/ik929086/Documents/iDeer/output/large_deer_full_df_cat_point_geometry.RDS")
+ 
+#Make large deer predict_dat rasters to check layers
+# Define the color palette
+index_palette <- c("0" = NA, "1" = "green", "2" = "orange", "3" = "red")
+
+# # --- Focal1000_EDGE_AREA_PERC ---
+# # Convert to character FIRST
+# df_sf$Focal1000_EDGE_AREA_PERC <- as.character(df_sf$Focal1000_EDGE_AREA_PERC)
+# # Now convert to factor with correct levels
+# df_sf$Focal1000_EDGE_AREA_PERC <- factor(df_sf$Focal1000_EDGE_AREA_PERC, levels = c("Low", "Medium", "High"))
+# # Convert to numeric (now it will be in the correct order)
+# vals <- levels(df_sf$Focal1000_EDGE_AREA_PERC) # Get levels in correct order
+# num_vals <- seq(1, length(vals), by = 1)
+# df_sf$Focal1000_EDGE_AREA_PERC <- num_vals[match(df_sf$Focal1000_EDGE_AREA_PERC, vals)]
+# df_edge <- df_sf %>% dplyr::select(geometry, Focal1000_EDGE_AREA_PERC)
+# edge_r <- stars::st_rasterize(sf = df_edge)
+# plot(edge_r, col = index_palette, main = "Focal1000_EDGE_AREA_PERC")
+# 
+# # --- Focal1000_ARABLE_PERC ---
+# 
+# if (is.factor(df_sf$Focal1000_ARABLE_PERC) || is.character(df_sf$Focal1000_ARABLE_PERC)) {
+#   # 1. Convert to character FIRST (Crucial!)
+#   df_sf$Focal1000_ARABLE_PERC <- as.character(df_sf$Focal1000_ARABLE_PERC)
+#   # 2. Now convert to factor with desired levels
+#   df_sf$Focal1000_ARABLE_PERC <- factor(df_sf$Focal1000_ARABLE_PERC, levels = c("Low", "Medium", "High")) # Or your levels
+#   # 3. Convert to numeric (now in the correct order)
+#   vals <- levels(df_sf$Focal1000_ARABLE_PERC) # Get levels in correct order
+#   num_vals <- seq(1, length(vals), by = 1)
+#   df_sf$Focal1000_ARABLE_PERC <- num_vals[match(df_sf$Focal1000_ARABLE_PERC, vals)]
+# }
+# df_arable <- df_sf %>% dplyr::select(geometry, Focal1000_ARABLE_PERC)
+# arable_r <- stars::st_rasterize(sf = df_arable)
+# #plot(arable_r, col = index_palette, main = "Focal1000_ARABLE_PERC")  # Use your palette
+# plot(arable_r)
+# 
+# 
+# # --- Focal1000_PEREN_PERC ---
+# 
+# if (is.factor(df_sf$Focal1000_PEREN_PERC) || is.character(df_sf$Focal1000_PEREN_PERC)) {
+#   # 1. Convert to character FIRST (Crucial!)
+#   df_sf$Focal1000_PEREN_PERC <- as.character(df_sf$Focal1000_PEREN_PERC)
+#   # 2. Now convert to factor with desired levels
+#   df_sf$Focal1000_PEREN_PERC <- factor(df_sf$Focal1000_PEREN_PERC, levels = c("Low", "Medium", "High")) # Or your levels
+#   # 3. Convert to numeric (now in the correct order)
+#   vals <- levels(df_sf$Focal1000_PEREN_PERC) # Get levels in correct order
+#   num_vals <- seq(1, length(vals), by = 1)
+#   df_sf$Focal1000_PEREN_PERC <- num_vals[match(df_sf$Focal1000_PEREN_PERC, vals)]
+# }
+# df_peren <- df_sf %>% dplyr::select(geometry, Focal1000_PEREN_PERC)
+# peren_r <- stars::st_rasterize(sf = df_peren)
+# plot(peren_r, col = index_palette, main = "Focal1000_PEREN_PERC")  # Use your palette
+# 
+# 
+
+df_sf_test <- df_sf[1:100000,]
+
+#Forage pressure index
+forage_vals <- c("Low"=1,"Medium"=2,"High"=3)
+df_sf_test$forage_vals <- forage_vals[df_sf_test$pred_attraction_index]
+df_sf_selected <- df_sf_test%>%dplyr::select(c(geometry, forage_vals))
+#forage_r <- stars::st_rasterize(sf = df_sf_selected, template = stars_template)
+forage_r <- stars::st_rasterize(sf = df_sf_selected)
+#stars::write_stars(forage_r, "C:/Users/ik929086/Documents/iDeer/output/large_deer_attraction_index_rast_test.tif",overwrite=TRUE)
+plot(forage_r, col = index_palette)
+plot(forage_r)
+# 
+#Connectivity index
+connect_vals <- c("Low"=1,"Medium"=2,"High"=3)
+df_sf_test$connect_vals <- connect_vals[df_sf_test$pred_connect]
+df_sf_selected <- df_sf_test%>%dplyr::select(c(geometry, connect_vals))
+#forage_r <- stars::st_rasterize(sf = df_sf_selected, template = stars_template)
+connect_r <- stars::st_rasterize(sf = df_sf_selected)
+#stars::write_stars(connect_r, "C:/Users/ik929086/Documents/iDeer/output/large_deer_connectivity_index_rast_test.tif",overwrite=TRUE)
+plot(connect_r, col = index_palette)
+
+ #Thermoreg index
+ thermoreg_vals <- c("Low"=1,"Medium"=2,"High"=3)
+ df_sf_test$thermoreg_vals <- thermoreg_vals[df_sf_test$pred_thermoreg]
+ df_sf_selected <- df_sf_test%>%dplyr::select(geometry, thermoreg_vals)
+ #forage_r <- stars::st_rasterize(sf = df_sf_selected, template = stars_template)
+ thermoreg_r <- stars::st_rasterize(sf = df_sf_selected)
+ #stars::write_stars(connect_r, "C:/Users/ik929086/Documents/iDeer/output/large_deer_connectivity_index_rast_test.tif",overwrite=TRUE)
+ plot(thermoreg_r, col = index_palette)
+# #stars::write_stars(thermoreg_r, "C:/Users/ik929086/Documents/iDeer/output/large_deer_attraction_index_rast_test.tif",overwrite=TRUE)
+# 
+# #Disturbance index
+# disturbance_vals <- c("Low"=1,"Medium"=2,"High"=3)
+# df_sf$disturbance_vals <- disturbance_vals[df_sf$pred_disturb]
+# df_sf_selected <- df_sf%>%dplyr::select(geometry, disturbance_vals)
+# disturbance_r <- stars::st_rasterize(sf = df_sf_selected)
+# plot(disturbance_r, col = index_palette)
+
+ # Define the value mapping for pred_damage
+damage_values <- c("Low" = 1, "Low_Medium" = 2, "Medium" = 3, "Medium_High" = 4, "High" = 5)
+df_sf$value <- damage_values[df_sf$pred_damage]
+damage_palette <- c("1" = "green", 
+                    "2" = "yellow", 
+                    "3" = "orange", 
+                    "4" = "red" ,
+                    "5" = "firebrick4")
+
+ #Convert to raster
+ # Select the geometry and value column
+ df_sf_selected <- df_sf %>% dplyr::select(geometry, value)
+ #make a stars template
+ # Convert the RasterLayer to a stars object
+ stars_template <- stars::st_as_stars(lcm)
+ # Use the template raster for extent, resolution, and CRS
+ r <- stars::st_rasterize(sf = df_sf_selected, template = stars_template)
+ #r <- stars::st_rasterize(sf = df_sf_selected)
+ #r[r == 0] <- NA #make zero's NAs
+ #plot(r, col = damage_palette)
+stars::write_stars(r, "C:/Users/ik929086/Documents/iDeer/output/large_deer_risk_raster.tif",overwrite=TRUE)
+
+beep()
+
+r <- raster("C:/Users/ik929086/Documents/iDeer/output/large_deer_risk_raster.tif")
+r[is.na(r)] <- 0
+
+ #r_rast <- terra::rast(r)
+ 
+ #Finally, crop the raster to the England-Wales shapefile
+ 
+ #EW <- st_read("C:/Users/ik929086/Documents/iDeer/data/raw-data/GB shapefile/England_Wales_combined.shp")
+ 
+ #r_rast_EW <- crop(r_rast, EW)
+ #r_rast_EW <- mask(r_rast_EW, EW)
+ 
+ #r_rast_EW <- replace(r_rast_EW,  r_rast_EW==0, NA)
+ 
+#writeRaster(r_rast_EW, "C:/Users/ik929086/Documents/iDeer/output/large_deer_risk_raster_EW.tif",overwrite=TRUE)
+```
+
+```{r}
+#Extract deer damage risk to woodland polygons
+
+# Convert the stars object to a RasterLayer
+raster_layer <- as(r, "Raster")
+crs(raster_layer) <- bng
+
+plot(raster_layer)
+
+#source("C:/Users/ik929086/Documents/iDeer/code/functions/extract_raster_pixels_to_wood_polys_func_site_level.R")
+
+source("C:/Users/ik929086/Documents/iDeer/code/functions/extract_raster_pixels_to_wood_polys_func_10km_chunks_mean_poly_values.R")
+
+#Extract raster values to woodland polygons
+#Use custom function to loop over 10k tiles - takes too long unchunked
+ large_deer_risk_poly_vals <- extract_raster_to_wood_polygons(
+   risk_map = raster_layer,
+   wood_polys = GB_polys_unmerged,
+   tiles = ew10k[1:2,])
+ 
+ large_deer_risk_polys <- large_deer_risk_poly_vals$result
+ 
+ #The above step was done on Peter's computer as it takes around 12 hours
+ #Read in file from Peter's PC
+  large_deer_risk_polys <- st_read("C:/Users/ik929086/OneDrive - University of Reading/R_data_transfer/outputs/large_deer_risk_extracted_to_polys.shp")
+ 
+#round mean_risk column to 0 decimal places
+large_deer_risk_polys$mean_risk <- round(large_deer_risk_polys$mean_risk,0)
+ 
+ #write
+ 
+ st_write(large_deer_risk_polys, "C:/Users/ik929086/Documents/iDeer/output/Final_risk_maps/large_deer_risk_polys_rounded.shp",append=FALSE) 
+
+# # Get polygon IDs
+# poly_ids <- unique(large_deer_risk_poly_vals$patch_ID)
+# 
+# # # Group by patch_ID and calculate the counts for each raster_layer category
+# deer_risk_landcover <- large_deer_risk_poly_vals %>%
+#   filter(!is.na(r_rast)) %>% # Remove NA values
+#   group_by(patch_ID) %>%
+#   summarise(
+#     risk_count_1 = sum(r_rast == 1, na.rm = TRUE),
+#     risk_count_2 = sum(r_rast == 2, na.rm = TRUE),
+#     risk_count_3 = sum(r_rast == 3, na.rm = TRUE),
+#     risk_count_4 = sum(r_rast == 4, na.rm = TRUE),
+#     risk_count_5 = sum(r_rast == 5, na.rm = TRUE)
+#   )
+# 
+# # # Combine results into a matrix, where each column corresponds to a polygon
+# deer_risk_landcover_matrix <- do.call(rbind, deer_risk_landcover)
+# #make colnames patch_IDs
+# colnames(deer_risk_landcover_matrix) <- deer_risk_landcover_matrix[1,]
+# 
+# #Add polygon IDs to the matrix
+# deer_risk_landcover_df <- data.frame(t(deer_risk_landcover_matrix))
+# 
+# #Convert the matrix to a long format
+# deer_risk_landcover_long <- reshape2::melt(
+#   deer_risk_landcover_df,
+#   id.vars = "patch_ID",  # Specify the ID variable(s)
+#   variable.name = "risk_category",  # Name for the risk category column
+#   value.name = "value"  # Name for the value column
+# )
+# 
+# mean_risk <- deer_risk_landcover_long %>%
+#   mutate(
+#     risk_category = as.numeric(gsub("[^0-9]", "", risk_category))  # Remove non-numeric characters and convert to numeric
+#   ) %>%
+#   group_by(patch_ID) %>%
+#   filter(value != 0) %>%  # Exclude rows with zero values
+#   summarise(
+#     Weighted_Mean = sum(risk_category * value) / sum(value),
+#     #Weighted SD calculation
+#     sd = sqrt(sum(value * (risk_category - Weighted_Mean)^2) / sum(value)),
+#     # Weighted SE calculation
+#     se = sd / sqrt(sum(value)),
+#     .groups = 'drop'
+#   )
+
+# #Append the mean risk categories to the polygon dataset
+# polygon_with_mean_risk <- site_woods_unmerged %>%
+#   left_join(mean_risk, by = "patch_ID")
+
+ggplot(large_deer_risk_polys) +
+  geom_sf(aes(fill =mean_risk), color = "black") +  # Fill by Weighted_Mean, black borders
+  scale_fill_gradient(low = "gold", high = "red",limits = c(1, 5)) +  # Customize color gradient (optional)
+  labs(title = "Polygon Geometries Colored by Mean Risk",
+       fill = "Weighted Mean") +  # Add title and legend label
+  theme_minimal()  # Use a minimal theme (optional)
+```

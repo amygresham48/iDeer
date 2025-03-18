@@ -36,11 +36,12 @@ Focal1000= raster::focal(x=arable_raster_GB, w=circle.buff, fun=sum, na.rm=T, pa
                          filename = here("output/GB_datasets_2023/large_deer/sum_arable_1000_2023.tif"), 
                          overwrite=T)#do focal window analysis with weights matrix
 
-#plot(Focal1000)
+Focal1000_ARABLE <- raster("./output/GB_datasets_2023/large_deer/sum_arable_1000_2023.tif")
+#Divide number of pixels by the total number of 25m2 pixels in a buffer*100 = percentage arable
+Focal1000_ARABLE_PERC <- (Focal1000_ARABLE/5027)*100
+#save
+writeRaster(Focal1000_ARABLE_PERC, "./output/GB_datasets_2023/large_deer/percentage_cover_arable_1000_2023.tif")
 
-#IN THE SCRIPT TO MAKE THE CURRENT RISK MAP, I MULTIPLE THIS LAYER BY 25 TO GET THE TRUE AREA
-#FORGOT TO DO THIS HERE
-#SEE current_deer_impact_risk_EW_large_deer.qmd
 
 }
 

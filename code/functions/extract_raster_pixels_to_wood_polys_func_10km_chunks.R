@@ -56,7 +56,7 @@ extract_raster_to_wood_polygons <- function(risk_map, tiles, wood_polys) {
     
     #Matt's code:
     #will tell me how many of each pixel is in each polygon
-    risk_map_poly_vals <- extract(cropped_raster, wood_polys_tile, df = TRUE)
+    risk_map_poly_vals <- raster::extract(cropped_raster, wood_polys_tile, df = TRUE)
     
     #get row number and patch_ID from wood_poly_tiles
     wood_tiles_IDs <- data.frame(ID = rep(seq_len(nrow(wood_polys_tile))),
@@ -68,9 +68,12 @@ extract_raster_to_wood_polygons <- function(risk_map, tiles, wood_polys) {
     }
     
     # Get name of map
-    raster_name <- deparse(substitute(risk_map))
+    raster_name <- deparse(substitute(value))
     
     # Create a data frame with the extracted values and patch_IDs
+    
+    colnames(risk_map_poly_vals)[2] <- "value"
+    
     vals <- data.frame(
       ID = risk_map_poly_vals$ID,
       raster_values = risk_map_poly_vals$value  # Extracted raster values
@@ -84,11 +87,23 @@ extract_raster_to_wood_polygons <- function(risk_map, tiles, wood_polys) {
     # Filter out NA values
     vals <- vals[!is.na(vals$raster_values), ]
     
+    #Summarise dataframe: get mean Focal1000_wood_area for each polygon
+    
+    summary_df <- vals %>%
+      group_by(patch_ID) %>%
+      summarise(mean_value = mean(raster_values, na.rm = TRUE))
+      
+    #Join geometry to extracted values
+    geometry_tiles <- st_filter(GB_polys_merged, ew10k[i,])
+    merged_df <- left_join(summary_df, geometry_tiles, by = c("patch_ID"))
+    merged_df <- merged_df %>% filter(!st_is_empty(geometry))
+    merged_df <- st_as_sf(merged_df)
+    
     # Rename raster_values column to the map name
-    names(vals)[names(vals) == "raster_values"] <- raster_name
+    names(merged_df)[names(merged_df) == "mean_value"] <- paste0("mean_", raster_name)
     
     # Append the current tile's results to the overall list
-    extraction_results[[i]] <- vals
+    extraction_results[[i]] <- merged_df
   }
   
   # Combine all results into a single data frame
