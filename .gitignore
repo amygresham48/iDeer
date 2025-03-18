@@ -4,7 +4,6 @@
 data/*
 output/*
 .RDataTmp*
-*.Rproj
 *.png
 figure-html*
 code/package citations
