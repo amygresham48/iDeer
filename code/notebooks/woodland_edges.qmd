@@ -36,7 +36,7 @@ unique(non_woods$IFT_IOA)
 #Other things not usable habitat
 
 #Mixed structure habitats = open areas, or areas with good potential for foraging resources
-mixed_structure_habitats <- nfi %>% filter(IFT_IOA %in% c("Bare area","Assumed woodland","Failed","Coppice","Coppice with standards","Windblow","Grassland","Ground prep","Agriculture land","Other vegetation","Windfarm","Felled","Low density", "Young trees"))
+mixed_structure_habitats <- nfi %>% filter(IFT_IOA %in% c("Bare area","Assumed woodland","Failed","Coppice","Coppice with standards","Windblow","Grassland","Ground prep","Agriculture land","Other vegetation","Felled","Low density", "Young trees","Shrub"))
 
 #Closed habitats = mature woodland
 closed_habitats <- nfi %>% filter(IFT_IOA %in% c("Conifer","Broadleaved","Mixed mainly broadleaved","Mixed mainly conifer"))
