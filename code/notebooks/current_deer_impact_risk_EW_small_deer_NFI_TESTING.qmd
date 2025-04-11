@@ -799,7 +799,7 @@ plot(wood_value_r, col = index_palette)
 #stars::write_stars(thermoreg_r, "C:/Users/ik929086/Documents/iDeer/output/small_deer_forage_pressure_index_rast_test.tif",overwrite=TRUE)
 
 #  # Define the value mapping for pred_damage
-risk_palette <- c("0"="transparent","1" = "green", "2" = "yellow", "3" = "orange", "4" = "red", "5" = "brown")
+risk_palette <- c("1" = "green", "2" = "yellow", "3" = "orange", "4" = "red", "5" = "brown")
 
  damage_values <- c("Low" = 1, "Low_Medium" = 2, "Medium" = 3, "Medium_High" = 4, "High" = 5)
  df_sf$value <- damage_values[df_sf$pred_damage]
@@ -809,6 +809,7 @@ risk_palette <- c("0"="transparent","1" = "green", "2" = "yellow", "3" = "orange
  df_sf_selected <- df_sf %>% dplyr::select(geometry, value)
  #make a stars template
  # Use the template raster for extent, resolution, and CRS
+  r[r == 0] <- NA #make zero's NAs
  r <- stars::st_rasterize(sf = df_sf_selected)
  plot(r, col = risk_palette)
 ```
