@@ -414,6 +414,7 @@ valid_urban_rasters <- Filter(function(x) !is.null(x), valid_urban_rasters)
 
 # Mosaic raster
 #urban_distance_mosaic <- do.call(mosaic, c(valid_urban_rasters, fun = mean))
+NEAREST_URB_SUBURB <- do.call(mosaic, c(valid_urban_rasters, fun = mean))
 
 #ensure crs is bng
 
@@ -423,10 +424,10 @@ valid_urban_rasters <- Filter(function(x) !is.null(x), valid_urban_rasters)
 #writeRaster(urban_distance_mosaic, here("output/nearest_urban_suburban_raster_2023_EW_1_434.tif"),overwrite=TRUE)
 #print("Urban raster mosaic complete and saved")
 
-urban_tile <- st_filter(urban_parcels, tiles)
-plot(valid_urban_rasters[[1]])
-plot(urban_tile$geometry, add=TRUE)
-NEAREST_URB_SUBURB <- valid_urban_rasters[[1]]
+# urban_tile <- st_filter(urban_parcels, tiles)
+# plot(valid_urban_rasters[[1]])
+# plot(urban_tile$geometry, add=TRUE)
+# NEAREST_URB_SUBURB <- mosaic(valid_urban_rasters)
 ```
 
 ```{r}
