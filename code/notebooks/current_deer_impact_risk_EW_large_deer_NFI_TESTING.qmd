@@ -80,11 +80,11 @@ nfi_rast <- fasterize::fasterize(nfi, template_rast, field = "group_ID")
 plot(nfi_rast)
 
 # #Get boundaries between 1 and 2
-# boundaries_nfi <- boundaries(nfi_rast, type = "inner", classes = TRUE, #make edges between classes as well as NA
-#                              directions = 8, #search for edges in 8 directions
-#                              asNA = TRUE) #non-edges returned as NA
-# plot(boundaries_nfi)
-#writeRaster(boundaries_nfi, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/boundaries_open_closed_woods_NFI_2023.tif")
+boundaries_nfi <- boundaries(nfi_rast, type = "inner", classes = TRUE, #make edges between classes as well as NA
+                             directions = 8, #search for edges in 8 directions
+                             asNA = TRUE) #non-edges returned as NA
+plot(boundaries_nfi)
+writeRaster(boundaries_nfi, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/boundaries_open_closed_woods_NFI_2023.tif")
 boundaries_nfi <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/boundaries_open_closed_woods_NFI_2023.tif")
 
 boundaries_nfi_sample <- raster::crop(boundaries_nfi, tiles)
