@@ -16,7 +16,9 @@ unique(nfi$IFT_IOA)
 
 #England and Wales 10k squares
 ew10k <- sf::st_read("C:/Users/ik929086/Documents/iDeer/data/derived-data/10k_tiles_EW.shp")
-bng <- st_crs(ew10k)
+#bng <- st_crs(ew10k)
+
+bng <- 27700
 
 #Get Chilterns tile as an example
 #SU79 <- ew10k %>% filter(tile_name %in% c("SU79"))
@@ -39,62 +41,63 @@ unique(non_woods$IFT_IOA)
 #Other things not usable habitat
 
 #Mixed structure habitats = open areas, or areas with good potential for foraging resources
-mixed_structure_habitats <- nfi %>% filter(IFT_IOA %in% c("Bare area","Assumed woodland","Failed","Coppice","Coppice with standards","Windblow","Grassland","Ground prep","Agriculture land","Other vegetation","Felled","Low density", "Young trees","Shrub"))
+open_woodland <- nfi %>% filter(IFT_IOA %in% c("Assumed woodland","Failed","Windblow","Ground prep","Felled","Low density", "Young trees","Shrub"))
 
 #Closed habitats = mature woodland
-closed_habitats <- nfi %>% filter(IFT_IOA %in% c("Conifer","Broadleaved","Mixed mainly broadleaved","Mixed mainly conifer"))
+closed_woodland <- nfi %>% filter(IFT_IOA %in% c("Conifer","Broadleaved","Mixed mainly broadleaved","Mixed mainly conifer","Coppice with standards","Coppice"))
 
 #subset for testing
 
-closed_habitats <- st_filter(closed_habitats, tiles)
-mixed_structure_habitats <- st_filter(mixed_structure_habitats, tiles)
+closed_woodland <- st_filter(closed_woodland, tiles)
+open_woodland <- st_filter(open_woodland, tiles)
 
-plot(closed_habitats$geometry, col = "red")
-plot(mixed_structure_habitats$geometry, col = "blue",add=TRUE)
+plot(closed_woodland$geometry, col = "red")
+plot(open_woodland$geometry, col = "blue",add=TRUE)
 ```
 
 ```{r}
 #Make an NFI raster of the two habitat types
 
 # Create the IFT_ID column based on the IFT_IOA values
-#1 = open land cover types
+#1 = open woodland types
 #2 = mature woodland types
-nfi <- nfi %>%
-  mutate(group_ID = case_when(
-    IFT_IOA %in% c("Bare area", "Assumed woodland", "Failed", "Coppice", 
-                   "Coppice with standards", "Windblow", "Grassland", 
-                   "Ground prep", "Agriculture land", "Other vegetation", 
-                   "Shrub", "Felled", "Low density", "Young trees") ~ 1,
-    IFT_IOA %in% c("Conifer", "Broadleaved", "Mixed mainly broadleaved", 
-                   "Mixed mainly conifer") ~ 2,
-    TRUE ~ NA_real_  # This handles other values (if needed, or you can leave it out)
-  ))
+#3 = non woodland habitats with potential for foraging
 
-#Make raster of NFI
-template_rast <- raster("C:/Users/ik929086/Documents/iDeer/data/raw-data/lcm-2023/gblcm2023_25m.tif")
+# nfi <- nfi %>%
+#   mutate(group_ID = case_when(
+#     IFT_IOA %in% c("Assumed woodland","Failed","Windblow","Ground prep","Felled","Low density", "Young trees","Shrub") ~ 1,
+#     IFT_IOA %in% c("Conifer","Broadleaved","Mixed mainly broadleaved","Mixed mainly conifer","Coppice with standards","Coppice") ~ 2,
+#     #IFT_IOA %in% c("Agricultural land","Grassland","Other vegetation") ~ 3, #don't need this line- boundaries function automatically obtains edges of classes (1 and 2) with NAs
+#     TRUE ~ NA_real_  # This handles other values (if needed, or you can leave it out)
+#   ))
+# 
+# #Make raster of NFI
+# template_rast <- raster("C:/Users/ik929086/Documents/iDeer/data/raw-data/lcm-2023/gblcm2023_25m.tif")
+# crs(template_rast) <- bng
+# 
+# nfi_rast <- fasterize::fasterize(nfi, template_rast, field = "group_ID")
+# 
+# # Get boundaries between 1 and 2
+#  boundaries_nfi <- boundaries(nfi_rast, type = "inner", classes = TRUE, #make edges between classes as well as NA
+#                               directions = 8, #search for edges in 8 directions
+#                               asNA = TRUE) #non-edges returned as NA
+#  plot(boundaries_nfi)
+# crs(boundaries_nfi) <- bng
+# 
+# terra::writeRaster(boundaries_nfi, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/boundaries_open_closed_woods_NFI_2023_bng.tif",overwrite=TRUE)
+ 
+boundaries_nfi <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/boundaries_open_closed_woods_NFI_2023_bng.tif")
 
-nfi_rast <- fasterize::fasterize(nfi, template_rast, field = "group_ID")
+#plot(boundaries_nfi)
 
-plot(nfi_rast)
-
-# #Get boundaries between 1 and 2
-# boundaries_nfi <- boundaries(nfi_rast, type = "inner", classes = TRUE, #make edges between classes as well as NA
-#                              directions = 8, #search for edges in 8 directions
-#                              asNA = TRUE) #non-edges returned as NA
-# plot(boundaries_nfi)
-# writeRaster(boundaries_nfi, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/boundaries_open_closed_woods_NFI_2023.tif")
-boundaries_nfi <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/boundaries_open_closed_woods_NFI_2023.tif")
-
-plot(boundaries_nfi)
-
-boundaries_nfi_sample <- raster::crop(boundaries_nfi, tiles)
-
-# Plot the other geometries
-plot(closed_habitats$geometry, col = "forestgreen")
-plot(mixed_structure_habitats$geometry, col = "magenta", add = TRUE)
-
-#plot boundaries - internal boundaries and edge boundaries
-plot(boundaries_nfi_sample)
+# boundaries_nfi_sample <- raster::crop(boundaries_nfi, tiles)
+# 
+# # Plot the other geometries
+# plot(closed_woodland$geometry, col = "forestgreen")
+# plot(open_woodland$geometry, col = "magenta", add = TRUE)
+# 
+# #plot boundaries - internal boundaries and edge boundaries
+# plot(boundaries_nfi_sample)
 
 ```
 
@@ -104,165 +107,205 @@ plot(boundaries_nfi_sample)
 
 #Add a column woodland_vulnerability to woods_only with following conditions
 #Where open habitats have highest
+#3 = "Recent woodland"
+#2 = mature broadleaved woodland
+#1 = mature conifer woodland
 
-woods_only <- woods_only %>%
-  mutate(woodland_food_value = case_when(
-    IFT_IOA %in% c("Assumed woodland", "Failed", "Coppice", 
-                   "Coppice with standards", "Windblow", 
-                   "Ground prep", 
-                   "Shrub", "Felled", "Low density", "Young trees") ~ 3,
-    IFT_IOA %in% c("Broadleaved", "Mixed mainly broadleaved") ~ 2,
-    IFT_IOA %in% c("Conifer","Mixed mainly conifer") ~ 1,
-    TRUE ~ NA_real_  # This handles other values (if needed, or you can leave it out)
-  ))
+# woods_only <- woods_only %>%
+#   mutate(woodland_food_value = case_when(
+#     IFT_IOA %in% c("Assumed woodland","Failed","Windblow","Ground prep","Felled","Low density", "Young trees","Shrub") ~ 3,
+#     IFT_IOA %in% c("Broadleaved", "Mixed mainly broadleaved","Coppice with standards","Coppice") ~ 2,
+#     IFT_IOA %in% c("Conifer","Mixed mainly conifer") ~ 1,
+#     TRUE ~ NA_real_  # This handles other values (if needed, or you can leave it out)
+#   ))
+# 
+# woodland_food_value_raster <- fasterize::fasterize(woods_only, template_rast,
+#                                                    field = "woodland_food_value")
+# crs(woodland_food_value_raster) <- bng
+# 
+# terra::writeRaster(woodland_food_value_raster, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/small_deer/NFI_woodland_food_value_index_bng.tif",
+#               overwrite=TRUE)
 
-woodland_food_value_raster <- fasterize::fasterize(woods_only, template_rast,
-                                                   field = "woodland_food_value")
-#plot(woodland_food_value_raster)
+# #plot(woodland_food_value_raster)
+woodland_food_value_raster <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/small_deer/NFI_woodland_food_value_index.tif")
 
-woodland_food_value_raster_test <- crop(woodland_food_value_raster, tiles)
+#woodland_food_value_raster_test <- crop(woodland_food_value_raster, tiles)
 ```
 
 ```{r}
 #PERCENTAGE COVER WOODLAND EDGE
 #Edges now include both external woodland edges and interior woodland edges produced in boundaries_nfi above
 
-#create circular buffers around every pixel of 400 metres
-circle.buff = raster::focalWeight (boundaries_nfi_sample, d=400, type="circle",fillNA=T )#Create buffer
-circle.buff[circle.buff > 0] <- 1   # replacing weights by 1
-Focal400_EDGES= raster::focal(boundaries_nfi_sample, w=circle.buff, fun=sum, na.rm=T,pad=TRUE, padValue=NA)
+# #create circular buffers around every pixel of 400 metres
+# circle.buff = raster::focalWeight (boundaries_nfi, d=400, type="circle",fillNA=T )#Create buffer
+# circle.buff[circle.buff > 0] <- 1   # replacing weights by 1
+# Focal400_EDGES= raster::focal(boundaries_nfi, w=circle.buff, fun=sum, na.rm=T,pad=TRUE, padValue=NA)
+# 
+# #plot(Focal400_EDGES)
+# crs(Focal400_EDGES) <- bng
+# 
+# #Divide number of pixels by the total number of 25m2 pixels in a 400m buffer*100
+# Focal400_EDGES_PERC <- (Focal400_EDGES/804)*100
+# plot(Focal400_EDGES_PERC)
+# #plot(boundaries_nfi_sample,add=TRUE)
+# 
+# #writeRaster(Focal400_EDGES, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/small_deer/NFI_focal_woodland_edge_area_400m.tif",
+#             # overwrite=TRUE)
+# 
+# writeRaster(Focal400_EDGES_PERC, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/small_deer/NFI_focal_woodland_edge_area_400m_percentage_cover.tif",
+#              overwrite=TRUE)
 
-#plot(Focal400_EDGES)
-crs(Focal400_EDGES) <- bng
-
-#Divide number of pixels by the total number of 25m2 pixels in a 400m buffer*100
-Focal400_EDGES_PERC <- (Focal400_EDGES/804)*100
-plot(Focal400_EDGES_PERC)
-plot(boundaries_nfi_sample,add=TRUE)
+Focal400_EDGES_PERC <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/small_deer/NFI_focal_woodland_edge_area_400m_percentage_cover.tif")
 ```
 
 ```{r}
-#WOODLAND CONNECTIVITY
-
-#Woodland cover within 2000m
-#400m was too small
-
-#subset for woodland types that offer cover
-
-connectivity_woods <- woods_only %>% filter(IFT_IOA %in% c("Broadleaved","Mixed mainly broadleaved","Conifer","Mixed mainly conifer","Shrub","Coppice","Coppice with standards","Other vegetation","Low density","Young trees"))
-
-#filter for testing
-
-connectivity_woods_test <- st_filter(connectivity_woods, tiles)
-
-#merged connectivity woods
-# Step 1: Get touching relationships
-touching <- st_touches(connectivity_woods_test)
-
-# Step 2: Build graph and identify groups
-g <- graph_from_adj_list(touching)
-groups <- components(g)$membership
-
-# Step 3: Add group ID to the data
-connectivity_woods_test$group_ID <- groups
-
-# Step 4: Dissolve (union) polygons by group
-merged_connect_woods <- connectivity_woods_test %>%
-  group_by(group_ID) %>%
-  summarise(geometry = st_union(geometry), .groups = "drop")
-
-plot(merged_connect_woods$geometry)
-
-#Rasterize
-
-connectivity_woods_raster <- fasterize::fasterize(connectivity_woods, template_rast)
-
-#crop for testing
-
-connectivity_woods_raster_test <- crop(connectivity_woods_raster, tiles)
-
-#d = 2000m radius
-circle.buff = raster::focalWeight(connectivity_woods_raster_test, d=2000, type="circle",fillNA=T)#Create buffer
-circle.buff[circle.buff > 0] <- 1   # replacing weights by 1
-Focal2000_WOOD= raster::focal(x=connectivity_woods_raster_test, w=circle.buff, fun=sum, na.rm=T, pad=TRUE, padValue=NA)
-
-plot(Focal2000_WOOD)
-crs(Focal2000_WOOD) <- bng
-
-#Divide number of pixels by the total number of 25m2 pixels in a buffer*100 = percentage woodland
-Focal2000_WOOD_PERC <- (Focal2000_WOOD/20106)*100
-plot(Focal2000_WOOD_PERC)
-
-#Get average woodland cover within 1000m for each merged woodland polygon
-#Accounts for patch size, but also woods around each patch.
-mean_wood_map_poly_vals  <- raster::extract(Focal2000_WOOD_PERC, merged_connect_woods, fun=mean, na.rm=TRUE, df=TRUE)
-
-#left_join GB_merged_polys
-mean_wood_map_poly_vals <- mean_wood_map_poly_vals %>% rename(group_ID = ID)
-
-mean_wood_perc_polys <- left_join(merged_connect_woods, mean_wood_map_poly_vals, by = c("group_ID"))
-mean_wood_perc_polys <- st_as_sf(mean_wood_perc_polys)
-
-woods_area_2000m_tif <- fasterize::fasterize(sf = mean_wood_perc_polys, 
-                                            raster = connectivity_woods_raster_test,
-                                            field = "layer",
-                                            fun = "sum",
-                                            background = NA)
-crs(woods_area_2000m_tif) <- bng
-plot(woods_area_2000m_tif)
-
-# writeRaster(woods_area_2000m_tif, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/mean_percentage_focal_area_woods_extracted_to_polys_2000m.tif",
-#             overwrite=TRUE)
+# #WOODLAND CONNECTIVITY WITHIN 400m
+# 
+# #subset for woodland types that offer cover
+# 
+# unique(woods_only$IFT_IOA)
+# 
+# #connectivity_woods <- woods_only %>% filter(IFT_IOA %in% c("Broadleaved","Mixed mainly broadleaved","Conifer","Mixed mainly conifer","Shrub","Coppice","Coppice with standards","Low density","Young trees","Windblow"))
+# 
+# #Use all woodland types (open & closed)
+# connectivity_woods <- woods_only
+# 
+# #filter for testing
+# #connectivity_woods_test <- st_filter(connectivity_woods, tiles)
+# 
+# #merged connectivity woods
+# # Step 1: Get touching relationships
+# touching <- st_touches(connectivity_woods)
+# 
+# # Step 2: Build graph and identify groups
+# g <- graph_from_adj_list(touching)
+# groups <- components(g)$membership
+# 
+# # Step 3: Add group ID to the data
+# connectivity_woods$group_ID <- groups
+# 
+# saveRDS(connectivity_woods, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/small_deer/NFI_2023_all_woods_UK_touching_groups.rds")
+# 
+# # Step 4: Dissolve (union) polygons by group
+# merged_connect_woods <- connectivity_woods%>%
+#   group_by(group_ID) %>%
+#   summarise(geometry = st_union(geometry), .groups = "drop")
+# 
+# #save as RDS
+# 
+# saveRDS(merged_connect_woods,"C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/small_deer/NFI_2023_all_woods_UK_touching_merged.rds")
+# 
+# #plot(merged_connect_woods$geometry)
+# 
+# #Rasterize
+# 
+# connectivity_woods_raster <- fasterize::fasterize(connectivity_woods, template_rast)
+# 
+# #crop for testing
+# #connectivity_woods_raster <- crop(connectivity_woods_raster, tiles)
+# 
+# #d = 400m radius
+# circle.buff = raster::focalWeight(connectivity_woods_raster, d=400, type="circle",fillNA=T)#Create buffer
+# circle.buff[circle.buff > 0] <- 1   # replacing weights by 1
+# Focal400_WOOD= raster::focal(x=connectivity_woods_raster, w=circle.buff, fun=sum, na.rm=T, pad=TRUE, padValue=NA)
+# 
+# plot(Focal400_WOOD)
+# crs(Focal400_WOOD) <- bng
+# 
+# #Divide number of pixels by the total number of 25m2 pixels in a buffer*100 = percentage woodland
+# #Focal2000_WOOD_PERC <- (Focal2000_WOOD/20106)*100
+# Focal400_WOOD_PERC <- (Focal400_WOOD/804)*100
+# plot(Focal400_WOOD_PERC)
+# 
+# writeRaster(Focal400_WOOD_PERC, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/small_deer/NFI_focal_area_woods_400m.tif",
+#              overwrite=TRUE)
+# 
+# #Get average woodland cover within 400m for each merged woodland polygon
+# #Accounts for patch size, but also woods around each patch.
+# mean_wood_map_poly_vals  <- raster::extract(Focal400_WOOD_PERC, merged_connect_woods, fun=mean, na.rm=TRUE, df=TRUE)
+# 
+# #left_join GB_merged_polys
+# mean_wood_map_poly_vals <- mean_wood_map_poly_vals %>% rename(group_ID = ID)
+# 
+# mean_wood_perc_polys <- left_join(merged_connect_woods, mean_wood_map_poly_vals, by = c("group_ID"))
+# mean_wood_perc_polys <- st_as_sf(mean_wood_perc_polys)
+# 
+# saveRDS(mean_wood_perc_polys, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/small_deer/NFI_mean_percentage_focal_area_woods_extracted_to_polys_400m.rds")
+# 
+# woods_area_400m_tif <- fasterize::fasterize(sf = mean_wood_perc_polys, 
+#                                             raster = connectivity_woods_raster,
+#                                             field = "layer",
+#                                             fun = "sum",
+#                                             background = NA)
+# crs(woods_area_400m_tif) <- bng
+# plot(woods_area_400m_tif)
+# 
+#  writeRaster(woods_area_400m_tif, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/small_deer/NFI_mean_percentage_focal_area_woods_extracted_to_polys_400m.tif",
+#              overwrite=TRUE)
+ 
+Focal400_WOOD_PERC_POLYS <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/small_deer/NFI_mean_percentage_focal_area_woods_extracted_to_polys_400m.tif")
 ```
 
 ```{r}
 #LINEAR FEATURE CONNECTIVITY
 
-#Read in linear feature raster
-#Created in ArcGIS
-#Original dataset: CEH linear features (2016)
-#The dataset has been rasterized, snapped to gblcm2023_25m.tif
-#Then masked to the original GB LF vector dataset to remove weird background values
-#Maintained full GB extent so as to not miss off hedgerows on the Scottish border
-lf <- raster("C:/Users/ik929086/Documents/iDeer/data/derived-data/WLF_GB_raster_LCM_matched_masked.tif")
-crs(lf) <- bng
-
-#crop for testing
-
-lf_test <- crop(lf, tiles)
-
-#focal statistics, moving window
-#Count pixels that contain linear features up to 400m away from each woodland pixel
-
-#if na.rm = F, edges become cropped.
-
-circle.buff = raster::focalWeight(lf_test, d=2000, type="circle",fillNA=T )#Create buffer
-circle.buff[circle.buff > 0] <- 1   # replacing weights by 1
-Focal2000_lf= raster::focal(x=lf_test, w=circle.buff, fun=sum, na.rm=T, pad=TRUE, padValue=NA)
-
-plot(Focal2000_lf)
-
-#Divide number of pixels by the total number of 25m2 pixels in a 400m buffer*100 = percentage lf
-Focal2000_LF_PERC <- (Focal2000_lf/20106)*100
-plot(Focal2000_LF_PERC)
-
-#Get average woodland cover within 1000m for each merged woodland polygon
-#Accounts for patch size, but also woods around each patch.
-mean_lf_map_poly_vals  <- raster::extract(Focal2000_LF_PERC, merged_connect_woods, fun=mean, na.rm=TRUE, df=TRUE)
-
-#left_join GB_merged_polys
-mean_lf_map_poly_vals <- mean_lf_map_poly_vals %>% rename(group_ID = ID)
-
-mean_lf_perc_polys <- left_join(merged_connect_woods, mean_lf_map_poly_vals, by = c("group_ID"))
-mean_lf_perc_polys <- st_as_sf(mean_lf_perc_polys)
-
-lf_area_2000m_tif <- fasterize::fasterize(sf = mean_lf_perc_polys, 
-                                            raster = connectivity_woods_raster_test,
-                                            field = "layer",
-                                            fun = "sum",
-                                            background = NA)
-crs(lf_area_2000m_tif) <- bng
-plot(lf_area_2000m_tif)
+# #Read in linear feature raster
+# #Created in ArcGIS
+# #Original dataset: CEH linear features (2016)
+# #The dataset has been rasterized, snapped to gblcm2023_25m.tif
+# #Then masked to the original GB LF vector dataset to remove weird background values
+# #Maintained full GB extent so as to not miss off hedgerows on the Scottish border
+# lf <- raster("C:/Users/ik929086/Documents/iDeer/data/derived-data/WLF_GB_raster_LCM_matched_masked.tif")
+# crs(lf) <- bng
+# 
+# #crop for testing
+# 
+# #lf_test <- crop(lf, tiles)
+# 
+# #focal statistics, moving window
+# #Count pixels that contain linear features up to 400m away from each woodland pixel
+# 
+# #if na.rm = F, edges become cropped.
+# 
+# # circle.buff = raster::focalWeight(lf, d=400, type="circle",fillNA=T )#Create buffer
+# # circle.buff[circle.buff > 0] <- 1   # replacing weights by 1
+# # Focal400_lf= raster::focal(x=lf, w=circle.buff, fun=sum, na.rm=T, pad=TRUE, padValue=NA)
+# #plot(Focal400_lf)
+# 
+# #Divide number of pixels by the total number of 25m2 pixels in a 400m buffer*100 = percentage lf
+# #Focal2000_LF_PERC <- (Focal2000_lf/20106)*100
+# #Focal400_LF_PERC <- (Focal400_lf/804)*100
+# 
+# #Read in
+# 
+# Focal400_LF_PERC <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/small_deer/percentage_LF_area_400m_small_deer_GB_2023.tif")
+# 
+# plot(Focal400_LF_PERC)
+# 
+# #Get average LF cover within 400m for each merged woodland polygon
+# #Accounts for patch size, but also woods around each patch.
+# mean_lf_map_poly_vals  <- raster::extract(Focal400_LF_PERC, merged_connect_woods, fun=mean, na.rm=TRUE, df=TRUE)
+# 
+# #left_join GB_merged_polys
+# mean_lf_map_poly_vals <- mean_lf_map_poly_vals %>% rename(group_ID = ID)
+# 
+# mean_lf_perc_polys <- left_join(merged_connect_woods, mean_lf_map_poly_vals, by = c("group_ID"))
+# mean_lf_perc_polys <- st_as_sf(mean_lf_perc_polys)
+# 
+# saveRDS(mean_lf_perc_polys, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/small_deer/NFI_mean_percentage_focal_area_lf_extracted_to_polys_400m.rds")
+# 
+# lf_area_400m_tif <- fasterize::fasterize(sf = mean_lf_perc_polys, 
+#                                             raster = connectivity_woods_raster,
+#                                             field = "percentage_LF_area_400m_small_deer_GB_2023",
+#                                             fun = "sum",
+#                                             background = NA)
+# crs(lf_area_400m_tif) <- bng
+# plot(lf_area_400m_tif)
+# 
+#  writeRaster(lf_area_400m_tif, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/small_deer/NFI_mean_percentage_focal_area_lf_extracted_to_polys_400m.tif",
+#              overwrite=TRUE)
+ 
+ Focal400_LF_PERC_POLYS <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/small_deer/NFI_mean_percentage_focal_area_lf_extracted_to_polys_400m.tif")
 ```
 
 ```{r}
@@ -291,9 +334,18 @@ small_wood_food_value_cpt_df <- read.csv("C:/Users/ik929086/Documents/iDeer/data
 ```
 
 ```{r}
-#Create a dataframe containing all extracted raster values within user's landscape
+
+#Crop rasters to produce tests
+
+Focal400_EDGES_PERC <- crop(Focal400_EDGES_PERC, tiles)
+Focal400_LF_PERC_POLYS <- crop(Focal400_LF_PERC_POLYS, tiles)
+Focal400_WOOD_PERC_POLYS <- crop(Focal400_WOOD_PERC_POLYS, tiles)
+woodland_food_value_raster <- crop(woodland_food_value_raster, tiles)
 
 template_rast_tiles <- crop(template_rast, tiles)
+
+#Create a dataframe containing all extracted raster values within user's landscape
+
 
 #EXTRACT LENGTH OF WOODLAND EDGE
 
@@ -307,12 +359,12 @@ edgepix <- extract_raster(map = Focal400_EDGES_PERC,
 
 #EXTRACT WOODLAND FOOD QUALITY
 
-foodpix <- extract_raster(map = woodland_food_value_raster_test,
+foodpix <- extract_raster(map = woodland_food_value_raster,
                           lcm = template_rast_tiles,
                           tiles = tiles)
 
 #EXTRACT CONNECTIVITY
-woodpix <- extract_raster(map = Focal2000_WOOD_PERC,
+woodpix <- extract_raster(map = Focal400_WOOD_PERC_POLYS,
                           lcm = template_rast_tiles,
                          tiles = tiles)
 #saveRDS(woodpix, "C:/Users/ik929086/Documents/iDeer/output/woodpix_wood_area_400m_df_EW.RDS")
@@ -321,7 +373,7 @@ woodpix <- extract_raster(map = Focal2000_WOOD_PERC,
 
 #EXTRACT LF DENSITY WITHIN 400M
 
-LFpix <- extract_raster(map = Focal2000_LF_PERC,
+LFpix <- extract_raster(map = Focal400_LF_PERC_POLYS,
                         lcm = template_rast_tiles,
                         tiles = tiles)
 
@@ -339,7 +391,7 @@ left_join(foodpix, by = c("x","y"))
 #These rasters have the correct woodland pixels
 
 df.no.nas <- df %>%
-  mutate(across(c(Focal400_EDGES_PERC, Focal2000_LF_PERC, Focal2000_WOOD_PERC), 
+  mutate(across(c(Focal400_EDGES_PERC, Focal400_LF_PERC_POLYS, Focal400_WOOD_PERC_POLYS), 
                 ~ tidyr::replace_na(., 0)))
 
 
@@ -371,48 +423,52 @@ df.no.nas.full <- df.no.nas
 ```
 
 ```{r}
-#Find optimal break points using quantiles
+# #Find optimal break points using quantiles
 
-#k = number of breaks = 3
-#USED WHOLE DATASET TO PRODUCE THESE BREAKS (UK)
+#DON'T NEED TO DO THIS IN R
+#CAN LOOK AT FULL RASTERS IN ARCGIS PRO, MUCH QUICKER
 
-#Edge density
-
-edge_Tert = quantile(df.no.nas.full$Focal400_EDGES_PERC, c(0:3/3))
-hist(df.no.nas.full$Focal400_EDGES_PERC)
-abline(v = 20, col = "red")
-abline(v = 35, col = "red")
-
-#Linear features
-LF_tert <- quantile(df.no.nas.full$Focal2000_LF_PERC, c(0:3/3))
-hist(df.no.nas.full$Focal2000_LF_PERC)
-abline(v = 3.5, col = "red")
-abline(v = 5.5, col = "red")
-
-#Summed DAMS
-#MANUALLY ASSIGN TO ENSURE THEY ARE NOT TOO CLOSE TOGETHER
-# dams_400m_tert <- quantile(df.no.nas.full$Focal400_MAX_SUMMED_DAMS, c(0:3/3))
-# hist(df.no.nas.full$Focal400_MAX_SUMMED_DAMS)
-# abline(v = 0.40, col = "red")
-# abline(v = 0.55, col = "red")
-# #USE 0.40 and 0.55
-
-#Connectivity
-connect_tert <- quantile(df.no.nas.full$Focal2000_WOOD_PERC, c(0:3/3))
-hist(df.no.nas.full$Focal2000_WOOD_PERC)
-abline(v = 20, col = "red")
-abline(v = 40, col = "red")
-
-#Woodland food value
-#Low = 1
-#Medium = 2
-#High = 3
-
-# #Alternative forage
-# alt_forage_tert <- quantile(df.no.nas.full$Woodland_food_value, c(0:3/3))
-# hist(df.no.nas.full$Woodland_food_value)
-# abline(v = 30, col = "red")
-# abline(v = 60, col = "red")
+# 
+# #k = number of breaks = 3
+# #USED WHOLE DATASET TO PRODUCE THESE BREAKS (UK)
+# 
+# #Edge density
+# 
+# edge_Tert = quantile(df.no.nas.full$Focal400_EDGES_PERC, c(0:3/3))
+# hist(df.no.nas.full$Focal400_EDGES_PERC)
+# abline(v = 20, col = "red")
+# abline(v = 35, col = "red")
+# 
+# #Linear features
+# LF_tert <- quantile(df.no.nas.full$Focal400_LF_PERC, c(0:3/3))
+# hist(df.no.nas.full$Focal400_LF_PERC)
+# abline(v = 3.5, col = "red")
+# abline(v = 5.5, col = "red")
+# 
+# #Summed DAMS
+# #MANUALLY ASSIGN TO ENSURE THEY ARE NOT TOO CLOSE TOGETHER
+# # dams_400m_tert <- quantile(df.no.nas.full$Focal400_MAX_SUMMED_DAMS, c(0:3/3))
+# # hist(df.no.nas.full$Focal400_MAX_SUMMED_DAMS)
+# # abline(v = 0.40, col = "red")
+# # abline(v = 0.55, col = "red")
+# # #USE 0.40 and 0.55
+# 
+# #Connectivity
+# connect_tert <- quantile(df.no.nas.full$Focal400_WOOD_PERC, c(0:3/3))
+# hist(df.no.nas.full$Focal400_WOOD_PERC)
+# abline(v = 20, col = "red")
+# abline(v = 40, col = "red")
+# 
+# #Woodland food value
+# #Low = 1
+# #Medium = 2
+# #High = 3
+# 
+# # #Alternative forage
+# # alt_forage_tert <- quantile(df.no.nas.full$Woodland_food_value, c(0:3/3))
+# # hist(df.no.nas.full$Woodland_food_value)
+# # abline(v = 30, col = "red")
+# # abline(v = 60, col = "red")
 
 ```
 
@@ -420,30 +476,33 @@ abline(v = 40, col = "red")
 #Reclassify continuous data into pre-specified Low,Medium,High categories
 #Inspect terciles for each variable
 #Categorise into LOW/MED/HIGH
+#Breakpoints decided by inspecting rasters in ArcGIS pro
 
 df_cat <- df.no.nas.full
 
-df_cat <- df_cat %>% rename(Woodland_food_value = woodland_food_value_raster_test)
+df_cat <- df_cat %>% rename(Woodland_food_value = woodland_food_value_raster,
+                            Focal400_WOOD_PERC = Focal400_WOOD_PERC_POLYS,
+                            Focal400_LF_PERC = Focal400_LF_PERC_POLYS)
 
 #keep numeric columns ####
 
 #Linear features
 # Replace numeric values with cat labels
-df_cat$Focal2000_LF_PERC <- ifelse(df_cat$Focal2000_LF_PERC<=3.5, "Low",
-                ifelse(df_cat$Focal2000_LF_PERC> 3.5 & df_cat$Focal2000_LF_PERC <= 5.5, "Medium",
-                       ifelse(df_cat$Focal2000_LF_PERC> 5.5, "High", NA)))
+df_cat$Focal400_LF_PERC <- ifelse(df_cat$Focal400_LF_PERC<=1, "Low",
+                ifelse(df_cat$Focal400_LF_PERC>1 & df_cat$Focal400_LF_PERC <= 5, "Medium",
+                       ifelse(df_cat$Focal400_LF_PERC> 5, "High", NA)))
 
  #Woodland connectivity
-df_cat$Focal2000_WOOD_PERC <- ifelse(
-  df_cat$Focal2000_WOOD_PERC <= 20, "Low",
-  ifelse(df_cat$Focal2000_WOOD_PERC > 20 & df_cat$Focal2000_WOOD_PERC <= 40, "Medium",
-    ifelse(df_cat$Focal2000_WOOD_PERC > 40, "High", NA)))
+df_cat$Focal400_WOOD_PERC <- ifelse(
+  df_cat$Focal400_WOOD_PERC <= 2, "Low",
+  ifelse(df_cat$Focal400_WOOD_PERC > 2 & df_cat$Focal400_WOOD_PERC <= 10, "Medium",
+    ifelse(df_cat$Focal400_WOOD_PERC > 10, "High", NA)))
   
 
 #Edge density
-df_cat$Focal400_EDGES_PERC <- ifelse(df_cat$Focal400_EDGES_PERC <= 20, "Low",
-                                            ifelse(df_cat$Focal400_EDGES_PERC >20 & df_cat$Focal400_EDGES_PERC <=35, "Medium",
-                                                   ifelse(df_cat$Focal400_EDGES_PERC > 35, "High", NA)))
+df_cat$Focal400_EDGES_PERC <- ifelse(df_cat$Focal400_EDGES_PERC <= 5, "Low",
+                                            ifelse(df_cat$Focal400_EDGES_PERC >5 & df_cat$Focal400_EDGES_PERC <=30, "Medium",
+                                                   ifelse(df_cat$Focal400_EDGES_PERC > 30, "High", NA)))
 
 # Woodland forage quality
 df_cat$Woodland_food_value <- ifelse(df_cat$Woodland_food_value == 1, "Low",
@@ -451,15 +510,15 @@ df_cat$Woodland_food_value <- ifelse(df_cat$Woodland_food_value == 1, "Low",
            ifelse(df_cat$Woodland_food_value ==3 , "High", NA)))
 
 
-df_cat$Focal2000_WOOD_PERC <- factor(df_cat$Focal2000_WOOD_PERC, levels= c("Low","Medium","High"))
-df_cat$Focal2000_LF_PERC <- factor(df_cat$Focal2000_LF_PERC, levels = c("Low","Medium","High"))
+df_cat$Focal400_WOOD_PERC <- factor(df_cat$Focal400_WOOD_PERC, levels= c("Low","Medium","High"))
+df_cat$Focal400_LF_PERC <- factor(df_cat$Focal400_LF_PERC, levels = c("Low","Medium","High"))
 df_cat$Focal400_EDGES_PERC <- factor(df_cat$Focal400_EDGES_PERC, levels = c("Low","Medium","High"))
 df_cat$Woodland_food_value <- factor(df_cat$Woodland_food_value, levels = c("Low","Medium","High"))
 
 unique(df_cat$Woodland_food_value)
 unique(df_cat$Focal400_EDGES_PERC)
-unique(df_cat$Focal2000_WOOD_PERC)
-unique(df_cat$Focal2000_LF_PERC)
+unique(df_cat$Focal400_WOOD_PERC)
+unique(df_cat$Focal400_LF_PERC)
 ```
 
 ```{r}
@@ -469,9 +528,9 @@ unique(df_cat$Focal2000_LF_PERC)
 edge_cpt <-matrix(c(0.333333,0.333333,0.333333),ncol = 3,dimnames = list(NULL, c("Low", "Medium","High")))
 #woodland value
 wood_value_cpt <- matrix(c(0.333333,0.333333,0.333333),ncol = 3,dimnames = list(NULL, c("Low", "Medium","High")))
-#linear feature area within 2000m
+#linear feature area within 400m
 lf_cpt <-matrix(c(0.333333,0.333333,0.333333),ncol = 3,dimnames = list(NULL, c("Low", "Medium","High")))
-#woodland connectivity within 2000m
+#woodland connectivity within 400m
 wood_connect_cpt <- matrix(c(0.333333,0.333333,0.333333),ncol = 3,dimnames = list(NULL, c("Low", "Medium","High")))
 
 ```
@@ -703,9 +762,9 @@ predict_dat <- df_cat %>% st_drop_geometry() #drop geometry
 #Ensure variable names match those in BBN
 predict_dat<-predict_dat%>%dplyr::rename(
   Woodland_edge_cover_400m=Focal400_EDGES_PERC,
-  LF_cover_400m=Focal2000_LF_PERC,
+  LF_cover_400m=Focal400_LF_PERC,
   Woodland_food_value=Woodland_food_value,
-  Woodland_cover_400m=Focal2000_WOOD_PERC)
+  Woodland_cover_400m=Focal400_WOOD_PERC)
 
 #Make empty columns for the latent (unobserved) variables
 
@@ -798,18 +857,30 @@ plot(wood_value_r, col = index_palette)
 
 #stars::write_stars(thermoreg_r, "C:/Users/ik929086/Documents/iDeer/output/small_deer_forage_pressure_index_rast_test.tif",overwrite=TRUE)
 
-#  # Define the value mapping for pred_damage
-risk_palette <- c("1" = "green", "2" = "yellow", "3" = "orange", "4" = "red", "5" = "brown")
-
- damage_values <- c("Low" = 1, "Low_Medium" = 2, "Medium" = 3, "Medium_High" = 4, "High" = 5)
- df_sf$value <- damage_values[df_sf$pred_damage]
+# #  # Define the value mapping for pred_damage
+# risk_palette <- c("1" = "green", "2" = "yellow", "3" = "orange", "4" = "red", "5" = "brown")
+# 
+damage_values <- c("Low" = 1, "Low_Medium" = 2, "Medium" = 3, "Medium_High" = 4, "High" = 5)
+df_sf$value <- damage_values[df_sf$pred_damage]
  
  #Convert to raster
  # Select the geometry and value column
  df_sf_selected <- df_sf %>% dplyr::select(geometry, value)
  #make a stars template
  # Use the template raster for extent, resolution, and CRS
-  r[r == 0] <- NA #make zero's NAs
  r <- stars::st_rasterize(sf = df_sf_selected)
- plot(r, col = risk_palette)
+ r[r == 0] <- NA #make zero's NAs
+
+ # Check unique values
+unique_vals <- unique(as.vector(r[[1]]))
+#print(unique_vals)
+
+# Define full palette
+risk_palette <- c("1" = "green", "2" = "yellow", "3" = "orange", "4" = "red", "5" = "brown")
+
+# Subset palette to only existing levels in the raster
+active_palette <- risk_palette[names(risk_palette) %in% unique_vals]
+
+plot(r, col = active_palette)
+ 
 ```

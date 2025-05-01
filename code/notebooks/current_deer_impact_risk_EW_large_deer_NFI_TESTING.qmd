@@ -16,7 +16,7 @@ unique(nfi$IFT_IOA)
 
 #England and Wales 10k squares
 ew10k <- sf::st_read("C:/Users/ik929086/Documents/iDeer/data/derived-data/10k_tiles_EW.shp")
-bng <- st_crs(ew10k)
+bng <- 27700
 
 #Get Chilterns tile as an example
 #SU79 <- ew10k %>% filter(tile_name %in% c("SU79"))
@@ -38,89 +38,95 @@ unique(non_woods$IFT_IOA)
 #Other things not usable habitat
 
 #Mixed structure habitats = open areas, or areas with good potential for foraging resources
-mixed_structure_habitats <- nfi %>% filter(IFT_IOA %in% c("Bare area","Assumed woodland","Failed","Coppice","Coppice with standards","Windblow","Grassland","Ground prep","Agriculture land","Other vegetation","Felled","Low density", "Young trees","Shrub"))
+open_woodland <- nfi %>% filter(IFT_IOA %in% c("Assumed woodland","Failed","Windblow","Ground prep","Felled","Low density", "Young trees","Shrub"))
 
 #Closed habitats = mature woodland
-closed_habitats <- nfi %>% filter(IFT_IOA %in% c("Conifer","Broadleaved","Mixed mainly broadleaved","Mixed mainly conifer"))
+closed_woodland <- nfi %>% filter(IFT_IOA %in% c("Conifer","Broadleaved","Mixed mainly broadleaved","Mixed mainly conifer","Coppice with standards","Coppice"))
 
 #subset for testing
 
-closed_habitats <- st_filter(closed_habitats, tiles)
-mixed_structure_habitats <- st_filter(mixed_structure_habitats, tiles)
+closed_woodland <- st_filter(closed_woodland, tiles)
+open_woodland <- st_filter(open_woodland, tiles)
 
-plot(closed_habitats$geometry, col = "red")
-plot(mixed_structure_habitats$geometry, col = "blue",add=TRUE)
+plot(closed_woodland$geometry, col = "red")
+plot(open_woodland$geometry, col = "blue",add=TRUE)
 ```
 
 ```{r}
 #Make an NFI raster of the two habitat types
 
 # Create the IFT_ID column based on the IFT_IOA values
-#1 = open land cover types
+#1 = open woodland types
 #2 = mature woodland types
-nfi <- nfi %>%
-  mutate(group_ID = case_when(
-    IFT_IOA %in% c("Bare area", "Assumed woodland", "Failed", "Coppice", 
-                   "Coppice with standards", "Windblow", "Grassland", 
-                   "Ground prep", "Agriculture land", "Other vegetation", 
-                   "Shrub", "Felled", "Low density", "Young trees") ~ 1,
-    IFT_IOA %in% c("Conifer", "Broadleaved", "Mixed mainly broadleaved", 
-                   "Mixed mainly conifer") ~ 2,
-    TRUE ~ NA_real_  # This handles other values (if needed, or you can leave it out)
-  ))
+#3 = non woodland habitats with potential for foraging
 
-#Make raster of NFI
-template_rast <- raster("C:/Users/ik929086/Documents/iDeer/data/raw-data/lcm-2023/gblcm2023_25m.tif")
+# nfi <- nfi %>%
+#   mutate(group_ID = case_when(
+#     IFT_IOA %in% c("Assumed woodland","Failed","Windblow","Ground prep","Felled","Low density", "Young trees","Shrub") ~ 1,
+#     IFT_IOA %in% c("Conifer","Broadleaved","Mixed mainly broadleaved","Mixed mainly conifer","Coppice with standards","Coppice") ~ 2,
+#     #IFT_IOA %in% c("Agricultural land","Grassland","Other vegetation") ~ 3, #don't need this line- boundaries function automatically obtains edges of classes (1 and 2) with NAs
+#     TRUE ~ NA_real_  # This handles other values (if needed, or you can leave it out)
+#   ))
+# 
+# #Make raster of NFI
+ template_rast <- raster("C:/Users/ik929086/Documents/iDeer/data/raw-data/lcm-2023/gblcm2023_25m.tif")
+ crs(template_rast) <- bng
+# 
+# nfi_rast <- fasterize::fasterize(nfi, template_rast, field = "group_ID")
+# 
+# # Get boundaries between 1 and 2
+#  boundaries_nfi <- boundaries(nfi_rast, type = "inner", classes = TRUE, #make edges between classes as well as NA
+#                               directions = 8, #search for edges in 8 directions
+#                               asNA = TRUE) #non-edges returned as NA
+#  plot(boundaries_nfi)
+# crs(boundaries_nfi) <- bng
+# 
+# terra::writeRaster(boundaries_nfi, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/boundaries_open_closed_woods_NFI_2023_bng.tif",overwrite=TRUE)
+ 
+boundaries_nfi <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/boundaries_open_closed_woods_NFI_2023_bng.tif")
 
-#Test template
-template_rast_tiles <- crop(template_rast, tiles)
+#plot(boundaries_nfi)
 
-nfi_rast <- fasterize::fasterize(nfi, template_rast, field = "group_ID")
-
-plot(nfi_rast)
-
-# #Get boundaries between 1 and 2
-boundaries_nfi <- boundaries(nfi_rast, type = "inner", classes = TRUE, #make edges between classes as well as NA
-                             directions = 8, #search for edges in 8 directions
-                             asNA = TRUE) #non-edges returned as NA
-plot(boundaries_nfi)
-writeRaster(boundaries_nfi, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/boundaries_open_closed_woods_NFI_2023.tif")
-boundaries_nfi <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/boundaries_open_closed_woods_NFI_2023.tif")
-
-boundaries_nfi_sample <- raster::crop(boundaries_nfi, tiles)
-
-# Plot the other geometries
-plot(closed_habitats$geometry, col = "forestgreen")
-plot(mixed_structure_habitats$geometry, col = "magenta", add = TRUE)
-
-#plot boundaries - internal boundaries and edge boundaries
-plot(boundaries_nfi_sample)
+# boundaries_nfi_sample <- raster::crop(boundaries_nfi, tiles)
+# 
+# # Plot the other geometries
+# plot(closed_woodland$geometry, col = "forestgreen")
+# plot(open_woodland$geometry, col = "magenta", add = TRUE)
+# 
+# #plot boundaries - internal boundaries and edge boundaries
+# plot(boundaries_nfi_sample)
 ```
 
 ```{r}
-#Open woodland types will have a high risk of impact from large deer
-#Closed woodland types will have a medium risk of impact
+#Open woodland types will have a high risk of impact from small deer
+#Closed woodland types will have a lower risk of impact
 
 #Add a column woodland_vulnerability to woods_only with following conditions
-#Where open habitats have highest risk
-#No "Low" category as all woods at moderate risk of damage from large deer due to bark stripping of mature trees
+#Where open habitats have highest
+#2 =  "Recent woodland" 
+#1 = mature conifer woodland and mature broadleaved woodland
 
-woods_only <- woods_only %>%
-  mutate(woodland_food_value = case_when(
-    IFT_IOA %in% c("Assumed woodland", "Failed", "Coppice", 
-                   "Coppice with standards", "Windblow", 
-                   "Ground prep", 
-                   "Shrub", "Felled", "Low density", "Young trees") ~ 3,
-    IFT_IOA %in% c("Broadleaved", "Mixed mainly broadleaved","Conifer","Mixed mainly conifer") ~ 2,
-    TRUE ~ NA_real_  # This handles other values (if needed, or you can leave it out)
-  ))
+# unique(woods_only$IFT_IOA)
+# 
+# woods_only <- woods_only %>%
+#   mutate(woodland_food_value = case_when(
+#     IFT_IOA %in% c("Assumed woodland","Failed","Windblow","Ground prep","Felled","Low density", "Young trees","Shrub") ~ 2,
+#     IFT_IOA %in% c("Broadleaved", "Mixed mainly broadleaved","Coppice with standards","Coppice","Conifer","Mixed mainly conifer") ~ 1,
+#     TRUE ~ NA_real_  # This handles other values (if needed, or you can leave it out)
+#   ))
+# 
+# woodland_food_value_raster <- fasterize::fasterize(woods_only, template_rast,
+#                                                    field = "woodland_food_value")
+# 
+# crs(woodland_food_value_raster) <- bng
+# 
+# writeRaster(woodland_food_value_raster, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/NFI_woodland_food_value_index_large_deer.tif",
+#              overwrite=TRUE)
+# #plot(woodland_food_value_raster)
 
-woodland_food_value_raster <- fasterize::fasterize(woods_only, template_rast,
-                                                   field = "woodland_food_value")
-#plot(woodland_food_value_raster)
+woodland_food_value_raster <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/NFI_woodland_food_value_index_large_deer.tif")
 
-woodland_food_value_raster_test <- crop(woodland_food_value_raster, tiles)
-plot(woodland_food_value_raster_test)
+#woodland_food_value_raster_test <- crop(woodland_food_value_raster, tiles)
 ```
 
 ```{r}
@@ -128,20 +134,29 @@ plot(woodland_food_value_raster_test)
 #Edges now include both external woodland edges and interior woodland edges produced in boundaries_nfi above
 
 #create circular buffers around every pixel of 1000 metres
-circle.buff = raster::focalWeight (boundaries_nfi_sample, d=1000, type="circle",fillNA=T )#Create buffer
+circle.buff = raster::focalWeight (boundaries_nfi, d=1000, type="circle",fillNA=T )#Create buffer
 circle.buff[circle.buff > 0] <- 1   # replacing weights by 1
-Focal1000_EDGES= raster::focal(boundaries_nfi_sample, w=circle.buff, fun=sum, na.rm=T,pad=TRUE, padValue=NA)
+Focal1000_EDGES= raster::focal(boundaries_nfi, w=circle.buff, fun=sum, na.rm=T,pad=TRUE, padValue=NA)
 
 crs(Focal1000_EDGES) <- bng
+
+writeRaster(Focal1000_EDGES, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/NFI_focal_woodland_edge_area_1000m.tif",
+             overwrite=TRUE)
 
 #Divide number of pixels by the total number of 25m2 pixels in a 1000m buffer*100
 Focal1000_EDGES_PERC <- (Focal1000_EDGES/5027)*100
 plot(Focal1000_EDGES_PERC)
 plot(boundaries_nfi_sample,add=TRUE)
+
+writeRaster(Focal1000_EDGES_PERC, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/NFI_focal_woodland_edge_area_1000m_percentage_cover.tif",
+             overwrite=TRUE)
 ```
 
 ```{r}
 #PERCENTAGE COVER PERENNIAL 
+
+#ON INSPECTION, CEH LAND COVER MAP DOES A GOOD JOB OF CATCHING PERENNIAL VEGETATION INSIDE WOODS
+#DON'T NEED TO COMBINE WITH PERENNIAL LAND COVER FROM NON WOODS IN NFI DATASET
 
 # lcm <- raster("./data/raw-data/lcm-2023/gblcm2023_25m.tif")
 # crs(lcm) <- bng
@@ -152,34 +167,34 @@ plot(boundaries_nfi_sample,add=TRUE)
 # crs(peren_raster_GB) <- bng
 # writeRaster(peren_raster_GB, here("./output/GB_datasets_2023/peren_raster_GB_2023.tif"),overwrite=TRUE)
 
-peren_raster_GB <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/peren_raster_GB_2023.tif")
+#peren_raster_GB <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/peren_raster_GB_2023.tif")
 
 #get perennial cover inside NFI woodlands
 #In NFI documentation, Agricultural land could be pasture or arable
 #Took decision to include in perennial
-perennial_NFI <- nfi %>% filter(IFT_IOA %in% c("Grassland","Other vegetation","Agricultural land"))
-perennial_NFI_raster <- fasterize::fasterize(perennial_NFI, template_rast)
+# unique(non_woods$IFT_IOA)
+# perennial_NFI <- nfi %>% filter(IFT_IOA %in% c("Grassland","Other vegetation","Agricultural land"))
+# perennial_NFI_raster <- fasterize::fasterize(perennial_NFI, template_rast)
+# writeRaster(perennial_NFI_raster, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/NFI_peren_raster_GB_2023.tif")
+# perennial_NFI_raster_test <- crop(perennial_NFI_raster, tiles)
+# peren_raster_test <- crop(peren_raster_GB, tiles)
+# #Merge the perennial GB map with perennial NFI vegetation
+# nfi_lcm_perennial_raster <- mosaic(perennial_NFI_raster_test, peren_raster_test, fun = max)
+# plot(perennial_NFI_raster_test)
+# plot(peren_raster_test)
+# plot(nfi_lcm_perennial_raster)
 
-perennial_NFI_raster_test <- crop(perennial_NFI_raster, tiles)
-peren_raster_test <- crop(peren_raster_GB, tiles)
+# #Focal extraction of perennial cover
+# circle.buff = raster::focalWeight(peren_raster_GB, d=1000, type="circle",fillNA=T )#Create buffer
+# circle.buff[circle.buff > 0] <- 1   # replacing weights by 1
+# Focal1000_peren= raster::focal(x=peren_raster_GB, w=circle.buff, fun=sum, na.rm=T, pad=TRUE, padValue=NA)
+#                        
+# #Divide number of pixels by the total number of 25m2 pixels in a buffer*100 = percentage peren
+# Focal1000_PEREN_PERC <- (Focal1000_peren/5027)*100
+# 
+# plot(Focal1000_PEREN_PERC)
 
-#Merge the perennial GB map with perennial NFI vegetation
-
-nfi_lcm_perennial_raster <- mosaic(perennial_NFI_raster_test, peren_raster_test, fun = max)
-
-plot(perennial_NFI_raster_test)
-plot(peren_raster_test)
-plot(nfi_lcm_perennial_raster)
-
-#Focal extraction of perennial cover
-circle.buff = raster::focalWeight(nfi_lcm_perennial_raster, d=1000, type="circle",fillNA=T )#Create buffer
-circle.buff[circle.buff > 0] <- 1   # replacing weights by 1
-Focal1000_peren= raster::focal(x=nfi_lcm_perennial_raster, w=circle.buff, fun=sum, na.rm=T, pad=TRUE, padValue=NA)
-                       
-#Divide number of pixels by the total number of 25m2 pixels in a buffer*100 = percentage peren
-Focal1000_PEREN_PERC <- (Focal1000_peren/5027)*100
-
-plot(Focal1000_PEREN_PERC)
+Focal1000_PEREN_PERC <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/percentage_cover_perennial_1000m_2023.tif")
 ```
 
 ```{r}
@@ -194,102 +209,104 @@ plot(Focal1000_PEREN_PERC)
 # crs(arable_raster_GB) <- bng
 # writeRaster(arable_raster_GB, here("output/GB_datasets_2023/2023/arable_raster_GB_2023.tif"),overwrite=TRUE)
 
-arable_raster_GB <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/arable_raster_GB_2023.tif")
+# arable_raster_GB <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/arable_raster_GB_2023.tif")
+# 
+# #arable_raster_test <- crop(arable_raster_GB, tiles)
+# #plot(arable_raster_test)
+# 
+# circle.buff = raster::focalWeight(arable_raster_GB, d=1000, type="circle",fillNA=T )#Create buffer
+# circle.buff[circle.buff > 0] <- 1   # replacing weights by 1
+# Focal1000_arable= raster::focal(x=arable_raster_GB, w=circle.buff, fun=sum, na.rm=T, pad=TRUE, padValue=NA)
+# #Divide number of pixels by the total number of 25m2 pixels in a buffer*100 = percentage arable
+# Focal1000_ARABLE_PERC <- (Focal1000_arable/5027)*100
+# plot(Focal1000_ARABLE_PERC)
+#writeRaster(Focal1000_ARABLE_PERC, "./output/GB_datasets_2023/large_deer/percentage_cover_arable_1000_2023.tif")
 
-arable_raster_test <- crop(arable_raster_GB, tiles)
-plot(arable_raster_test)
-
-circle.buff = raster::focalWeight(arable_raster_test, d=1000, type="circle",fillNA=T )#Create buffer
-circle.buff[circle.buff > 0] <- 1   # replacing weights by 1
-Focal1000_arable= raster::focal(x=arable_raster_test, w=circle.buff, fun=sum, na.rm=T, pad=TRUE, padValue=NA)
-#Divide number of pixels by the total number of 25m2 pixels in a buffer*100 = percentage arable
-Focal1000_ARABLE_PERC <- (Focal1000_arable/5027)*100
-plot(Focal1000_ARABLE_PERC)
+Focal1000_ARABLE_PERC <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/percentage_cover_arable_1000_2023.tif")
 ```
 
 ```{r}
 #EXPOSURE OF NON-WOODLAND AND OPEN WOODLAND TYPES WITHIN 1000m
 
+#ON INSPECTION, CEH LAND COVER MAP DOES A GOOD JOB OF CATCHING PERENNIAL VEGETATION INSIDE WOODS, AND HAS ALSO CLASSIFIED HABITATS SUCH AS YOUNG TREES AND LOW DENSITY AS OTHER VEGETATION TYPES
+#THEREFORE, DON'T NEED TO REDO THE DAMS EXTRACTION WITH A COMBINED CEH/NFI MAP
+
 #Get woodlands only
-woods_only_test <- st_filter(woods_only, tiles)
+#woods_only_test <- st_filter(woods_only, tiles)
 
-#Get merged polygons for thermoreg map ####
+# #Get merged polygons for thermoreg map ####
+# 
+# # Step 1: Get touching relationships
+# touching <- st_touches(woods_only_test)
+# 
+# # Step 2: Build graph and identify groups
+# g <- graph_from_adj_list(touching)
+# groups <- components(g)$membership
+# 
+# # Step 3: Add group ID to the data
+# woods_only_test$group_ID <- groups
+# 
+# # Step 4: Dissolve (union) polygons by group
+# merged_woods <- woods_only_test %>%
+#   group_by(group_ID) %>%
+#   summarise(geometry = st_union(geometry), .groups = "drop")
+# 
+# plot(merged_woods$geometry)
 
-# Step 1: Get touching relationships
-touching <- st_touches(woods_only_test)
+merged_woods <- read_rds("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/small_deer/NFI_2023_all_woods_UK_touching_merged.rds")
 
-# Step 2: Build graph and identify groups
-g <- graph_from_adj_list(touching)
-groups <- components(g)$membership
-
-# Step 3: Add group ID to the data
-woods_only_test$group_ID <- groups
-
-# Step 4: Dissolve (union) polygons by group
-merged_woods <- woods_only_test %>%
-  group_by(group_ID) %>%
-  summarise(geometry = st_union(geometry), .groups = "drop")
-
-plot(merged_woods$geometry)
-
-#DAMS
-#Interpolated from 50m resolution to 25m resolution
-#To match the resolution of other raster layers
-#Interpolation method = bilinear
+# #DAMS
+# #Interpolated from 50m resolution to 25m resolution
+# #To match the resolution of other raster layers
+# #Interpolation method = bilinear
 dams <- raster("C:/Users/ik929086/Documents/iDeer/data/raw-data/DAMS/dams_25m_bng.tif")
 crs(dams) <- bng
-
 # Crop dams to match the extent of lcm
-#dams_crop <- crop(dams, extent(template_rast))
-
-dams_test <- crop(dams, tiles)
-
-#Reclass lcm so all woodland habitat set to 0
-#All non-woodland habitat set to 1
-
+dams_crop <- crop(dams, extent(template_rast))
+#Reclass lcm so all habitats set to 1 (including woods)
+#Provides a blank slate that we can then burn the NFI woods into as zeros
 reclass <- data.frame(is = c(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,
-                             18,19,20,21), becomes = c(0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1))
+                             18,19,20,21), becomes = c(1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1))
+binary_raster_GB <- reclassify(template_rast, reclass)
 
-
-#open_raster_GB <- reclassify(template_rast, reclass)
-
-open_raster_test <- reclassify(template_rast_tiles, reclass)
+#open_raster_GB <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/woods_only_raster_GB_2023.tif")
+#crs(open_raster_GB) <- bng
 
 #Reclass NFI so all shelter habitats set to 0
-
 thermoreg_habitats <- nfi <- nfi %>%
   mutate(thermoreg_ID = case_when(
-    IFT_IOA %in% c("Bare area", "Assumed woodland", "Failed", 
-                   "Windblow", "Grassland", 
-                   "Ground prep", "Agriculture land", 
-                   "Felled", "Low density", "Young trees","Urban","Windfarm","Quarry","River","Open water","Road") ~ 1,
-    IFT_IOA %in% c("Conifer", "Broadleaved", "Mixed mainly broadleaved", 
-                   "Mixed mainly conifer","Shrub","Other vegetation","Coppice","Coppice with standards","Power line") ~ 0,
+    IFT_IOA %in% c("Bare area", "Assumed woodland", "Failed",
+                   "Windblow", "Grassland",
+                   "Ground prep", "Agricultural land",
+                   "Felled", "Low density", "Young trees","Urban","Windfarm","Quarry","River","Open water","Road", "Other vegetation") ~ 1,
+    IFT_IOA %in% c("Conifer", "Broadleaved", "Mixed mainly broadleaved",
+                   "Mixed mainly conifer","Shrub","Coppice","Coppice with standards","Power line") ~ 0,
     TRUE ~ NA_real_  # This handles other values (if needed, or you can leave it out)
   ))
 
-#Make binary open habitat raster ####
 
+#Make binary open habitat raster ####
 nfi_rast_open <- fasterize::fasterize(thermoreg_habitats, template_rast,
                                       field = "thermoreg_ID")
-#open_raster_test <- crop(open_raster_GB, tiles)
-nfi_rast_open_test <- crop(nfi_rast_open, tiles)
 
+#binary_raster_test <- crop(binary_raster_GB, tiles)
+#nfi_rast_open_test <- crop(nfi_rast_open, tiles)
 #Mosaic the two rasters, giving priority to the NFI
-
-nfi_lcm_open_mosaic_test <- mosaic(open_raster_test,nfi_rast_open_test,
-                              fun = max #zeros will remain 0 
+nfi_lcm_open_mosaic <- mosaic(nfi_rast_open, binary_raster_GB,
+                              fun = min #zeros will remain 0
                               )
+crs(nfi_lcm_open_mosaic) <- bng
 
-plot(nfi_rast_open_test)
-plot(open_raster_test)
-plot(nfi_lcm_open_mosaic_test)
-
+writeRaster(nfi_lcm_open_mosaic, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/woods_only_raster_GB_NFI_LCM_mosaic_2023.tif",overwrite=TRUE)
+#plot(nfi_rast_open_test)
+#plot(open_raster_test)
+#plot(nfi_lcm_open_mosaic_test)
 #Multiply DAMs and open land cover raster together - woodlands will be set to 0 DAMS
-
-DAMS_open_raster <- dams_test*nfi_lcm_open_mosaic_test
-
+DAMS_open_raster <- dams_crop*nfi_lcm_open_mosaic
+writeRaster(DAMS_open_raster, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/DAMS_non_wood_raster_GB_NFI_LCM_mosaic_2023.tif",overwrite=TRUE)
 plot(DAMS_open_raster)
+
+#DAMS_open_raster_test <- crop(DAMS_open_raster, tiles)
 
 circle.buff = raster::focalWeight(DAMS_open_raster, d=1000, type="circle",fillNA=T )#Create buffer
 circle.buff[circle.buff > 0] <- 1   # replacing weights by 1
@@ -297,10 +314,13 @@ Focal1000_DAMS= raster::focal(x=DAMS_open_raster, w=circle.buff, fun=sum, na.rm=
                          #filename = here("output/GB_datasets_2023/large-deer/sum_dams_1000_non_wood_2023.tif"), 
                          #overwrite=T)#do focal window analysis with weights matrix
 )
-plot(Focal1000_DAMS)
+#plot(Focal1000_DAMS)
 print("MAX DAMS 1km raster saved")
+writeRaster(Focal1000_DAMS, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/summed_dams_1000_non_wood_NFI_LCM_mosaic_2023.tif")
 
-#Focal1000 <- raster("./output/GB_datasets_2023/large_deer/sum_dams_1000_non_wood_2023.tif")
+#START HERE ####
+
+#Focal1000_DAMS <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/sum_dams_1000_non_wood_NFI_LCM_mosaic_2023.tif")
 
 #Aggregate to patch, where the score for each patch is the normalised maximum summed DAMS score for any pixel in patch
 # Assuming you have a patch identifier, e.g., 'patch_id' in your woodland polygons
@@ -318,10 +338,8 @@ polys_merged_max_summed_DAMS <- st_as_sf(polys_merged_max_summed_DAMS)
 #Rasterize
 
 polys_merged_max_summed_DAMS_raster <- fasterize::fasterize(sf = polys_merged_max_summed_DAMS,
-raster = template_rast_tiles,
+raster = template_rast,
 field = "max_dams_1000_non_wood_2023")
-
-
 
 summed_dams_min <- polys_merged_max_summed_DAMS_raster@data@min
 summed_dams_max <- polys_merged_max_summed_DAMS_raster@data@max
