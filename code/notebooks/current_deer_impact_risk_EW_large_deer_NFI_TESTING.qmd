@@ -106,27 +106,26 @@ boundaries_nfi <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2
 #2 =  "Recent woodland" 
 #1 = mature conifer woodland and mature broadleaved woodland
 
-# unique(woods_only$IFT_IOA)
-# 
-# woods_only <- woods_only %>%
-#   mutate(woodland_food_value = case_when(
-#     IFT_IOA %in% c("Assumed woodland","Failed","Windblow","Ground prep","Felled","Low density", "Young trees","Shrub") ~ 2,
-#     IFT_IOA %in% c("Broadleaved", "Mixed mainly broadleaved","Coppice with standards","Coppice","Conifer","Mixed mainly conifer") ~ 1,
-#     TRUE ~ NA_real_  # This handles other values (if needed, or you can leave it out)
-#   ))
-# 
-# woodland_food_value_raster <- fasterize::fasterize(woods_only, template_rast,
-#                                                    field = "woodland_food_value")
-# 
-# crs(woodland_food_value_raster) <- bng
-# 
-# writeRaster(woodland_food_value_raster, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/NFI_woodland_food_value_index_large_deer.tif",
-#              overwrite=TRUE)
-# #plot(woodland_food_value_raster)
+unique(woods_only$IFT_IOA)
+
+woods_only <- woods_only %>%
+  mutate(woodland_food_value = case_when(
+    IFT_IOA %in% c("Assumed woodland","Failed","Windblow","Ground prep","Felled","Low density", "Young trees","Shrub") ~ 2,
+    IFT_IOA %in% c("Broadleaved", "Mixed mainly broadleaved","Coppice with standards","Coppice","Conifer","Mixed mainly conifer") ~ 1,
+    TRUE ~ NA_real_  # This handles other values (if needed, or you can leave it out)
+  ))
+
+woodland_food_value_raster <- fasterize::fasterize(woods_only, template_rast,
+                                                   field = "woodland_food_value")
+
+crs(woodland_food_value_raster) <- bng
+
+writeRaster(woodland_food_value_raster, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/NFI_woodland_food_value_index_large_deer.tif",
+             overwrite=TRUE)
+#plot(woodland_food_value_raster)
 
 woodland_food_value_raster <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/NFI_woodland_food_value_index_large_deer.tif")
 
-#woodland_food_value_raster_test <- crop(woodland_food_value_raster, tiles)
 ```
 
 ```{r}
@@ -150,6 +149,8 @@ plot(boundaries_nfi_sample,add=TRUE)
 
 writeRaster(Focal1000_EDGES_PERC, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/NFI_focal_woodland_edge_area_1000m_percentage_cover.tif",
              overwrite=TRUE)
+
+Focal1000_EDGES_PERC <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/NFI_focal_woodland_edge_area_1000m_percentage_cover.tif")
 ```
 
 ```{r}
@@ -227,9 +228,6 @@ Focal1000_ARABLE_PERC <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_dat
 
 ```{r}
 #EXPOSURE OF NON-WOODLAND AND OPEN WOODLAND TYPES WITHIN 1000m
-
-#ON INSPECTION, CEH LAND COVER MAP DOES A GOOD JOB OF CATCHING PERENNIAL VEGETATION INSIDE WOODS, AND HAS ALSO CLASSIFIED HABITATS SUCH AS YOUNG TREES AND LOW DENSITY AS OTHER VEGETATION TYPES
-#THEREFORE, DON'T NEED TO REDO THE DAMS EXTRACTION WITH A COMBINED CEH/NFI MAP
 
 #Get woodlands only
 #woods_only_test <- st_filter(woods_only, tiles)
@@ -318,9 +316,7 @@ Focal1000_DAMS= raster::focal(x=DAMS_open_raster, w=circle.buff, fun=sum, na.rm=
 print("MAX DAMS 1km raster saved")
 writeRaster(Focal1000_DAMS, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/summed_dams_1000_non_wood_NFI_LCM_mosaic_2023.tif")
 
-#START HERE ####
-
-#Focal1000_DAMS <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/sum_dams_1000_non_wood_NFI_LCM_mosaic_2023.tif")
+Focal1000_DAMS <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/summed_dams_1000_non_wood_NFI_LCM_mosaic_2023.tif")
 
 #Aggregate to patch, where the score for each patch is the normalised maximum summed DAMS score for any pixel in patch
 # Assuming you have a patch identifier, e.g., 'patch_id' in your woodland polygons
@@ -334,6 +330,8 @@ patch_agg <- patch_agg %>% rename(group_ID = ID,
 polys_merged_max_summed_DAMS <- left_join(patch_agg, merged_woods, by = c("group_ID"))
 
 polys_merged_max_summed_DAMS <- st_as_sf(polys_merged_max_summed_DAMS)
+
+saveRDS(polys_merged_max_summed_DAMS, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/NFI_max_summed_DAMS_extracted_to_polys_1000m.rds")
 
 #Rasterize
 
@@ -349,6 +347,12 @@ polys_merged_max_summed_DAMS_raster_normalised <- (polys_merged_max_summed_DAMS_
   (summed_dams_max - summed_dams_min)
 
 plot(polys_merged_max_summed_DAMS_raster_normalised)
+
+#Only these woodland types will provide good shelter for thermoregulation:
+#"Conifer", "Broadleaved", "Mixed mainly broadleaved",
+#"Mixed mainly conifer","Shrub","Coppice","Coppice with standards"
+
+#
  
 ```
 
