@@ -22,8 +22,10 @@ bng <- 27700
 #SU79 <- ew10k %>% filter(tile_name %in% c("SU79"))
 
 #Get first five 10k tiles as an example
-tiles <- ew10k %>% filter(tile_name %in% c("SU79","SU78","SU88","SU89"))
-#plot(tiles$geometry)
+#tiles <- ew10k %>% filter(tile_name %in% c("TL87","TL88","TL97","TL98"))
+tiles <- ew10k %>% filter(tile_name %in% c("NY21","NY22","NY12","NY11"))
+
+plot(tiles$geometry)
 ```
 
 ```{r}
@@ -98,7 +100,7 @@ boundaries_nfi <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2
 ```
 
 ```{r}
-#Open woodland types will have a high risk of impact from small deer
+#Open woodland types will have a high risk of impact from large deer
 #Closed woodland types will have a lower risk of impact
 
 #Add a column woodland_vulnerability to woods_only with following conditions
@@ -125,7 +127,8 @@ writeRaster(woodland_food_value_raster, "C:/Users/ik929086/Documents/iDeer/outpu
 #plot(woodland_food_value_raster)
 
 woodland_food_value_raster <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/NFI_woodland_food_value_index_large_deer.tif")
-
+#woodland_food_value_raster <- crop(woodland_food_value_raster, tiles)
+#plot(woodland_food_value_raster)
 ```
 
 ```{r}
@@ -151,6 +154,8 @@ writeRaster(Focal1000_EDGES_PERC, "C:/Users/ik929086/Documents/iDeer/output/GB_d
              overwrite=TRUE)
 
 Focal1000_EDGES_PERC <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/NFI_focal_woodland_edge_area_1000m_percentage_cover.tif")
+#Focal1000_EDGES_PERC <- crop(Focal1000_EDGES_PERC, tiles)
+#plot(Focal1000_EDGES_PERC)
 ```
 
 ```{r}
@@ -196,6 +201,8 @@ Focal1000_EDGES_PERC <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_data
 # plot(Focal1000_PEREN_PERC)
 
 Focal1000_PEREN_PERC <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/percentage_cover_perennial_1000m_2023.tif")
+#Focal1000_PEREN_PERC <- crop(Focal1000_PEREN_PERC, tiles)
+#plot(Focal1000_PEREN_PERC)
 ```
 
 ```{r}
@@ -323,7 +330,7 @@ Focal1000_DAMS <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2
 patch_agg <- raster::extract(Focal1000_DAMS, merged_woods, fun=max, na.rm=TRUE, df=TRUE)
 
 patch_agg <- patch_agg %>% rename(group_ID = ID,
-                                  max_dams_1000_non_wood_2023 = layer)
+                                  max_dams_1000_non_wood_2023 = summed_dams_1000_non_wood_NFI_LCM_mosaic_2023)
 
 #left_join the max summed DAMS score to GB_polys_merged
 
@@ -348,12 +355,45 @@ polys_merged_max_summed_DAMS_raster_normalised <- (polys_merged_max_summed_DAMS_
 
 plot(polys_merged_max_summed_DAMS_raster_normalised)
 
+writeRaster(polys_merged_max_summed_DAMS_raster_normalised, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/NFI_CEH_LCM_2023_summed_max_dams_non_wood_1000m_normalised.tif")
+
+polys_merged_max_summed_DAMS_raster_normalised <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/NFI_CEH_LCM_2023_summed_max_dams_non_wood_1000m_normalised.tif")
+
+#polys_merged_max_summed_DAMS_raster_normalised <- crop(polys_merged_max_summed_DAMS_raster_normalised, tiles)
+#plot(polys_merged_max_summed_DAMS_raster_normalised)
+```
+
+```{r}
 #Only these woodland types will provide good shelter for thermoregulation:
 #"Conifer", "Broadleaved", "Mixed mainly broadleaved",
 #"Mixed mainly conifer","Shrub","Coppice","Coppice with standards"
+#Classify NFI woods by their shelter quality
 
-#
- 
+unique(woods_only$IFT_IOA)
+#  [1] "Broadleaved"              "Assumed woodland"         "Conifer"                  "Felled"                  
+#  [5] "Failed"                   "Ground prep"              "Low density"              "Mixed mainly broadleaved"
+#  [9] "Mixed mainly conifer"     "Young trees"              "Coppice"                  "Coppice with standards"  
+# [13] "Shrub"                    "Windblow"  
+
+woods_only <- woods_only %>%
+  mutate(woodland_shelter_value = case_when(
+    IFT_IOA %in% c("Assumed woodland","Failed","Windblow","Ground prep","Felled","Low density", "Young trees") ~ 1,
+    IFT_IOA %in% c("Coppice with standards","Coppice","Shrub") ~ 2,
+    IFT_IOA %in% c("Broadleaved", "Mixed mainly broadleaved","Conifer","Mixed mainly conifer") ~ 3,
+    TRUE ~ NA_real_  # This handles other values (if needed, or you can leave it out)
+  ))
+
+woodland_shelter_value_raster <- fasterize::fasterize(woods_only, template_rast,
+                                                   field = "woodland_shelter_value")
+
+crs(woodland_shelter_value_raster) <- bng
+
+writeRaster(woodland_shelter_value_raster, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/NFI_woodland_shelter_value_index_large_deer.tif",overwrite=TRUE)
+
+woodland_shelter_value_raster <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/NFI_woodland_shelter_value_index_large_deer.tif")
+
+#woodland_shelter_value_raster <- crop(woodland_shelter_value_raster, tiles)
+#plot(woodland_shelter_value_raster)
 ```
 
 ```{r}
@@ -373,16 +413,26 @@ urban_parcels <- st_read("C:/Users/ik929086/Documents/iDeer/output/urban_suburba
 st_crs(urban_parcels) <- bng
 
 # NEAREST URBAN FEATURE LOOP ####
+
+library(progress)
   
 #tiles <- ew10k
 
-tiles <- tiles
+tiles <- ew10k
 
 #Raster that only contains NFI woodlands
 wood_binary_rast <- woodland_food_value_raster
 
 # Make empty list to store raster tiles
 nearest_urban_suburban_list <- list()
+
+# Set up progress bar
+pb <- progress_bar$new(
+  format = "  Processing tiles [:bar] :percent eta: :eta",
+  total = length(tiles$tile_name),
+  clear = FALSE,
+  width = 60
+)
 
 for (i in 1:length(tiles$tile_name)) { 
   tile <- tiles[i,] #select tile
@@ -413,6 +463,9 @@ for (i in 1:length(tiles$tile_name)) {
     
   }
   
+  # Update progress bar
+  pb$tick()
+  
 }
 
 
@@ -434,6 +487,8 @@ valid_urban_rasters <- lapply(nearest_urban_suburban_list, function(raster_layer
 # Remove NULL elements from the list
 valid_urban_rasters <- Filter(function(x) !is.null(x), valid_urban_rasters)
 
+write_rds(valid_urban_rasters, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/NFI_nearest_urban_suburban_raster_2023_EW.rds")
+
 # Mosaic raster
 #urban_distance_mosaic <- do.call(mosaic, c(valid_urban_rasters, fun = mean))
 NEAREST_URB_SUBURB <- do.call(mosaic, c(valid_urban_rasters, fun = mean))
@@ -443,13 +498,17 @@ NEAREST_URB_SUBURB <- do.call(mosaic, c(valid_urban_rasters, fun = mean))
 #crs(urban_distance_mosaic) <- bng
 
 # Save raster
-#writeRaster(urban_distance_mosaic, here("output/nearest_urban_suburban_raster_2023_EW_1_434.tif"),overwrite=TRUE)
+writeRaster(NEAREST_URB_SUBURB, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/NFI_nearest_urban_suburban_raster_2023_EW.tif",overwrite=TRUE)
 #print("Urban raster mosaic complete and saved")
 
 # urban_tile <- st_filter(urban_parcels, tiles)
 # plot(valid_urban_rasters[[1]])
 # plot(urban_tile$geometry, add=TRUE)
 # NEAREST_URB_SUBURB <- mosaic(valid_urban_rasters)
+
+NEAREST_URB_SUBURB <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/NFI_nearest_urban_suburban_raster_2023_EW.tif")
+#NEAREST_URB_SUBURB <- crop(NEAREST_URB_SUBURB, tiles)
+#plot(NEAREST_URB_SUBURB)
 ```
 
 ```{r}
@@ -463,7 +522,7 @@ source("C:/Users/ik929086/Documents/iDeer/code/functions/extract_raster_pixels_f
 
 large_attraction_cpt_df <- read.csv("C:/Users/ik929086/Documents/iDeer/output/CPTs/Large_Deer_Attraction_Index_CPT.csv")
 #Thermoregulation Index
-large_thermoreg_cpt_df <- read.csv("C:/Users/ik929086/Documents/iDeer/data/CPTs/Largedeer_Thermoregulation_Index_Max_Summed_DAMS_1000m_Amy.csv")
+large_thermoreg_cpt_df <- read.csv("C:/Users/ik929086/Documents/iDeer/output/CPTs/Large_Deer_Thermoreg_Index_CPT_post_interviews.csv")
 #Connectivity Index
 #large_connectivity_cpt_df <- read.csv("C:/Users/ik929086/Documents/iDeer/data/CPTs/Largedeer_Connectivity_Index_Woodland_cover_1000m_Amy_EDITED.csv")
 
@@ -483,10 +542,12 @@ large_wood_food_value_cpt_df <- read.csv("C:/Users/ik929086/Documents/iDeer/data
 
 #template_rast_tiles <- crop(template_rast, tiles)
 
+#tiles <- ew10k %>% filter(tile_name %in% c("SU79","SU78","SU88","SU89"))
+
 #EXTRACT WOOD EDGE / ARABLE AREA
 
 edgepix <- extract_raster(map= Focal1000_EDGES_PERC,
-                          lcm = template_rast_tiles, #lcm
+                          lcm = template_rast, #lcm
                           tiles = tiles) #ew10k
 
 #saveRDS(edgepix, "C:/Users/ik929086/Documents/iDeer/output/edge_pix_1000m_df_EW.RDS")
@@ -504,13 +565,19 @@ edgepix <- extract_raster(map= Focal1000_EDGES_PERC,
 
 #EXTRACT WOODLAND FOOD QUALITY
 
-foodpix <- extract_raster(map = woodland_food_value_raster_test,
-                          lcm = template_rast_tiles,
+foodpix <- extract_raster(map = woodland_food_value_raster,
+                          lcm = template_rast,
                           tiles = tiles)
+
+#EXTRACT WOODLAND SHELTER QUALITY
+
+shelterpix <- extract_raster(map = woodland_shelter_value_raster,
+                             lcm = template_rast,
+                             tiles = tiles)
 
 #EXTRACT summed DAMS
 damspix <- extract_raster(map = polys_merged_max_summed_DAMS_raster_normalised,
-                          lcm = template_rast_tiles,
+                          lcm = template_rast,
                           tiles = tiles)
 
 #saveRDS(damspix, "C:/Users/ik929086/Documents/iDeer/output/dams_1000m_df_EW.RDS")
@@ -520,7 +587,7 @@ damspix <- extract_raster(map = polys_merged_max_summed_DAMS_raster_normalised,
 #EXTRACT nearest urban
 
 urbanpix <- extract_raster(map = NEAREST_URB_SUBURB,
-                          lcm = template_rast_tiles,
+                          lcm = template_rast,
                          tiles = tiles)
 
 #saveRDS(urbanpix, "C:/Users/ik929086/Documents/iDeer/output/urbanpix_df_EW.RDS")
@@ -530,7 +597,7 @@ urbanpix <- extract_raster(map = NEAREST_URB_SUBURB,
 #EXTRACT PERENNIAL COVER
 
 perenpix <- extract_raster(map = Focal1000_PEREN_PERC,
-                         lcm = template_rast_tiles,
+                         lcm = template_rast,
                          tiles = tiles)
 
 #saveRDS(perenpix, "C:/Users/ik929086/Documents/iDeer/output/perenpix_1000m_df_EW.RDS")
@@ -540,7 +607,7 @@ perenpix <- extract_raster(map = Focal1000_PEREN_PERC,
 #EXTRACT ARABLE AREA WITHIN 1000M
 
 arablepix <- extract_raster(map = Focal1000_ARABLE_PERC,
-                           lcm = template_rast_tiles,
+                           lcm = template_rast,
                          tiles = tiles)
 #saveRDS(arablepix, "C:/Users/ik929086/Documents/iDeer/output/arablepix_1000m_df_EW.RDS")
 #read
@@ -549,7 +616,8 @@ arablepix <- extract_raster(map = Focal1000_ARABLE_PERC,
 #left_join the datasets together #---------------
 
 df <- left_join(edgepix, damspix, by = c("x","y")) %>%
-  left_join(foodpix, by = c("x","y")) %>%
+  left_join(foodpix, by = c("x","y")) %>% 
+  left_join(shelterpix, by = c("x","y")) %>%
   left_join(perenpix, by = c("x","y")) %>%
   left_join(urbanpix, by = c("x","y")) %>%
   left_join(arablepix, by = c("x","y"))
@@ -586,55 +654,58 @@ beepr::beep()
 ```
 
 ```{r}
-#calculate the optimum breakpoints using Jenks natural breaks optimization.
-#to convert variables into categorical
-
-#k = number of breaks = 3
-#need to introduce subsets - dataset too large
-
-#Nearest urban/suburban
-#Predetermined using literature
-#Low <=100  metres
-#Medium >=100 - 250 metres
-#High > 250 metres
-hist(df.no.nas.full$NEAREST_URB_SUBURB)
-abline(v = 100, col = "red")
-abline(v = 250, col = "red")
-
-#Summed DAMS
-#Need to bring thresholds up so only the super high DAMS scores score as high
-dams_tert <- quantile(df.no.nas.full$Focal1000_MAX_DAMS, c(0:3/3))
-hist(df.no.nas.full$Focal1000_MAX_DAMS)
-abline(v = 0.60, col = "red")
-abline(v = 0.80, col = "red")
-
-#Connectivity
-#connect_tert <- quantile(df.no.nas.full$Focal1000_WOODS_PERC, c(0:3/3))
-#hist(df.no.nas.full$Focal1000_WOODS_PERC)
-#abline(v = 20, col = "red")
-#abline(v = 40, col = "red")
-
-#Edge density
-edge_Tert = quantile(df.no.nas.full$Focal1000_EDGE_AREA_PERC, c(0:3/3))
-hist(df.no.nas.full$Focal1000_EDGES_PERC)
-abline(v =16, col = "red")
-abline(v = 30, col = "red")
-
-#Perennial cover
-peren_tert <- quantile(df.no.nas.full$Focal1000_PEREN_PERC, c(0:3/3))
-hist(df.no.nas.full$Focal1000_PEREN_PERC)
-abline(v = 25, col = "red")
-abline(v = 50, col = "red")
-
-#Arable cover
-arable_tert <- quantile(df.no.nas.full$Focal1000_ARABLE_PERC, c(0:3/3))
-hist(df.no.nas.full$Focal1000_ARABLE_PERC)
-abline(v = 0, col = "red")
-abline(v = 15, col = "red")
-
-#Woodland food value
-#Medium = 2
-#High = 3
+# #calculate the optimum breakpoints using Jenks natural breaks optimization.
+# #to convert variables into categorical
+# 
+# #DON'T NEED TO DO THIS IN R
+# #CAN LOOK AT FULL RASTERS IN ARCGIS PRO, MUCH QUICKER
+# 
+# #k = number of breaks = 3
+# #need to introduce subsets - dataset too large
+# 
+# #Nearest urban/suburban
+# #Predetermined using literature
+# #Low <=100  metres
+# #Medium >=100 - 250 metres
+# #High > 250 metres
+# hist(df.no.nas.full$NEAREST_URB_SUBURB)
+# abline(v = 100, col = "red")
+# abline(v = 250, col = "red")
+# 
+# #Summed DAMS
+# #Need to bring thresholds up so only the super high DAMS scores score as high
+# dams_tert <- quantile(df.no.nas.full$Focal1000_MAX_DAMS, c(0:3/3))
+# hist(df.no.nas.full$Focal1000_MAX_DAMS)
+# abline(v = 0.60, col = "red")
+# abline(v = 0.80, col = "red")
+# 
+# #Connectivity
+# #connect_tert <- quantile(df.no.nas.full$Focal1000_WOODS_PERC, c(0:3/3))
+# #hist(df.no.nas.full$Focal1000_WOODS_PERC)
+# #abline(v = 20, col = "red")
+# #abline(v = 40, col = "red")
+# 
+# #Edge density
+# edge_Tert = quantile(df.no.nas.full$Focal1000_EDGE_AREA_PERC, c(0:3/3))
+# hist(df.no.nas.full$Focal1000_EDGES_PERC)
+# abline(v =16, col = "red")
+# abline(v = 30, col = "red")
+# 
+# #Perennial cover
+# peren_tert <- quantile(df.no.nas.full$Focal1000_PEREN_PERC, c(0:3/3))
+# hist(df.no.nas.full$Focal1000_PEREN_PERC)
+# abline(v = 25, col = "red")
+# abline(v = 50, col = "red")
+# 
+# #Arable cover
+# arable_tert <- quantile(df.no.nas.full$Focal1000_ARABLE_PERC, c(0:3/3))
+# hist(df.no.nas.full$Focal1000_ARABLE_PERC)
+# abline(v = 0, col = "red")
+# abline(v = 15, col = "red")
+# 
+# #Woodland food value
+# #Medium = 1
+# #High = 2
 ```
 
 ```{r}
@@ -642,12 +713,13 @@ abline(v = 15, col = "red")
 
 df_cat <- df.no.nas.full 
 
-df_cat <- df_cat %>% rename(Woodland_food_value = woodland_food_value_raster_test)
+df_cat <- df_cat %>% rename(Woodland_food_value = woodland_food_value_raster,
+                            Woodland_shelter_value = woodland_shelter_value_raster)
 
 #Edges within 1000m
 #LOW/MED/HIGH
-df_cat$Focal1000_EDGES_PERC<- ifelse(df_cat$Focal1000_EDGES_PERC <= 16, "Low",
-          ifelse(df_cat$Focal1000_EDGES_PERC > 16 & df_cat$Focal1000_EDGES_PERC <=30, "Medium",
+df_cat$Focal1000_EDGES_PERC<- ifelse(df_cat$Focal1000_EDGES_PERC <= 5, "Low",
+          ifelse(df_cat$Focal1000_EDGES_PERC > 5 & df_cat$Focal1000_EDGES_PERC <=30, "Medium",
           ifelse(df_cat$Focal1000_EDGES_PERC>30, "High", NA)))#)
 
  
@@ -659,18 +731,24 @@ df_cat$Focal1000_EDGES_PERC<- ifelse(df_cat$Focal1000_EDGES_PERC <= 16, "Low",
 #     ifelse(df_cat$Focal1000_WOODS_PERC> 40, "High", NA)))#)
 
 
- # Woodland forage quality
- df_cat$Woodland_food_value <-
-            ifelse(df_cat$Woodland_food_value==2, "Medium",
-            ifelse(df_cat$Woodland_food_value ==3 , "High", NA))
+# Woodland forage quality
+df_cat$Woodland_food_value <-
+            ifelse(df_cat$Woodland_food_value==1, "Medium",
+            ifelse(df_cat$Woodland_food_value ==2 , "High", NA))
+
+# Woodland shelter quality
+df_cat$Woodland_shelter_value <-
+            ifelse(df_cat$Woodland_shelter_value==1, "Low",
+            ifelse(df_cat$Woodland_shelter_value==2, "Medium",
+            ifelse(df_cat$Woodland_shelter_value==3 , "High", NA)))
 
 
 #Arable within 1000m
 #LOW/MED/HIGH
 #Manually adjusted
-df_cat$Focal1000_ARABLE_PERC <- ifelse(df_cat$Focal1000_ARABLE_PERC <=0, "Low",
-           ifelse(df_cat$Focal1000_ARABLE_PERC > 0 & df_cat$Focal1000_ARABLE_PERC <=15, "Medium",
-           ifelse(df_cat$Focal1000_ARABLE_PERC >15, "High", NA)))
+df_cat$Focal1000_ARABLE_PERC <- ifelse(df_cat$Focal1000_ARABLE_PERC <=25, "Low",
+           ifelse(df_cat$Focal1000_ARABLE_PERC > 25 & df_cat$Focal1000_ARABLE_PERC <=50, "Medium",
+           ifelse(df_cat$Focal1000_ARABLE_PERC >50, "High", NA)))
 
 #Perennial cover within 1000m
 df_cat$Focal1000_PEREN_PERC <- ifelse(df_cat$Focal1000_PEREN_PERC <=25, "Low",
@@ -700,12 +778,15 @@ df_cat$NEAREST_URB_SUBURB <- factor(df_cat$NEAREST_URB_SUBURB, levels = c("Low",
 
 df_cat$Focal1000_PEREN_PERC <- factor(df_cat$Focal1000_PEREN_PERC, levels = c("Low","Medium","High"))
 
+df_cat$Woodland_shelter_value <- factor(df_cat$Woodland_shelter_value, levels = c("Low","Medium","High"))
+
 unique(df_cat$NEAREST_URB_SUBURB)
 unique(df_cat$Focal1000_MAX_DAMS)
 unique(df_cat$Focal1000_PEREN_PERC)
 unique(df_cat$Focal1000_ARABLE_PERC)
 unique(df_cat$Focal1000_EDGES_PERC)
 unique(df_cat$Woodland_food_value)
+unique(df_cat$Woodland_shelter_value)
 ```
 
 ```{r}
@@ -722,7 +803,9 @@ dams_cpt<-matrix(c(0.333333,0.333333,0.333333),ncol = 3,dimnames = list(NULL, c(
 # #woodland connectivity within 1000m
 # wood_connect_cpt <- matrix(c(0.333333,0.333333,0.333333),ncol = 3,dimnames = list(NULL, c("Low", "Medium","High")))
 #woodland value
-wood_value_cpt <- matrix(c(0.5,0.5),ncol = 2,dimnames = list(NULL, c("Medium","High")))
+wood_food_value_cpt <- matrix(c(0.5,0.5),ncol = 2,dimnames = list(NULL, c("Medium","High")))
+#woodland shelter value
+wood_shelter_value_cpt <- matrix(c(0.333333,0.333333,0.333333),ncol = 3,dimnames = list(NULL, c("Low", "Medium","High")))
 #woodland edge area within 1000m
 edge_cpt <-matrix(c(0.333333,0.333333,0.333333),ncol = 3,dimnames = list(NULL, c("Low", "Medium","High")))
 ```
@@ -776,29 +859,32 @@ attraction_index_cpt
 #CPT for thermoregulation index --------------------------------####
 
 thermoreg_cpt_df<- large_thermoreg_cpt_df %>%
-  dplyr::select(-c("X","Expertise","Confidence","Total"))
+  dplyr::select(-c("X"))
 
 # Define the dimensions
 thermoreg_index_levels <- c("Low", "Medium", "High")
 max_dams_1000m_levels <- unique(thermoreg_cpt_df$MAX_DAMS_1000m)
+woodland_shelter_quality_levels <- unique(thermoreg_cpt_df$woodland_shelter_value)
 
 # Initialize the array
 thermoreg_index_cpt <- array(
   NA,
-  dim = c(length(thermoreg_index_levels), length(max_dams_1000m_levels)),
+  dim = c(length(thermoreg_index_levels), length(max_dams_1000m_levels), length(woodland_shelter_quality_levels)),
   dimnames = list(
     thermoreg_index = thermoreg_index_levels,
-    MAX_DAMS_1000m = max_dams_1000m_levels
+    MAX_DAMS_1000m = max_dams_1000m_levels,
+    Woodland_shelter_value = woodland_shelter_quality_levels
   )
 )
 
 # Populate the array with values from the DataFrame
 for (i in 1:nrow(thermoreg_cpt_df)) {
   dams_val <- thermoreg_cpt_df$MAX_DAMS_1000m[i]
+  shelter_val <- thermoreg_cpt_df$woodland_shelter_value[i]
 
-  thermoreg_index_cpt["Low", as.character(dams_val)] <- thermoreg_cpt_df$Low[i]
-  thermoreg_index_cpt["Medium", as.character(dams_val)] <- thermoreg_cpt_df$Medium[i]
-  thermoreg_index_cpt["High", as.character(dams_val)] <- thermoreg_cpt_df$High[i]
+  thermoreg_index_cpt["Low", as.character(dams_val), as.character(shelter_val)] <- thermoreg_cpt_df$Low[i]
+  thermoreg_index_cpt["Medium", as.character(dams_val),as.character(shelter_val)] <- thermoreg_cpt_df$Medium[i]
+  thermoreg_index_cpt["High", as.character(dams_val),as.character(shelter_val)] <- thermoreg_cpt_df$High[i]
 }
 
 thermoreg_index_cpt
@@ -932,6 +1018,7 @@ large_risk_index_cpt
 # Step 1: Explicitly define the nodes in the network
 nodes <- c(
   "Woodland_food_value",
+  "Woodland_shelter_value",
   "dist_to_urban",
   "Focal1000_PEREN_PERC",
   "Focal1000_ARABLE_PERC",
@@ -954,6 +1041,7 @@ arc.set = matrix(c("Woodland_food_value", "wood_value_index",
                    "Focal1000_EDGES_PERC", "attraction_index",
                    "Focal1000_ARABLE_PERC", "attraction_index",
                    "MAX_DAMS_1000m","thermoreg_index",
+                   "Woodland_shelter_value","thermoreg_index",
                    "thermoreg_index","large_risk_index",
                    "wood_value_index","large_risk_index",
                    "attraction_index","large_risk_index",
@@ -969,17 +1057,18 @@ net<-model2network(model_string)
 # You dont need to repeat the names of the nodes with parents (child nodes) 
 
 # Custom fitting network (matching up the nodes to their CPTs)
-dfit = custom.fit(net, dist = list(Woodland_food_value = wood_value_cpt, 
+dfit = custom.fit(net, dist = list(Woodland_food_value = wood_food_value_cpt, 
                                    dist_to_urban = urban_cpt,
                                    Focal1000_PEREN_PERC = peren_cpt,
                                    Focal1000_EDGES_PERC = edge_cpt,
                                    MAX_DAMS_1000m = dams_cpt,
                                    Focal1000_ARABLE_PERC = arable_cpt,
-                                   wood_value_index = wood_value_index_cpt,
+                                   Woodland_shelter_value = wood_shelter_value_cpt,
                                    thermoreg_index = thermoreg_index_cpt,
                                    urban_dist_index = disturbance_index_cpt,
                                    attraction_index =attraction_index_cpt,
-                                   large_risk_index=large_risk_index_cpt))
+                                   large_risk_index=large_risk_index_cpt,
+                                   wood_value_index=wood_value_index_cpt))
 
 #Plot BN structure ####
 #graphviz.plot(net)
@@ -1022,6 +1111,7 @@ levels(predict_dat$Focal1000_ARABLE_PERC)<-c("Low", "Medium", "High")
 levels(predict_dat$dist_to_urban) <- c("Low", "Medium", "High")
 levels(predict_dat$MAX_DAMS_1000m)<-c("Low", "Medium", "High")
 levels(predict_dat$Focal1000_EDGES_PERC)<-c("Low", "Medium", "High")
+levels(predict_dat$Woodland_shelter_value) <- c("Low", "Medium", "High")
 
 predict_dat$attraction_index <- factor(NA, levels = c("Low", "Medium", "High"))
 predict_dat$wood_value_index <- factor(NA, levels = c("Medium", "High"))
@@ -1064,7 +1154,7 @@ df_cat$pred_attraction_index <- pred_fpi
 df_cat$pred_wood_value_index <- pred_wood_value
 df_cat$pred_disturb <- pred_disturb
 
-beepr::beep()
+#beepr::beep()
 ```
 
 ```{r}
@@ -1074,7 +1164,7 @@ beepr::beep()
 
  # Make sf object
  df_sf <- st_as_sf(df_cat, coords = c("x", "y"), crs = st_crs(bng))
-
+ 
  #save sf object
  #saveRDS(df_sf, "C:/Users/ik929086/Documents/iDeer/output/large_deer_full_df_cat_point_geometry.RDS")
  
@@ -1082,7 +1172,6 @@ beepr::beep()
  
 #Make large deer predict_dat rasters to check layers
 # Define the color palette
-index_palette <- c("0" = NA, "1" = "green", "2" = "orange", "3" = "red")
 
 #Forage pressure index
 forage_vals <- c("Low"=1,"Medium"=2,"High"=3)
@@ -1091,7 +1180,26 @@ df_sf_selected <- df_sf%>%dplyr::select(c(geometry, forage_vals))
 #forage_r <- stars::st_rasterize(sf = df_sf_selected, template = stars_template)
 forage_r <- stars::st_rasterize(sf = df_sf_selected)
 #stars::write_stars(forage_r, "C:/Users/ik929086/Documents/iDeer/output/large_deer_attraction_index_rast_test.tif",overwrite=TRUE)
-plot(forage_r, col = index_palette)
+forage_r[forage_r == 0] <- NA #make zero's NAs
+
+unique_vals <- sort(na.omit(unique(as.vector(forage_r[[1]]))))
+
+# Define full palette
+forage_palette <- c("1" = "green", "2"= "orange", "3" = "red")
+
+# Subset palette to only existing levels in the raster
+active_palette <- forage_palette[names(forage_palette) %in% unique_vals]
+
+# Set breaks: one more than number of colours
+breaks_vals <- c(min(unique_vals) - 0.5, unique_vals + 0.5)
+
+# Plot with explicit breaks and colours
+plot(forage_r, col = active_palette, breaks = breaks_vals)
+
+#save
+
+stars::write_stars(forage_r, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/NFI_attraction_index_example_borrowdale.tif")
+
 #plot(forage_r)
 # 
 # #Connectivity index
@@ -1103,31 +1211,47 @@ plot(forage_r, col = index_palette)
 # #stars::write_stars(connect_r, "C:/Users/ik929086/Documents/iDeer/output/large_deer_connectivity_index_rast_test.tif",overwrite=TRUE)
 # plot(connect_r, col = index_palette)
 
-wood_value_palette <- c("0" = NA, "2" = "orange", "3" = "red")
+wood_value_palette <- c("1" = "orange", "2" = "red")
 #Wood value index
-wood_value_vals <- c("Medium"=2,"High"=3)
+wood_value_vals <- c("Medium"=1,"High"=2)
 df_sf$wood_value_vals <- wood_value_vals[df_sf$pred_wood_value_index]
 df_sf_selected <- df_sf%>%dplyr::select(geometry, wood_value_vals)
 #forage_r <- stars::st_rasterize(sf = df_sf_selected, template = stars_template)
 wood_value_r <- stars::st_rasterize(sf = df_sf_selected)
+wood_value_r[wood_value_r == 0] <- NA #make zero's NAs
 plot(wood_value_r, col = wood_value_palette)
+unique_vals <- unique(as.vector(wood_value_r[[1]]))
 
- #Thermoreg index
- thermoreg_vals <- c("Low"=1,"Medium"=2,"High"=3)
+
+#Thermoreg index
+
+thermoreg_vals <- c("Low"=1,"Medium"=2,"High"=3)
  df_sf$thermoreg_vals <- thermoreg_vals[df_sf$pred_thermoreg]
  df_sf_selected <- df_sf%>%dplyr::select(geometry, thermoreg_vals)
  #forage_r <- stars::st_rasterize(sf = df_sf_selected, template = stars_template)
  thermoreg_r <- stars::st_rasterize(sf = df_sf_selected)
+thermoreg_r[thermoreg_r == 0] <- NA #make zero's NAs
+ # Define full palette
+full_palette <- c("1" = "green", "2" = "orange", "3" = "red")
+
+#Get unique values
+unique_vals <- sort(na.omit(unique(as.vector(thermoreg_r[[1]]))))
+
+# Subset palette to only existing levels in the raster
+active_palette <- full_palette[names(full_palette) %in% unique_vals]
+
  #stars::write_stars(connect_r, "C:/Users/ik929086/Documents/iDeer/output/large_deer_connectivity_index_rast_test.tif",overwrite=TRUE)
- plot(thermoreg_r, col = index_palette)
-# #stars::write_stars(thermoreg_r, "C:/Users/ik929086/Documents/iDeer/output/large_deer_attraction_index_rast_test.tif",overwrite=TRUE)
+plot(thermoreg_r, col = active_palette)
+stars::write_stars(thermoreg_r, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/NFI_thermoreg_index_example_borrowdale.tif")
 # 
  #Disturbance index
- disturbance_vals <- c("Low"=1,"Medium"=2,"High"=3)
- df_sf$disturbance_vals <- disturbance_vals[df_sf$pred_disturb]
- df_sf_selected <- df_sf%>%dplyr::select(geometry, disturbance_vals)
- disturbance_r <- stars::st_rasterize(sf = df_sf_selected)
- plot(disturbance_r, col = index_palette)
+disturbance_vals <- c("Low"=1,"Medium"=2,"High"=3)
+df_sf$disturbance_vals <- disturbance_vals[df_sf$pred_disturb]
+df_sf_selected <- df_sf%>%dplyr::select(geometry, disturbance_vals)
+disturbance_r <- stars::st_rasterize(sf = df_sf_selected)
+disturbance_r[disturbance_r == 0] <- NA #make zero's NAs
+
+ plot(disturbance_r, col = full_palette)
 
  # Define the value mapping for pred_damage
 damage_values <- c("Low" = 1, "Low_Medium" = 2, "Medium" = 3, "Medium_High" = 4, "High" = 5)
@@ -1148,10 +1272,19 @@ damage_palette <- c("1" = "green",
  r <- stars::st_rasterize(sf = df_sf_selected)
  #r <- stars::st_rasterize(sf = df_sf_selected)
  r[r == 0] <- NA #make zero's NAs
- plot(r, col = damage_palette)
-#stars::write_stars(r, "C:/Users/ik929086/Documents/iDeer/output/large_deer_risk_raster.tif",overwrite=TRUE)
+  # Check unique values
+unique_vals <- unique(as.vector(r[[1]]))
+#print(unique_vals)
 
-beepr::beep()
+# Define full palette
+risk_palette <- c("1" = "green", "2" = "yellow", "3" = "orange", "4" = "red", "5" = "brown")
+
+# Subset palette to only existing levels in the raster
+active_palette <- risk_palette[names(risk_palette) %in% unique_vals]
+
+plot(r, col = active_palette)
+stars::write_stars(r, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/NFI_large_deer_risk_raster_example_borrowdale.tif",overwrite=TRUE)
+#beepr::beep()
 
 #r <- raster("C:/Users/ik929086/Documents/iDeer/output/large_deer_risk_raster.tif")
 #r[is.na(r)] <- 0
