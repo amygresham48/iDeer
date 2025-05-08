@@ -24,7 +24,8 @@ bng <- 27700
 #SU79 <- ew10k %>% filter(tile_name %in% c("SU79"))
 
 #Get first five 10k tiles as an example
-tiles <- ew10k %>% filter(tile_name %in% c("SU79","SU78","SU88","SU89"))
+#tiles <- ew10k %>% filter(tile_name %in% c("SU79","SU78","SU88","SU89"))
+tiles <- ew10k %>% filter(tile_name %in% c("NY21","NY22","NY12","NY11"))
 #plot(tiles$geometry)
 
 ```
@@ -127,7 +128,7 @@ boundaries_nfi <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2
 #               overwrite=TRUE)
 
 # #plot(woodland_food_value_raster)
-woodland_food_value_raster <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/small_deer/NFI_woodland_food_value_index.tif")
+woodland_food_value_raster <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/small_deer/NFI_woodland_food_value_index_bng.tif")
 
 #woodland_food_value_raster_test <- crop(woodland_food_value_raster, tiles)
 ```
@@ -337,12 +338,12 @@ small_wood_food_value_cpt_df <- read.csv("C:/Users/ik929086/Documents/iDeer/data
 
 #Crop rasters to produce tests
 
-Focal400_EDGES_PERC <- crop(Focal400_EDGES_PERC, tiles)
-Focal400_LF_PERC_POLYS <- crop(Focal400_LF_PERC_POLYS, tiles)
-Focal400_WOOD_PERC_POLYS <- crop(Focal400_WOOD_PERC_POLYS, tiles)
-woodland_food_value_raster <- crop(woodland_food_value_raster, tiles)
-
-template_rast_tiles <- crop(template_rast, tiles)
+# Focal400_EDGES_PERC <- crop(Focal400_EDGES_PERC, tiles)
+# Focal400_LF_PERC_POLYS <- crop(Focal400_LF_PERC_POLYS, tiles)
+# Focal400_WOOD_PERC_POLYS <- crop(Focal400_WOOD_PERC_POLYS, tiles)
+# woodland_food_value_raster <- crop(woodland_food_value_raster, tiles)
+# 
+# template_rast_tiles <- crop(template_rast, tiles)
 
 #Create a dataframe containing all extracted raster values within user's landscape
 
@@ -350,7 +351,7 @@ template_rast_tiles <- crop(template_rast, tiles)
 #EXTRACT LENGTH OF WOODLAND EDGE
 
 edgepix <- extract_raster(map = Focal400_EDGES_PERC,
-                          lcm = template_rast_tiles, #UK lcm
+                          lcm = template_rast, #UK lcm
                          tiles = tiles) #ew10k
 
 #saveRDS(edgepix, "C:/Users/ik929086/Documents/iDeer/output/edgepix_400m_df_EW.RDS")
@@ -360,12 +361,12 @@ edgepix <- extract_raster(map = Focal400_EDGES_PERC,
 #EXTRACT WOODLAND FOOD QUALITY
 
 foodpix <- extract_raster(map = woodland_food_value_raster,
-                          lcm = template_rast_tiles,
+                          lcm = template_rast,
                           tiles = tiles)
 
 #EXTRACT CONNECTIVITY
 woodpix <- extract_raster(map = Focal400_WOOD_PERC_POLYS,
-                          lcm = template_rast_tiles,
+                          lcm = template_rast,
                          tiles = tiles)
 #saveRDS(woodpix, "C:/Users/ik929086/Documents/iDeer/output/woodpix_wood_area_400m_df_EW.RDS")
 #read
@@ -374,7 +375,7 @@ woodpix <- extract_raster(map = Focal400_WOOD_PERC_POLYS,
 #EXTRACT LF DENSITY WITHIN 400M
 
 LFpix <- extract_raster(map = Focal400_LF_PERC_POLYS,
-                        lcm = template_rast_tiles,
+                        lcm = template_rast,
                         tiles = tiles)
 
 #saveRDS(LFpix, "C:/Users/ik929086/Documents/iDeer/output/LFpix_area_400m_df_EW.RDS")
@@ -822,7 +823,7 @@ df_sf <- st_as_sf(df_cat, coords = c("x", "y"), crs = st_crs(bng))
 #df_sf <- readRDS("C:/Users/ik929086/Documents/iDeer/output/small_deer_full_df_cat_point_geometry.RDS")
 
 # Convert the RasterLayer to a stars object
- stars_template <- stars::st_as_stars(template_rast_tiles)
+#stars_template <- stars::st_as_stars(template_rast_tiles)
 
 #Make small deer predict_dat rasters to check layers
 #Define the color palette
@@ -836,6 +837,7 @@ df_sf_selected <- df_sf%>%dplyr::select(geometry, forage_vals)
 forage_r <- stars::st_rasterize(sf = df_sf_selected)
 #stars::write_stars(forage_r, "C:/Users/ik929086/Documents/iDeer/output/small_deer_forage_pressure_index_rast_test.tif",overwrite=TRUE)
 plot(forage_r, col = index_palette)
+stars::write_stars(forage_r, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/small_deer/NFI_attraction_index_example_borrowdale.tif")
 
 #Connectivity index
 connect_vals <- c("Low"=1,"Medium"=2,"High"=3)
@@ -845,6 +847,7 @@ df_sf_selected <- df_sf%>%dplyr::select(geometry, connect_vals)
 connect_r <- stars::st_rasterize(sf = df_sf_selected)
 #stars::write_stars(connect_r, "C:/Users/ik929086/Documents/iDeer/output/small_deer_connectivity_index_rast_test.tif",overwrite=TRUE)
 plot(connect_r, col = index_palette)
+stars::write_stars(connect_r, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/small_deer/NFI_connect_index_example_borrowdale.tif")
 
 #Wood value index
 wood_value_vals <- c("Low"=1,"Medium"=2,"High"=3)
@@ -882,5 +885,7 @@ risk_palette <- c("1" = "green", "2" = "yellow", "3" = "orange", "4" = "red", "5
 active_palette <- risk_palette[names(risk_palette) %in% unique_vals]
 
 plot(r, col = active_palette)
+
+stars::write_stars(r, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/small_deer/NFI_small_deer_risk_raster_example_borrowdale.tif",overwrite=TRUE)
  
 ```
