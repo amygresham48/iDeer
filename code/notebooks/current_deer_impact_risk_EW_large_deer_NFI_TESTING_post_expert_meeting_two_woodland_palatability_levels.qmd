@@ -4,7 +4,7 @@ Changes made:
 
 -   Disturbance (distance to nearest urban/suburban area removed)
 
--   Add in "Low" category to woodland "yummy-ness" or "palatability" for mature conifer woods
+-   Calculate focal max DAMS without excluding woodlands as 0 DAMS.
 
 ```{r}
 library(sf)
@@ -27,8 +27,8 @@ bng <- 27700
 #tiles <- ew10k %>% filter(tile_name %in% c("TL87","TL88","TL97","TL98")) #northampton
 #tiles <- ew10k %>% filter(tile_name %in% c("NY21","NY22","NY12","NY11")) #lake district
 #tiles <- ew10k %>% filter(tile_name %in% c("SE71","SE72","SE61","SE62")) #thorne moors
-#tiles <- ew10k %>% filter(tile_name %in% c("SX16","SX17","SX27","SX26")) #cornwall
-tiles <- ew10k %>% filter(tile_name %in% c("SU20","SU30","SZ29","SZ39")) #new forest
+tiles <- ew10k %>% filter(tile_name %in% c("SX16","SX17","SX27","SX26")) #cornwall
+#tiles <- ew10k %>% filter(tile_name %in% c("SU20","SU30","SZ29","SZ39")) #new forest
 
 plot(tiles$geometry)
 ```
@@ -294,181 +294,181 @@ Focal1000_ARABLE_PERC <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_dat
 # 
 # plot(merged_woods$geometry)
 
-merged_woods <- read_rds("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/small_deer/NFI_2023_all_woods_UK_touching_merged.rds")
-
-# #DAMS
-# #Interpolated from 50m resolution to 25m resolution
-# #To match the resolution of other raster layers
-# #Interpolation method = bilinear
-dams <- raster("C:/Users/ik929086/Documents/iDeer/data/raw-data/DAMS/dams_25m_bng.tif")
-crs(dams) <- bng
-# Crop dams to match the extent of lcm
-dams_crop <- crop(dams, extent(template_rast))
-#Reclass lcm so all habitats set to 1 (including woods)
-#Provides a blank slate that we can then burn the NFI woods into as zeros
-reclass <- data.frame(is = c(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,
-                             18,19,20,21), becomes = c(1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1))
-binary_raster_GB <- reclassify(template_rast, reclass)
-
-#open_raster_GB <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/woods_only_raster_GB_2023.tif")
-#crs(open_raster_GB) <- bng
-
-#Reclass NFI so all shelter habitats set to 0
-thermoreg_habitats <- nfi <- nfi %>%
-  mutate(thermoreg_ID = case_when(
-    IFT_IOA %in% c("Bare area", "Assumed woodland", "Failed",
-                   "Windblow", "Grassland",
-                   "Ground prep", "Agricultural land",
-                   "Felled", "Low density", "Young trees","Urban","Windfarm","Quarry","River","Open water","Road", "Other vegetation") ~ 1,
-    IFT_IOA %in% c("Conifer", "Broadleaved", "Mixed mainly broadleaved",
-                   "Mixed mainly conifer","Shrub","Coppice","Coppice with standards","Power line") ~ 0,
-    TRUE ~ NA_real_  # This handles other values (if needed, or you can leave it out)
-  ))
-
-
-#Make binary open habitat raster ####
-nfi_rast_open <- fasterize::fasterize(thermoreg_habitats, template_rast,
-                                      field = "thermoreg_ID")
-
-#binary_raster_test <- crop(binary_raster_GB, tiles)
-#nfi_rast_open_test <- crop(nfi_rast_open, tiles)
-#Mosaic the two rasters, giving priority to the NFI
-nfi_lcm_open_mosaic <- mosaic(nfi_rast_open, binary_raster_GB,
-                              fun = min #zeros will remain 0
-                              )
-crs(nfi_lcm_open_mosaic) <- bng
-
-writeRaster(nfi_lcm_open_mosaic, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/woods_only_raster_GB_NFI_LCM_mosaic_2023.tif",overwrite=TRUE)
-#plot(nfi_rast_open_test)
-#plot(open_raster_test)
-#plot(nfi_lcm_open_mosaic_test)
-#Multiply DAMs and open land cover raster together - woodlands will be set to 0 DAMS
-DAMS_open_raster <- dams_crop*nfi_lcm_open_mosaic
-writeRaster(DAMS_open_raster, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/DAMS_non_wood_raster_GB_NFI_LCM_mosaic_2023.tif",overwrite=TRUE)
-plot(DAMS_open_raster)
-
-#DAMS_open_raster_test <- crop(DAMS_open_raster, tiles)
-
-circle.buff = raster::focalWeight(DAMS_open_raster, d=1000, type="circle",fillNA=T )#Create buffer
-circle.buff[circle.buff > 0] <- 1   # replacing weights by 1
-Focal1000_DAMS= raster::focal(x=DAMS_open_raster, w=circle.buff, fun=sum, na.rm=T, pad=TRUE, padValue=NA#,
-                         #filename = here("output/GB_datasets_2023/large-deer/sum_dams_1000_non_wood_2023.tif"), 
-                         #overwrite=T)#do focal window analysis with weights matrix
-)
-#plot(Focal1000_DAMS)
-print("MAX DAMS 1km raster saved")
-writeRaster(Focal1000_DAMS, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/summed_dams_1000_non_wood_NFI_LCM_mosaic_2023.tif")
-
-Focal1000_DAMS <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/summed_dams_1000_non_wood_NFI_LCM_mosaic_2023.tif")
-
-#Aggregate to patch, where the score for each patch is the normalised maximum summed DAMS score for any pixel in patch
-# Assuming you have a patch identifier, e.g., 'patch_id' in your woodland polygons
-patch_agg <- raster::extract(Focal1000_DAMS, merged_woods, fun=max, na.rm=TRUE, df=TRUE)
-
-patch_agg <- patch_agg %>% rename(group_ID = ID,
-                                  max_dams_1000_non_wood_2023 = summed_dams_1000_non_wood_NFI_LCM_mosaic_2023)
-
-#left_join the max summed DAMS score to GB_polys_merged
-
-polys_merged_max_summed_DAMS <- left_join(patch_agg, merged_woods, by = c("group_ID"))
-
-polys_merged_max_summed_DAMS <- st_as_sf(polys_merged_max_summed_DAMS)
-
-saveRDS(polys_merged_max_summed_DAMS, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/NFI_max_summed_DAMS_extracted_to_polys_1000m.rds")
-
-#Rasterize
-
-polys_merged_max_summed_DAMS_raster <- fasterize::fasterize(sf = polys_merged_max_summed_DAMS,
-raster = template_rast,
-field = "max_dams_1000_non_wood_2023")
-
-summed_dams_min <- polys_merged_max_summed_DAMS_raster@data@min
-summed_dams_max <- polys_merged_max_summed_DAMS_raster@data@max
-
-#Normalise summed DAMS scores from 0-1
-polys_merged_max_summed_DAMS_raster_normalised <- (polys_merged_max_summed_DAMS_raster - summed_dams_min) / 
-  (summed_dams_max - summed_dams_min)
-
-plot(polys_merged_max_summed_DAMS_raster_normalised)
-
-writeRaster(polys_merged_max_summed_DAMS_raster_normalised, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/NFI_CEH_LCM_2023_summed_max_dams_non_wood_1000m_normalised.tif")
-
-polys_merged_max_summed_DAMS_raster_normalised <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/NFI_CEH_LCM_2023_summed_max_dams_non_wood_1000m_normalised.tif")
-
-#polys_merged_max_summed_DAMS_raster_normalised <- crop(polys_merged_max_summed_DAMS_raster_normalised, tiles)
-#plot(polys_merged_max_summed_DAMS_raster_normalised)
+# merged_woods <- read_rds("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/small_deer/NFI_2023_all_woods_UK_touching_merged.rds")
+# 
+# # #DAMS
+# # #Interpolated from 50m resolution to 25m resolution
+# # #To match the resolution of other raster layers
+# # #Interpolation method = bilinear
+# dams <- raster("C:/Users/ik929086/Documents/iDeer/data/raw-data/DAMS/dams_25m_bng.tif")
+# crs(dams) <- bng
+# # Crop dams to match the extent of lcm
+# dams_crop <- crop(dams, extent(template_rast))
+# #Reclass lcm so all habitats set to 1 (including woods)
+# #Provides a blank slate that we can then burn the NFI woods into as zeros
+# reclass <- data.frame(is = c(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,
+#                              18,19,20,21), becomes = c(1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1))
+# binary_raster_GB <- reclassify(template_rast, reclass)
+# 
+# #open_raster_GB <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/woods_only_raster_GB_2023.tif")
+# #crs(open_raster_GB) <- bng
+# 
+# #Reclass NFI so all shelter habitats set to 0
+# thermoreg_habitats <- nfi <- nfi %>%
+#   mutate(thermoreg_ID = case_when(
+#     IFT_IOA %in% c("Bare area", "Assumed woodland", "Failed",
+#                    "Windblow", "Grassland",
+#                    "Ground prep", "Agricultural land",
+#                    "Felled", "Low density", "Young trees","Urban","Windfarm","Quarry","River","Open water","Road", "Other vegetation") ~ 1,
+#     IFT_IOA %in% c("Conifer", "Broadleaved", "Mixed mainly broadleaved",
+#                    "Mixed mainly conifer","Shrub","Coppice","Coppice with standards","Power line") ~ 0,
+#     TRUE ~ NA_real_  # This handles other values (if needed, or you can leave it out)
+#   ))
+# 
+# 
+# #Make binary open habitat raster ####
+# nfi_rast_open <- fasterize::fasterize(thermoreg_habitats, template_rast,
+#                                       field = "thermoreg_ID")
+# 
+# #binary_raster_test <- crop(binary_raster_GB, tiles)
+# #nfi_rast_open_test <- crop(nfi_rast_open, tiles)
+# #Mosaic the two rasters, giving priority to the NFI
+# nfi_lcm_open_mosaic <- mosaic(nfi_rast_open, binary_raster_GB,
+#                               fun = min #zeros will remain 0
+#                               )
+# crs(nfi_lcm_open_mosaic) <- bng
+# 
+# writeRaster(nfi_lcm_open_mosaic, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/woods_only_raster_GB_NFI_LCM_mosaic_2023.tif",overwrite=TRUE)
+# #plot(nfi_rast_open_test)
+# #plot(open_raster_test)
+# #plot(nfi_lcm_open_mosaic_test)
+# #Multiply DAMs and open land cover raster together - woodlands will be set to 0 DAMS
+# DAMS_open_raster <- dams_crop*nfi_lcm_open_mosaic
+# writeRaster(DAMS_open_raster, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/DAMS_non_wood_raster_GB_NFI_LCM_mosaic_2023.tif",overwrite=TRUE)
+# plot(DAMS_open_raster)
+# 
+# #DAMS_open_raster_test <- crop(DAMS_open_raster, tiles)
+# 
+# circle.buff = raster::focalWeight(DAMS_open_raster, d=1000, type="circle",fillNA=T )#Create buffer
+# circle.buff[circle.buff > 0] <- 1   # replacing weights by 1
+# Focal1000_DAMS= raster::focal(x=DAMS_open_raster, w=circle.buff, fun=sum, na.rm=T, pad=TRUE, padValue=NA#,
+#                          #filename = here("output/GB_datasets_2023/large-deer/sum_dams_1000_non_wood_2023.tif"), 
+#                          #overwrite=T)#do focal window analysis with weights matrix
+# )
+# #plot(Focal1000_DAMS)
+# print("MAX DAMS 1km raster saved")
+# writeRaster(Focal1000_DAMS, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/summed_dams_1000_non_wood_NFI_LCM_mosaic_2023.tif")
+# 
+# Focal1000_DAMS <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/summed_dams_1000_non_wood_NFI_LCM_mosaic_2023.tif")
+# 
+# #Aggregate to patch, where the score for each patch is the normalised maximum summed DAMS score for any pixel in patch
+# # Assuming you have a patch identifier, e.g., 'patch_id' in your woodland polygons
+# patch_agg <- raster::extract(Focal1000_DAMS, merged_woods, fun=max, na.rm=TRUE, df=TRUE)
+# 
+# patch_agg <- patch_agg %>% rename(group_ID = ID,
+#                                   max_dams_1000_non_wood_2023 = summed_dams_1000_non_wood_NFI_LCM_mosaic_2023)
+# 
+# #left_join the max summed DAMS score to GB_polys_merged
+# 
+# polys_merged_max_summed_DAMS <- left_join(patch_agg, merged_woods, by = c("group_ID"))
+# 
+# polys_merged_max_summed_DAMS <- st_as_sf(polys_merged_max_summed_DAMS)
+# 
+# saveRDS(polys_merged_max_summed_DAMS, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/NFI_max_summed_DAMS_extracted_to_polys_1000m.rds")
+# 
+# #Rasterize
+# 
+# polys_merged_max_summed_DAMS_raster <- fasterize::fasterize(sf = polys_merged_max_summed_DAMS,
+# raster = template_rast,
+# field = "max_dams_1000_non_wood_2023")
+# 
+# summed_dams_min <- polys_merged_max_summed_DAMS_raster@data@min
+# summed_dams_max <- polys_merged_max_summed_DAMS_raster@data@max
+# 
+# #Normalise summed DAMS scores from 0-1
+# polys_merged_max_summed_DAMS_raster_normalised <- (polys_merged_max_summed_DAMS_raster - summed_dams_min) / 
+#   (summed_dams_max - summed_dams_min)
+# 
+# plot(polys_merged_max_summed_DAMS_raster_normalised)
+# 
+# writeRaster(polys_merged_max_summed_DAMS_raster_normalised, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/NFI_CEH_LCM_2023_summed_max_dams_non_wood_1000m_normalised.tif")
+# 
+# polys_merged_max_summed_DAMS_raster_normalised <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/NFI_CEH_LCM_2023_summed_max_dams_non_wood_1000m_normalised.tif")
+# 
+# #polys_merged_max_summed_DAMS_raster_normalised <- crop(polys_merged_max_summed_DAMS_raster_normalised, tiles)
+# #plot(polys_merged_max_summed_DAMS_raster_normalised)
 ```
 
 ```{r}
-#TEST - TRY EXTRACTING DAMS WITHOUT CLASSIFYING WOODS AS 0 EXPOSURE
-
-#merged_woods <- read_rds("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/small_deer/NFI_2023_all_woods_UK_touching_merged.rds")
-#st_crs(merged_woods) <- bng
-
-
-merged_woods_crop <- st_filter(merged_woods, tiles)
-merged_woods_crop$poly_id <- 1:nrow(merged_woods_crop)
-
-template_rast_crop <- crop(template_rast, tiles)
-
-# #DAMS
-# #Interpolated from 50m resolution to 25m resolution
-# #To match the resolution of other raster layers
-# #Interpolation method = bilinear
-#dams <- raster("C:/Users/ik929086/Documents/iDeer/data/raw-data/DAMS/dams_25m_bng.tif")
-#crs(dams) <- bng
-
-#crop dams to tiles
-
-dams_crop <- crop(dams, tiles)
-
-#DAMS_open_raster_test <- crop(DAMS_open_raster, tiles)
-
-circle.buff = raster::focalWeight(dams_crop, d=1000, type="circle",fillNA=T )#Create buffer
-circle.buff[circle.buff > 0] <- 1   # replacing weights by 1
-Focal1000_DAMS= raster::focal(x=dams_crop, w=circle.buff, fun=sum, na.rm=T, pad=TRUE, padValue=NA#,
-                         #filename = here("output/GB_datasets_2023/large-deer/sum_dams_1000_non_wood_2023.tif"), 
-                         #overwrite=T)#do focal window analysis with weights matrix
-)
-
-#Aggregate to patch, where the score for each patch is the normalised maximum summed DAMS score for any pixel in patch
-# Assuming you have a patch identifier, e.g., 'patch_id' in your woodland polygons
-patch_agg <- raster::extract(Focal1000_DAMS, merged_woods_crop, fun=max, na.rm=TRUE, df=TRUE)
-
-patch_agg$poly_id <- 1:nrow(patch_agg)
-
-patch_agg <- patch_agg %>% rename(#group_ID = poly_id,
-                                  max_dams_1000_non_wood_2023 = layer)
-
-#left_join the max summed DAMS score to GB_polys_merged
-
-polys_merged_max_summed_DAMS <- left_join(merged_woods_crop, patch_agg, by=c("poly_id"="poly_id"))
-
-polys_merged_max_summed_DAMS <- st_as_sf(polys_merged_max_summed_DAMS)
-
-#Rasterize
-
-polys_merged_max_summed_DAMS_raster <- fasterize::fasterize(sf = polys_merged_max_summed_DAMS,
-raster = template_rast_crop,
-field = "max_dams_1000_non_wood_2023")
-
-plot(polys_merged_max_summed_DAMS_raster)
-
-#To normnalise, use min and max from full dataset
-#This is from the layer where woods = 0 dams but fine for now
-#> summed_dams_min
-#[1] 2184.247
-#> summed_dams_max
-#[1] 117529.5
-
-summed_dams_min <- 2184.247
-summed_dams_max <- 117529.5
-
-#Normalise summed DAMS scores from 0-1
-polys_merged_max_summed_DAMS_raster_normalised <- (polys_merged_max_summed_DAMS_raster - summed_dams_min) / 
-  (summed_dams_max - summed_dams_min)
-
-plot(polys_merged_max_summed_DAMS_raster_normalised)
+# #TEST - TRY EXTRACTING DAMS WITHOUT CLASSIFYING WOODS AS 0 EXPOSURE
+# 
+# #merged_woods <- read_rds("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/small_deer/NFI_2023_all_woods_UK_touching_merged.rds")
+# #st_crs(merged_woods) <- bng
+# 
+# 
+# merged_woods_crop <- st_filter(merged_woods, tiles)
+# merged_woods_crop$poly_id <- 1:nrow(merged_woods_crop)
+# 
+# template_rast_crop <- crop(template_rast, tiles)
+# 
+# # #DAMS
+# # #Interpolated from 50m resolution to 25m resolution
+# # #To match the resolution of other raster layers
+# # #Interpolation method = bilinear
+# #dams <- raster("C:/Users/ik929086/Documents/iDeer/data/raw-data/DAMS/dams_25m_bng.tif")
+# #crs(dams) <- bng
+# 
+# #crop dams to tiles
+# 
+# dams_crop <- crop(dams, tiles)
+# 
+# #DAMS_open_raster_test <- crop(DAMS_open_raster, tiles)
+# 
+# circle.buff = raster::focalWeight(dams_crop, d=1000, type="circle",fillNA=T )#Create buffer
+# circle.buff[circle.buff > 0] <- 1   # replacing weights by 1
+# Focal1000_DAMS= raster::focal(x=dams_crop, w=circle.buff, fun=sum, na.rm=T, pad=TRUE, padValue=NA#,
+#                          #filename = here("output/GB_datasets_2023/large-deer/sum_dams_1000_non_wood_2023.tif"), 
+#                          #overwrite=T)#do focal window analysis with weights matrix
+# )
+# 
+# #Aggregate to patch, where the score for each patch is the normalised maximum summed DAMS score for any pixel in patch
+# # Assuming you have a patch identifier, e.g., 'patch_id' in your woodland polygons
+# patch_agg <- raster::extract(Focal1000_DAMS, merged_woods_crop, fun=max, na.rm=TRUE, df=TRUE)
+# 
+# patch_agg$poly_id <- 1:nrow(patch_agg)
+# 
+# patch_agg <- patch_agg %>% rename(#group_ID = poly_id,
+#                                   max_dams_1000_non_wood_2023 = layer)
+# 
+# #left_join the max summed DAMS score to GB_polys_merged
+# 
+# polys_merged_max_summed_DAMS <- left_join(merged_woods_crop, patch_agg, by=c("poly_id"="poly_id"))
+# 
+# polys_merged_max_summed_DAMS <- st_as_sf(polys_merged_max_summed_DAMS)
+# 
+# #Rasterize
+# 
+# polys_merged_max_summed_DAMS_raster <- fasterize::fasterize(sf = polys_merged_max_summed_DAMS,
+# raster = template_rast_crop,
+# field = "max_dams_1000_non_wood_2023")
+# 
+# plot(polys_merged_max_summed_DAMS_raster)
+# 
+# #To normnalise, use min and max from full dataset
+# #This is from the layer where woods = 0 dams but fine for now
+# #> summed_dams_min
+# #[1] 2184.247
+# #> summed_dams_max
+# #[1] 117529.5
+# 
+# summed_dams_min <- 2184.247
+# summed_dams_max <- 117529.5
+# 
+# #Normalise summed DAMS scores from 0-1
+# polys_merged_max_summed_DAMS_raster_normalised <- (polys_merged_max_summed_DAMS_raster - summed_dams_min) / 
+#   (summed_dams_max - summed_dams_min)
+# 
+# plot(polys_merged_max_summed_DAMS_raster_normalised)
 ```
 
 ```{r}
@@ -477,8 +477,10 @@ plot(polys_merged_max_summed_DAMS_raster_normalised)
 unmerged_woods <- read_rds("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/small_deer/NFI_2023_all_woods_UK_touching_groups.rds")
 #st_crs(merged_woods) <- bng
 
-unmerged_woods_crop <- st_filter(unmerged_woods, tiles)
-unmerged_woods_crop$poly_id <- 1:nrow(unmerged_woods_crop)
+unmerged_woods$poly_id <- 1:nrow(unmerged_woods)
+
+#unmerged_woods_crop <- st_filter(unmerged_woods, tiles)
+#unmerged_woods_crop$poly_id <- 1:nrow(unmerged_woods_crop)
 
 template_rast_crop <- crop(template_rast, tiles)
 
@@ -504,44 +506,56 @@ Focal1000_DAMS= raster::focal(x=dams_crop, w=circle.buff, fun=sum, na.rm=T, pad=
 
 #save extracted raster
 
-#Aggregate to patch, where the score for each patch is the normalised maximum summed DAMS score for any pixel in patch
-# Assuming you have a patch identifier, e.g., 'patch_id' in your woodland polygons
-patch_agg <- raster::extract(Focal1000_DAMS, unmerged_woods_crop, fun=max, na.rm=TRUE, df=TRUE)
+writeRaster(Focal1000_DAMS, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/focal_DAMS_1000m.tif")
 
-patch_agg$poly_id <- 1:nrow(patch_agg)
+# #Aggregate to patch, where the score for each patch is the normalised maximum summed DAMS score for any pixel in patch
+# # Assuming you have a patch identifier, e.g., 'patch_id' in your woodland polygons
+# patch_agg <- raster::extract(Focal1000_DAMS, unmerged_woods, fun=max, na.rm=TRUE, df=TRUE)
+# 
+# patch_agg$poly_id <- 1:nrow(patch_agg)
+# 
+# patch_agg <- patch_agg %>% rename(#group_ID = poly_id,
+#                                   max_dams_1000_non_wood_2023 = layer)
+# 
+# #left_join the max summed DAMS score to GB_polys_merged
+# 
+# polys_merged_max_summed_DAMS <- left_join(unmerged_woods, patch_agg, by=c("poly_id"="poly_id"))
+# 
+# polys_merged_max_summed_DAMS <- st_as_sf(polys_merged_max_summed_DAMS)
+# 
+# #Rasterize
+# 
+# polys_merged_max_summed_DAMS_raster <- fasterize::fasterize(sf = polys_merged_max_summed_DAMS,
+# raster = template_rast_crop,
+# field = "max_dams_1000_non_wood_2023")
+# 
+# plot(polys_merged_max_summed_DAMS_raster)
 
-patch_agg <- patch_agg %>% rename(#group_ID = poly_id,
-                                  max_dams_1000_non_wood_2023 = layer)
+#The above step takes ages in R - used ArcGIS ####
 
-#left_join the max summed DAMS score to GB_polys_merged
+#Import
 
-polys_merged_max_summed_DAMS <- left_join(merged_woods_crop, patch_agg, by=c("poly_id"="poly_id"))
+polys_unmerged_max_summed_DAMS_raster <- raster("C:/Users/ik929086/OneDrive - University of Southampton/ArcGIS/Projects/iDeer_May_2025/focal_1000m_DAMS_max_unmerged.tif")
 
-polys_merged_max_summed_DAMS <- st_as_sf(polys_merged_max_summed_DAMS)
+#polys_unmerged_max_summed_DAMS_raster[polys_unmerged_max_summed_DAMS_raster == 0] <- NA #make zero's NAs
 
-#Rasterize
+plot(polys_unmerged_max_summed_DAMS_raster)
 
-polys_merged_max_summed_DAMS_raster <- fasterize::fasterize(sf = polys_merged_max_summed_DAMS,
-raster = template_rast_crop,
-field = "max_dams_1000_non_wood_2023")
+# summed_dams_min <- polys_unmerged_max_summed_DAMS_raster@data@min
+# summed_dams_max <- polys_unmerged_max_summed_DAMS_raster@data@max
 
-plot(polys_merged_max_summed_DAMS_raster)
-
-#To normnalise, use min and max from full dataset
-#This is from the layer where woods = 0 dams but fine for now
-#> summed_dams_min
-#[1] 2184.247
-#> summed_dams_max
-#[1] 117529.5
-
-summed_dams_min <- 2184.247
-summed_dams_max <- 117529.5
+#min and max values from before raster was exported from ArcGis pro
+#0 is not true minimum, just value for NoData
+summed_dams_min <- 3142.74
+summed_dams_max <- 117530
 
 #Normalise summed DAMS scores from 0-1
-polys_merged_max_summed_DAMS_raster_normalised <- (polys_merged_max_summed_DAMS_raster - summed_dams_min) / 
+polys_unmerged_max_summed_DAMS_raster_normalised <- (polys_unmerged_max_summed_DAMS_raster - summed_dams_min) / 
   (summed_dams_max - summed_dams_min)
 
-plot(polys_merged_max_summed_DAMS_raster_normalised)
+plot(polys_unmerged_max_summed_DAMS_raster_normalised)
+
+writeRaster(polys_unmerged_max_summed_DAMS_raster_normalised, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/polys_unmerged_max_summed_DAMS_raster_normalised.tif")
 ```
 
 ```{r}
@@ -642,7 +656,7 @@ shelterpix <- extract_raster(map = woodland_shelter_value_raster,
                              tiles = tiles)
 
 #EXTRACT summed DAMS
-damspix <- extract_raster(map = polys_merged_max_summed_DAMS_raster_normalised,
+damspix <- extract_raster(map = polys_unmerged_max_summed_DAMS_raster_normalised,
                           lcm = template_rast,
                           tiles = tiles)
 
@@ -688,7 +702,7 @@ df <- left_join(edgepix, damspix, by = c("x","y")) %>%
   #left_join(urbanpix, by = c("x","y")) %>%
   left_join(arablepix, by = c("x","y"))
 
-df <- df %>% rename(Focal1000_MAX_DAMS = polys_merged_max_summed_DAMS_raster_normalised)
+df <- df %>% rename(Focal1000_MAX_DAMS = polys_unmerged_max_summed_DAMS_raster_normalised)
                
 #make any NAs zeros apart DAMS, woodland cover and urban distance
 #these contain correct pixel IDs
@@ -1394,6 +1408,6 @@ ggplot() +
 
 #save map
 
-st_write(polygon_with_mean_risk, "C:/Users/ik929086/Documents/iDeer/output/Testing/large_deer_risk_map_test_new_forest_two_wood_food_value_levels.shp",append = TRUE)
+st_write(polygon_with_mean_risk, "C:/Users/ik929086/Documents/iDeer/output/Testing/large_deer_risk_map_test_cornwall_two_wood_food_value_levels.shp",append = TRUE)
 
 ```
