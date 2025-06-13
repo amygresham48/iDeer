@@ -1279,6 +1279,10 @@ risk_map_terra <- terra::rast(r_rast)
 
 #site_woods_unmerged <- st_filter(nfi_lcm_2023_polys, tiles)
 
+site_woods_unmerged <- nfi_lcm_2023_polys %>% mutate(patch_ID = 1:nrow(nfi_lcm_2023_polys)) %>%
+  mutate(Wood_Area_m2 = as.numeric(st_area(geometry))) %>%
+  dplyr::select(c(patch_ID, Wood_Area_m2))
+
 # Rename the area column for consistency
 #site_woods_unmerged <- site_woods_unmerged %>% rename(Shape_Area = Shape__Are)
 #site_woods_unmerged <- site_woods_unmerged %>% rename(patch_ID = OBJECTID)
@@ -1288,7 +1292,7 @@ risk_map_terra <- terra::rast(r_rast)
 output_dir = "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/split_polys_by_tile"
 
 source("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/split_wood_polys_by_tile.R")
-site_woods_unmerged_per_tile <- split_wood_polys_by_tile(wood_polys = nfi_lcm_2023_polys,
+site_woods_unmerged_per_tile <- split_wood_polys_by_tile(wood_polys = site_woods_unmerged,
                                                           tiles = tiles,
                                                          output_dir = output_dir)
 
@@ -1311,10 +1315,17 @@ tiles_list <- lapply(rds_files, readRDS)
 #                                                           tiles = tiles,
 #                                                           wood_polys_chunked = site_woods_unmerged_per_tile)
 
+output_dir = "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/wood_poly_risk_extraction_by_tile"
 source("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/extract_raster_pixels_to_wood_polygons_func_10km_chunks_mean_poly_values_NFI_LCM_merged_pre_chunked_exact.R")
 large_deer_risk_poly_vals <- extract_raster_to_wood_polygons_exact(risk_map = risk_map_terra,
                                                            tiles = tiles,
-                                                           wood_polys_chunked = tiles_list)
+                                                           wood_polys_chunked = tiles_list,
+                                                           output_dir = output_dir)
+
+# Get list of RDS files
+rds_files_risk <- list.files(output_dir, pattern = "\\.rds$", full.names = TRUE)
+# Read in tiles
+tiles_list_extraction <- lapply(rds_files_risk, readRDS)
 
 large_deer_risk_poly_vals_df <- large_deer_risk_poly_vals$result
 
