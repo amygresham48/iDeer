@@ -6,6 +6,12 @@ extract_raster_to_wood_polygons <- function(risk_map, tiles, wood_polys) {
   extraction_results <- list()
   problematic_tiles <- c()  # Initialize a vector to store problematic tiles
   
+  #Assign unique patch_ID
+  wood_polys$patch_ID <- 1:nrow(wood_polys)
+  
+  #Keep a vector of processed patches to avoid duplicates:
+  processed_patches <- c()
+
   # Get the name of the risk map
   raster_name <- deparse(substitute(risk_map))
   
@@ -54,9 +60,20 @@ extract_raster_to_wood_polygons <- function(risk_map, tiles, wood_polys) {
     if (is.null(wood_polys_tile) || nrow(wood_polys_tile) == 0) {
       next
     }
+    
+    # Remove already processed patches
+    wood_polys_tile <- wood_polys_tile %>%
+      filter(!patch_ID %in% processed_patches)
+    
+    # Skip if nothing new
+    if (nrow(wood_polys_tile) == 0) next
+    
+    # Add these to processed list
+    processed_patches <- c(processed_patches, wood_polys_tile$patch_ID)
+    
     # Extract raster values for polygons
     risk_map_poly_vals <- tryCatch(
-      raster::extract(cropped_raster, wood_polys_tile, fun=mean, na.rm=TRUE,df=TRUE),
+      raster::extract(cropped_raster, wood_polys_tile, fun=mean, na.rm=TRUE, df=TRUE),
       error = function(e) {
         message(paste("Tile", i, "caused an error during extraction:", e$message))
         problematic_tiles <<- c(problematic_tiles, i)
@@ -69,39 +86,10 @@ extract_raster_to_wood_polygons <- function(risk_map, tiles, wood_polys) {
       next
     }
     
-    # risk_map_poly_vals <- risk_map_poly_vals %>%
-    #   rename(patch_ID = ID,
-    #          mean_risk = layer) #this should be category for small deer - need to figure out why there is a difference
-    
-    colnames(risk_map_poly_vals)[1:2] <- c("patch_ID", "mean_risk")
-    wood_polys_tile <- wood_polys_tile %>% rename(patch_ID = OBJECTID)
-    
-    risk_map_poly_vals$patch_ID <- wood_polys_tile$patch_ID
-    
-    # # Prepare patch_ID mapping
-    # wood_tiles_IDs <- data.frame(
-    #   ID = seq_len(nrow(wood_polys_tile)),
-    #   patch_ID = wood_polys_tile$patch_ID
-    # )
-    
-    # # Create a data frame with extracted values and patch_IDs
-    # vals <- data.frame(
-    #   ID = risk_map_poly_vals$ID,
-    #   raster_values = risk_map_poly_vals[, 2]  # Second column contains raster values
-    # ) %>%
-    #   left_join(wood_tiles_IDs, by = "ID") %>%
-    #   dplyr::select(-ID) %>%
-    #   filter(!is.na(raster_values))  # Filter out NA values
-    # 
-    # # Summarize: Calculate mean raster values per patch_ID
-    # summary_df <- vals %>%
-    #   group_by(patch_ID) %>%
-    #   summarise(mean_value = mean(raster_values, na.rm = TRUE), .groups = "drop")
-    
-    
-    
-    # Get geometry for the current tile
-    #geometry_tiles <- st_filter(wood_polys, tile)
+    # Add patch_IDs based on the extract() ID mapping back to wood_polys_tile
+    risk_map_poly_vals <- risk_map_poly_vals %>%
+      mutate(patch_ID = wood_polys_tile$patch_ID[ID]) %>%
+      dplyr::select(patch_ID, mean_risk = 2)
     
     # Join geometry with summarized data
     merged_df <- left_join(risk_map_poly_vals, wood_polys_tile, by = "patch_ID") %>%

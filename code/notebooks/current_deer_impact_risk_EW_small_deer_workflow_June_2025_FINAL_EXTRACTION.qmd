@@ -9,6 +9,7 @@ library(stars)
 library(dplyr)
 library(fasterize)
 library(terra)
+library(progress)
 
 #British national grid code
 bng <- 27700
@@ -17,15 +18,15 @@ bng <- 27700
 ```{r Read-in-spatial-datasets}
 
 #NFI 2023 dataset
-nfi <- st_read("C:/Users/ik929086/Documents/iDeer/data/raw-data/nfi-2023-raw/National_Forest_Inventory_GB_2023.shp")
+nfi <- st_read("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/nfi-2023-raw/National_Forest_Inventory_GB_2023.shp")
 unique(nfi$IFT_IOA)
 
 #Make template raster
-template_rast <- raster("C:/Users/ik929086/Documents/iDeer/data/raw-data/lcm-2023/gblcm2023_25m.tif")
+template_rast <- raster("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/lcm-2023/gblcm2023_25m.tif")
 crs(template_rast) <- bng
 
-#England and Wales 10k squares
-ew10k <- sf::st_read("C:/Users/ik929086/Documents/iDeer/data/derived-data/10k_tiles_EW_Scotland_border_buffer.shp")
+#England and Wales 10k squares with Scotland buffer
+ew10k <- sf::st_read("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/10k_tiles_EW_Scotland_border_buffer.shp")
 
 #Read in linear feature raster
 #Created in ArcGIS
@@ -33,12 +34,14 @@ ew10k <- sf::st_read("C:/Users/ik929086/Documents/iDeer/data/derived-data/10k_ti
 #The dataset has been rasterized, snapped to gblcm2023_25m.tif
 #Then masked to the original GB LF vector dataset to remove weird background values
 #Maintained full GB extent so as to not miss off hedgerows on the Scottish border
-lf <- raster("C:/Users/ik929086/Documents/iDeer/data/derived-data/WLF_GB_raster_LCM_matched_masked.tif")
+lf <- raster("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/small deer/WLF_GB_raster_LCM_matched_masked.tif")
 crs(lf) <- bng
 
 #Use a group of tiles as an example for testing:
 
-tiles <- ew10k[1:20,]
+#tiles <- ew10k[1:20,]
+
+tiles <- ew10k
 
 #tiles <- ew10k %>% filter(tile_name %in% c("TL87","TL88","TL97","TL98")) #northampton
 #tiles <- ew10k %>% filter(tile_name %in% c("NY21","NY22","NY12","NY11")) #lake district
@@ -50,87 +53,20 @@ plot(tiles$geometry)
 
 ```{r Read-in-functions}
 #function to extract pixel values from raster layers
-source("C:/Users/ik929086/Documents/iDeer/code/functions/extract_raster_pixels_func_10km_chunks.R")
+source("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/extract_raster_pixels_func_10km_chunks.R")
 
 #function to extract risk maps to polygons at site level
-source("C:/Users/ik929086/Documents/iDeer-tool/code/functions/extract_raster_pixels_to_wood_polys_func_site_level.R")
+#source("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/extract_raster_pixels_to_wood_polys_func_site_level.R")
 
 #function to extract risk maps to polygons per 10km square
-#source("C:/Users/ik929086/Documents/iDeer/code/functions/extract_raster_pixels_to_wood_polys_func_10km_chunks_mean_poly_values.R")
+source("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/extract_raster_pixels_to_wood_polys_func_10km_chunks_mean_poly_values.R")
 ```
 
 ```{r Make-conditional-probability-tables-for-small-deer-BBN}
 
-#SMALL DEER ATTRACTION INDEX ####
-
-small_deer_food <- read.csv("C:/Users/ik929086/Documents/iDeer/data/CPTs/Smalldeer_Attraction_Index_Woodland_edge_cover_400m.Peren_arable_cover_400m_Amy.csv")
-
-# Select the relevant columns for analysis (Connectivity, Attraction, Thermoregulation).
-data <- subset(small_deer_food[2:3])
-
-# Define the initial importance weights for each index. These represent the relative
-# influence of each factor on deer damage risk.  They will be adjusted conditionally.
-importance <- c(Woodland_edge_cover_400m = 1, Peren_arable_cover_400m = 0.6)
-
-# Function to assign probability levels (Low, Low-Medium, Medium, Medium-High, High)
-# to each row based on the weighted combination of input indices.
-assign_probabilities <- function(row, importance) {
-  # Convert categorical factor levels (Low, Medium, High) to numerical scores (1, 2, 3).
-  # This allows for weighted calculations.
-  scores <- c(
-    Woodland_edge_cover_400m = as.numeric(factor(row["Woodland_edge_cover_400m"], levels = c("Low", "Medium", "High"))),
-    Peren_arable_cover_400m = as.numeric(factor(row["Peren_arable_cover_400m"], levels = c("Low", "Medium", "High")))
-
-  )
-
-  # Calculate the total weighted score for the row. This combines the numerical scores
-  # with their respective importance weights.
-  total_score <- sum(scores * importance)
-
-  # Scale the total weighted score to a range of 1-3. This is necessary to map the
-  # score to a meaningful range for the normal distribution.  The min and max scores
-  # are calculated based on the possible range given the importance weights.
-  min_score <- sum(c(1, 1) * importance)
-  max_score <- sum(c(3, 3) * importance)
-  scaled_score <- (total_score - min_score) / (max_score - min_score) * 2 + 1 # Scale to 1-3
-
-  # Calculate probabilities for each level (Low to High) using a normal distribution.
-  # The mean of the distribution is determined by the scaled total score.
-   #Higher number of sd = curve becomes flatter - probabilities more evenly distributed.
-  #Smaller number of sd = curve becomes steeper - greater difference in probabilities between categories.
-  base_probs <- dnorm(1:3, mean = scaled_score, sd = 0.41)
-  base_probs <- base_probs / sum(base_probs) # Normalize probabilities to sum to 1.
-
-  # Assign names to the probability levels.
-  names(base_probs) <- c("Low", "Medium", "High")
-
-  # Return the calculated probabilities and the total weighted score.
-  return(c(base_probs, total_score = total_score))
-}
-
-# Apply the probability assignment function to each row of the data.
-probabilities <- t(apply(data, 1, assign_probabilities, importance = importance))
-
-# Combine the original data with the calculated probabilities.
-result <- cbind(data, probabilities)
-
-# Print the resulting data frame.
-print(result)
-
-# Round numeric values to 3 decimal places for readability.
-#result <- result %>% mutate_if(is.numeric, round, digits=3)
-
-# Verify that the probabilities for each row sum to 1.
-rowSums(result[, c("Low", "Medium","High")])
-
-#save cpt
-
-write.csv(result,"C:/Users/ik929086/Documents/iDeer/output/CPTs/Small_Deer_Attraction_Index_CPT.csv")
-
-
 #SMALL DEER CONNECTIVITY INDEX ####
 
-small_deer_connect <- read.csv("C:/Users/ik929086/Documents/iDeer/data/CPTs/Smalldeer_Connectivity_Index_Woodland_cover_400m.LF_cover_400m_Amy.csv")
+small_deer_connect <- read.csv("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/small deer/Smalldeer_Connectivity_Index_Woodland_cover_400m.LF_cover_400m_Amy.csv")
 
 data <- subset(small_deer_connect[2:3])
 
@@ -202,13 +138,13 @@ rowSums(result[, c("Low", "Medium", "High")])
 
 #save cpt
 
-write.csv(result,"C:/Users/ik929086/Documents/iDeer/output/CPTs/Small_Deer_Connectivity_Index_CPT_post_interviews.csv")
+write.csv(result,"E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/small deer/Small_Deer_Connectivity_Index_CPT_post_interviews.csv")
 
 #SMALL DEER DAMAGE RISK CPT #####
 
 # Load small deer damage risk data.  This CSV contains the categorical levels 
 # for Connectivity_Index, Attraction_Index, and Thermoregulation_Index.
-small_deer_risk <- read.csv("C:/Users/ik929086/Documents/iDeer/data/CPTs/Smalldeer_Deer_Damage_Risk_Connectivity_Index.Attraction_Index.woodland_food_value_index_Amy.csv")
+small_deer_risk <- read.csv("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/small deer/Smalldeer_Deer_Damage_Risk_Connectivity_Index.Attraction_Index.woodland_food_value_index_Amy.csv")
 
 # Select the relevant columns for analysis (Connectivity, Attraction, Thermoregulation).
 data <- subset(small_deer_risk[2:4])
@@ -278,22 +214,22 @@ rowSums(result[, c("Low", "Low_Medium", "Medium", "Medium_High", "High")])
 
 #save cpt
 
-write.csv(result,"C:/Users/ik929086/Documents/iDeer/output/CPTs/Small_Deer_Damage_Risk_CPT_post_interviews.csv")
+write.csv(result,"E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/small deer/Small_Deer_Damage_Risk_CPT_post_interviews.csv")
 ```
 
 ```{r Read-in-all-conditional-probability-tables}
 
 #Connectivity
-small_connectivity_cpt_df <- read.csv("C:/Users/ik929086/Documents/iDeer/output/CPTs/Small_Deer_Connectivity_Index_CPT_post_interviews.csv")
+small_connectivity_cpt_df <- read.csv("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/small deer/Small_Deer_Connectivity_Index_CPT_post_interviews.csv")
 
 #Attraction index
-small_attraction_cpt_df <- read.csv("C:/Users/ik929086/Documents/iDeer/data/CPTs/Smalldeer_Attraction_Index_Woodland_edge_cover_400m_Amy.csv")
+small_attraction_cpt_df <- read.csv("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/small deer/Smalldeer_Attraction_Index_Woodland_edge_cover_400m_Amy.csv")
 
 #small deer damage risk
-small_risk_cpt_df_full <- read.csv("C:/Users/ik929086/Documents/iDeer/output/CPTs/Small_Deer_Damage_Risk_CPT_post_interviews.csv")
+small_risk_cpt_df_full <- read.csv("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/small deer/Small_Deer_Damage_Risk_CPT_post_interviews.csv")
 
 #woodland food value index
-small_wood_food_value_cpt_df <- read.csv("C:/Users/ik929086/Documents/iDeer/data/CPTs/Smalldeer_Woodland_food_value_Index.csv")
+small_wood_food_value_cpt_df <- read.csv("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/small deer/Smalldeer_Woodland_food_value_Index.csv")
 ```
 
 ```{r Determine-woodland-categories-NFI}
@@ -582,26 +518,22 @@ plot(lf_area_400m_tif)
 ```{r Read-in-all-raster-layers-generated-above-ready-to-go-into-BBN}
 
 #Focal extraction of Linear features within 400m
-Focal400_LF_PERC_POLYS <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/small_deer/NFI_mean_percentage_focal_area_lf_extracted_to_polys_400m.tif")
+Focal400_LF_PERC_POLYS <- raster("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/small deer/NFI_mean_percentage_focal_area_lf_extracted_to_polys_400m.tif")
 
 #Focal extraction of woodland area within 400m
-Focal400_WOOD_PERC_POLYS <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/small_deer/NFI_mean_percentage_focal_area_woods_extracted_to_polys_400m.tif")
+Focal400_WOOD_PERC_POLYS <- raster("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/small deer/NFI_mean_percentage_focal_area_woods_extracted_to_polys_400m.tif")
 
 #Focal extraction of woodland edges within 400m
-Focal400_EDGES_PERC <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/small_deer/NFI_focal_woodland_edge_area_400m_percentage_cover.tif")
+Focal400_EDGES_PERC <- raster("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/small deer/NFI_focal_woodland_edge_area_400m_percentage_cover.tif")
 
 #Woodland food value raster
-woodland_food_value_raster <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/small_deer/NFI_woodland_food_value_index_small_deer_bng.tif")
+woodland_food_value_raster <- raster("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/small deer/NFI_woodland_food_value_index_small_deer_bng.tif")
 ```
 
 ```{r Raster-value-extraction}
 
 #Crop rasters to produce tests
-Focal400_EDGES_PERC <- crop(Focal400_EDGES_PERC, tiles)
-Focal400_LF_PERC_POLYS <- crop(Focal400_LF_PERC_POLYS, tiles)
-Focal400_WOOD_PERC_POLYS <- crop(Focal400_WOOD_PERC_POLYS, tiles)
-woodland_food_value_raster <- crop(woodland_food_value_raster, tiles)
-template_rast_tiles <- crop(template_rast, tiles)
+#template_rast_tiles <- crop(template_rast, tiles)
 
 #Create a dataframe containing all extracted raster values within user's landscape
 
@@ -609,39 +541,39 @@ template_rast_tiles <- crop(template_rast, tiles)
 #EXTRACT LENGTH OF WOODLAND EDGE
 
 edgepix <- extract_raster(map = Focal400_EDGES_PERC,
-                          lcm = template_rast_tiles, #UK lcm
+                          lcm = template_rast, #UK lcm
                          tiles = tiles) #ew10k
                           #lcm = template_rast,
                         # tiles = ew10k)
 
-#saveRDS(edgepix, "C:/Users/ik929086/Documents/iDeer/output/NFI_wood_edgepix_400m_df_EW.RDS")
+saveRDS(edgepix, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/NFI_wood_edgepix_400m_df_EW.RDS")
 #read
 #edgepix <- readRDS("C:/Users/ik929086/Documents/iDeer/output/NFI_wood_edgepix_400m_df_EW.RDS")
 
 #EXTRACT WOODLAND FOOD QUALITY
 
 foodpix <- extract_raster(map = woodland_food_value_raster,
-                          lcm = template_rast_tiles,
+                          lcm = template_rast,
                           tiles = tiles)
-#saveRDS(foodpix, "C:/Users/ik929086/Documents/iDeer/output/NFI_wood_foodpix_400m_df_EW.RDS")
+saveRDS(foodpix, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/NFI_wood_foodpix_400m_df_EW.RDS")
 #read
 #foodpix <- readRDS("C:/Users/ik929086/Documents/iDeer/output/NFI_wood_foodpix_400m_df_EW.RDS")
 
 #EXTRACT CONNECTIVITY
 woodpix <- extract_raster(map = Focal400_WOOD_PERC_POLYS,
-                          lcm = template_rast_tiles, #UK lcm
+                          lcm = template_rast, #UK lcm
                          tiles = tiles) #ew10k
-#saveRDS(woodpix, "C:/Users/ik929086/Documents/iDeer/output/NFI_woodpix_wood_area_400m_df_EW.RDS")
+saveRDS(woodpix, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/NFI_woodpix_wood_area_400m_df_EW.RDS")
 #read
 #woodpix <- readRDS("C:/Users/ik929086/Documents/iDeer/output/NFI_woodpix_wood_area_400m_df_EW.RDS")
 
 #EXTRACT LF DENSITY WITHIN 400M
 
 LFpix <- extract_raster(map = Focal400_LF_PERC_POLYS,
-                       lcm = template_rast_tiles, #UK lcm
+                       lcm = template_rast, #UK lcm
                          tiles = tiles) #ew10k
 
-#saveRDS(LFpix, "C:/Users/ik929086/Documents/iDeer/output/NFI_LFpix_area_400m_df_EW.RDS")
+saveRDS(LFpix, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/NFI_LFpix_area_400m_df_EW.RDS")
 #read
 #LFpix <- readRDS("C:/Users/ik929086/Documents/iDeer/output/NFI_LFpix_area_400m_df_EW.RDS")
 
@@ -651,8 +583,7 @@ df <- left_join(edgepix, woodpix, by = c("x","y")) %>%
 left_join(LFpix, by = c("x","y")) %>%
 left_join(foodpix, by = c("x","y"))
 
-#make any NAs zeros apart from the food value raster
-#These rasters have the correct woodland pixels
+#make any NAs zeros apart from rasters with the correct woodland pixels
 
 df.no.nas <- df %>%
   mutate(across(c(Focal400_EDGES_PERC), 
@@ -665,8 +596,7 @@ df.no.nas <- na.omit(df.no.nas)
 
 #save
 
-#saveRDS(df.no.nas, "C:/Users/ik929086/Documents/iDeer/output/NFI_2023_small_deer_full_df_no_nas.RDS")
-#saveRDS(df.no.nas, "C:/Users/ik929086/Documents/iDeer/output/small_deer_full_df_no_nas_extractr.RDS")
+saveRDS(df.no.nas, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/NFI_2023_small_deer_full_df_no_nas.RDS")
 
 
 #read
@@ -733,7 +663,7 @@ unique(df_cat$Focal400_EDGES_PERC)
 unique(df_cat$Focal400_WOOD_PERC)
 unique(df_cat$Focal400_LF_PERC)
 
-#saveRDS(df_cat, "C:/Users/ik929086/Documents/iDeer/output/NFI_2023_small_deer_full_df_cat.RDS")
+saveRDS(df_cat, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/NFI_2023_small_deer_full_df_cat.RDS")
 ```
 
 ```{r CPTS-for-measured-nodes}
@@ -958,7 +888,7 @@ dfit = custom.fit(net, dist = list(Woodland_cover_400m = wood_connect_cpt,
                                    small_risk_index=small_risk_index_cpt))
 
 #Plot BN structure ####
-graphviz.plot(net)
+#graphviz.plot(net)
 
 #Check parameters ####
 dfit
@@ -967,7 +897,7 @@ dfit
 ```{r BBN-predictions}
 #Predict latent indices for BBN (wood_value Index, Connectivity Index and Foraging pressure index) ####--------------------------------
 
-#df_cat <- readRDS("C:/Users/ik929086/Documents/iDeer/output/NFI_2023_small_deer_full_df_cat.RDS")
+df_cat <- readRDS("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/NFI_2023_small_deer_full_df_cat.RDS")
 
 predict_dat <- df_cat %>% st_drop_geometry() #drop geometry
   #dplyr::select(-c("x","y"))
@@ -1030,8 +960,10 @@ df_cat$pred_connect <- pred_connect
 # Convert points dataframe to sf
 df_sf <- st_as_sf(df_cat, coords = c("x", "y"), crs = st_crs(bng))
 
+readr::write_rds(df_sf, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/NFI_2023_small_deer_impact_risk_sf.rds")
+
 # Define palettes
-index_palette <- c("0" = NA, "1" = "green", "2" = "orange", "3" = "red")
+index_palette <- c("1" = "green", "2" = "orange", "3" = "red")
 risk_palette  <- c("1" = "green", "2" = "yellow", "3" = "orange", "4" = "red", "5" = "brown")
 
 # Map categorical predictions to numeric values
@@ -1154,73 +1086,127 @@ ggplot(na.omit(df_rast)) +
   theme_minimal() +
   theme(legend.position = "right")
 
-damage_r <- risk_vals_r
-#stars::write_stars(r, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/small_deer/NFI_2023_small_deer_impact_risk_EW.tif")
+stars::write_stars(risk_vals_r, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/NFI_2023_small_deer_impact_risk_EW.tif")
 
- 
 ```
 
 ```{r Extract-risk-raster-to-polygons}
 
-r_rast <- as(damage_r, "Raster")
+risk_vals_r <- raster("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/NFI_2023_small_deer_impact_risk_EW.tif")
+
+r_rast <- as(risk_vals_r, "Raster")
 plot(r_rast)
 
 unique(woods_only$IFT_IOA)
 site_woods_unmerged <- st_filter(woods_only, tiles)
-site_woods_unmerged <- site_woods_unmerged %>% rename(patch_ID = OBJECTID)
+site_woods_unmerged <- site_woods_unmerged %>% rename(Shape_Area = Shape__Are)
+#site_woods_unmerged <- site_woods_unmerged %>% rename(patch_ID = OBJECTID)
 
+#function to extract risk maps to polygons at site level
+#source("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/extract_raster_pixels_to_wood_polys_func_site_level.R")
+
+#site level function:
+# small_deer_risk_poly_vals <- extract_raster_to_wood_polygons(risk_map = r_rast,
+#                                                              site_woods_unmerged = site_woods_unmerged
+#                                                              )
+
+#England-Wales risk map:
 small_deer_risk_poly_vals <- extract_raster_to_wood_polygons(risk_map = r_rast,
-                                                             site_woods_unmerged = site_woods_unmerged
-                                                             )
+                                                          tiles = tiles,
+                                                          wood_polys = site_woods_unmerged)
+
+small_deer_risk_poly_vals_df <- small_deer_risk_poly_vals$result
+
+write_rds(small_deer_risk_poly_vals_df, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/NFI_2023_small_deer_impact_risk_EW_extracted_to_polys.rds")
+
+#Identify duplicate rows
+
+duplicates <- small_deer_risk_poly_vals_df[duplicated(small_deer_risk_poly_vals_df), ]
+
+## Remove duplicate rows (keep the first occurrence)
+small_deer_risk_poly_vals_df_unique <- small_deer_risk_poly_vals_df[!duplicated(small_deer_risk_poly_vals_df), ]
+
 # Get polygon IDs
-poly_ids <- unique(small_deer_risk_poly_vals$patch_ID)
+poly_ids <- unique(small_deer_risk_poly_vals_df_unique$patch_ID)
+#Get rows with duplicated ids
+duplicated_ids_subset <- small_deer_risk_poly_vals_df_unique %>%
+  group_by(across(1)) %>%
+  filter(n() > 1) %>%
+  ungroup()
+#Remove duplicated id rows
+small_deer_risk_poly_vals_df_unique_ids  <- small_deer_risk_poly_vals_df_unique %>%
+  distinct(patch_ID, .keep_all = TRUE)
 
+#There are some edge effects on edge of Scottish border buffer tiles that are making some polygon risk scores < 1
+#The user won't see these, but we don't want values <1 on the map legend
+#Round all mean_risk values <1 to 1
+#Remove polys with NA in mean_risk (Scotland polys right on border)
+# small_deer_risk_poly_vals_df_unique_ids <- small_deer_risk_poly_vals_df_unique_ids %>%
+#   filter(!is.na(mean_risk)) %>%                    # Remove rows with NA in mean_risk
+#   mutate(mean_risk = if_else(mean_risk < 1, 1, mean_risk))  # Round values <1 to 1
+
+#Remove polys with NA or <1 mean_risk
+small_deer_risk_poly_vals_df_unique_ids <- small_deer_risk_poly_vals_df_unique_ids %>%
+  filter(!is.na(mean_risk) & mean_risk >= 1)
+
+#save as shapefile
+st_write(small_deer_risk_poly_vals_df_unique_ids, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/NFI_2023_small_deer_impact_risk_EW_extracted_to_unique_polys.shp",append=FALSE)
+
+
+#WEIGHTED MEAN METHOD ####----------------------
 # # Group by patch_ID and calculate the counts for each raster_layer category
-deer_risk_landcover <- small_deer_risk_poly_vals %>%
-  filter(!is.na(r_rast)) %>% # Remove NA values
-  group_by(patch_ID) %>%
-  summarise(
-    risk_count_1 = sum(r_rast == 1, na.rm = TRUE),
-    risk_count_2 = sum(r_rast == 2, na.rm = TRUE),
-    risk_count_3 = sum(r_rast == 3, na.rm = TRUE),
-    risk_count_4 = sum(r_rast == 4, na.rm = TRUE),
-    risk_count_5 = sum(r_rast == 5, na.rm = TRUE)
-  )
-
-# # Combine results into a matrix, where each column corresponds to a polygon
-deer_risk_landcover_matrix <- do.call(rbind, deer_risk_landcover)
-#make colnames patch_IDs
-colnames(deer_risk_landcover_matrix) <- deer_risk_landcover_matrix[1,]
-
-#Add polygon IDs to the matrix
-deer_risk_landcover_df <- data.frame(t(deer_risk_landcover_matrix))
-
-#Convert the matrix to a long format
-deer_risk_landcover_long <- reshape2::melt(
-  deer_risk_landcover_df,
-  id.vars = "patch_ID",  # Specify the ID variable(s)
-  variable.name = "risk_category",  # Name for the risk category column
-  value.name = "value"  # Name for the value column
-)
-
-mean_risk <- deer_risk_landcover_long %>%
-  mutate(
-    risk_category = as.numeric(gsub("[^0-9]", "", risk_category))  # Remove non-numeric characters and convert to numeric
-  ) %>%
-  group_by(patch_ID) %>%
-  filter(value != 0) %>%  # Exclude rows with zero values
-  summarise(
-    Weighted_Mean = sum(risk_category * value) / sum(value),
-    #Weighted SD calculation
-    sd = sqrt(sum(value * (risk_category - Weighted_Mean)^2) / sum(value)),
-    # Weighted SE calculation
-    se = sd / sqrt(sum(value)),
-    .groups = 'drop'
-  )
-
-#Append the mean risk categories to the polygon dataset
-polygon_with_mean_risk <- site_woods_unmerged %>%
-  left_join(mean_risk, by = "patch_ID")
+# deer_risk_landcover <- small_deer_risk_poly_vals_df %>%
+#   dplyr::filter(!is.na(r_rast)) %>% # Remove NA values
+#   group_by(patch_ID) %>%
+#   summarise(
+#     risk_count_1 = sum(r_rast == 1, na.rm = TRUE),
+#     risk_count_2 = sum(r_rast == 2, na.rm = TRUE),
+#     risk_count_3 = sum(r_rast == 3, na.rm = TRUE),
+#     risk_count_4 = sum(r_rast == 4, na.rm = TRUE),
+#     risk_count_5 = sum(r_rast == 5, na.rm = TRUE)
+#   )
+# deer_risk_landcover <- small_deer_risk_poly_vals_df %>%
+#   dplyr::filter(!is.na(mean_risk)) %>% # Remove NA values
+#   group_by(patch_ID) %>%
+#   summarise(
+#     risk_count_1 = sum(mean_risk <= 1, na.rm = TRUE),
+#     risk_count_2 = sum(mean_risk > 1 & r_rast <= 2, na.rm = TRUE),
+#     risk_count_3 = sum(mean_risk > 2 & r_rast <= 3, na.rm = TRUE),
+#     risk_count_4 = sum(mean_risk > 3 & r_rast <= 4, na.rm = TRUE),
+#     risk_count_5 = sum(mean_risk > 4 & r_rast <= 5, na.rm = TRUE)
+#   )
+# # # Combine results into a matrix, where each column corresponds to a polygon
+# deer_risk_landcover_matrix <- do.call(rbind, deer_risk_landcover)
+# #make colnames patch_IDs
+# colnames(deer_risk_landcover_matrix) <- deer_risk_landcover_matrix[1,]
+# 
+# #Add polygon IDs to the matrix
+# deer_risk_landcover_df <- data.frame(t(deer_risk_landcover_matrix))
+# 
+# #Convert the matrix to a long format
+# deer_risk_landcover_long <- reshape2::melt(
+#   deer_risk_landcover_df,
+#   id.vars = "patch_ID",  # Specify the ID variable(s)
+#   variable.name = "risk_category",  # Name for the risk category column
+#   value.name = "value"  # Name for the value column
+# )
+# mean_risk <- deer_risk_landcover_long %>%
+#   mutate(
+#     risk_category = as.numeric(gsub("[^0-9]", "", risk_category))  # Remove non-numeric characters and convert to numeric
+#   ) %>%
+#   group_by(patch_ID) %>%
+#   filter(value != 0) %>%  # Exclude rows with zero values
+#   summarise(
+#     Weighted_Mean = sum(risk_category * value) / sum(value),
+#     #Weighted SD calculation
+#     sd = sqrt(sum(value * (risk_category - Weighted_Mean)^2) / sum(value)),
+#     # Weighted SE calculation
+#     se = sd / sqrt(sum(value)),
+#     .groups = 'drop'
+#   )
+# #Append the mean risk categories to the polygon dataset
+# polygon_with_mean_risk <- site_woods_unmerged %>%
+#   left_join(mean_risk, by = "patch_ID")
 
 # #Normalise mean impact risk scores from 0-1
 # #polygon_with_mean_risk_min <- min(polygon_with_mean_risk$Weighted_Mean, na.rm = TRUE)
@@ -1231,23 +1217,23 @@ polygon_with_mean_risk <- site_woods_unmerged %>%
 # 
 # polygon_with_mean_risk$Normalised_mean <- (polygon_with_mean_risk$Weighted_Mean - polygon_with_mean_risk_min) / 
 #   (polygon_with_mean_risk_max - polygon_with_mean_risk_min)
+#----------------------------------------------------
 
-
-#Plot the risk
-ggplot() +
-  geom_sf(data = polygon_with_mean_risk, mapping = aes(fill = Weighted_Mean), color = "black", linewidth = 0.1) +
-  scale_fill_gradientn(
-    colours = c("green", "yellow", "orange", "red", "brown"),
-    limits = c(1, 5),
-    breaks = 1:5,
-    labels = c("Low", "Low-Medium", "Medium", "Medium-High", "High"),
-    name = "Damage Risk"
-  ) +
-  theme_minimal()
+# #Plot the risk
+# ggplot() +
+#   geom_sf(data = small_deer_risk_poly_vals_df_unique_ids, mapping = aes(fill = mean_risk), color = "black", linewidth = 0.1) +
+#   scale_fill_gradientn(
+#     colours = c("green", "yellow", "orange", "red", "brown"),
+#     limits = c(1, 5),
+#     breaks = 1:5,
+#     labels = c("Low", "Low-Medium", "Medium", "Medium-High", "High"),
+#     name = "Damage Risk"
+#   ) +
+#   theme_minimal()
 
 #plot(r_rast)
 
 
 #save map - TO DO
-st_write(polygon_with_mean_risk, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/small_deer/NFI_2023_small_deer_impact_risk_test.shp",append = TRUE)
+#st_write(polygon_with_mean_risk, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/small_deer/NFI_2023_small_deer_impact_risk_test.shp",append = TRUE)
 ```

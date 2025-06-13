@@ -7,7 +7,7 @@ extract_raster_to_wood_polygons <- function(risk_map, site_woods_unmerged) {
   site_woods_unmerged <- st_filter(site_woods_unmerged, risk_map_extent_sf)
   
   #will tell me how many of each pixel is in each polygon
-  risk_map_poly_vals <- raster::extract(risk_map, site_woods_unmerged, df = TRUE)
+  risk_map_poly_vals <- raster::extract(risk_map, site_woods_unmerged, df = TRUE, progress = "text")
   
   #get row number and patch_ID from
   wood_site_IDs <- data.frame(ID = rep(seq_len(nrow(site_woods_unmerged))),
@@ -18,7 +18,7 @@ extract_raster_to_wood_polygons <- function(risk_map, site_woods_unmerged) {
   # Create a data frame with the extracted values and patch_IDs
   vals <- data.frame(
     ID = risk_map_poly_vals$ID,
-    raster_values = risk_map_poly_vals$layer  # Extracted raster values
+    raster_values = risk_map_poly_vals$category  # Extracted raster values
   )
   
   #left_join the patch_IDs to this df
