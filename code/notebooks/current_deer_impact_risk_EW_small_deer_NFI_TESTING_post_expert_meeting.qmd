@@ -763,6 +763,8 @@ dfit
 ```{r}
 #Predict latent indices for BBN (wood_value Index, Connectivity Index and Foraging pressure index) ####--------------------------------
 
+df_cat <- readRDS("C:/Users/ik929086/Documents/iDeer/output/NFI_2023_small_deer_full_df_cat.RDS")
+
 predict_dat <- df_cat %>% st_drop_geometry() #drop geometry
   #dplyr::select(-c("x","y"))
 
@@ -824,6 +826,8 @@ library(sf)
 library(stars)
 library(dplyr)
 
+bng <- 27700
+
 # Convert points dataframe to sf
 df_sf <- st_as_sf(df_cat, coords = c("x", "y"), crs = st_crs(bng))
 
@@ -863,10 +867,22 @@ df_sf <- df_sf %>%
   )
 
 # Rasterize and plot each index
-forage_r     <- rasterize_and_plot(df_sf, "forage_vals", index_palette)
-connect_r    <- rasterize_and_plot(df_sf, "connect_vals", index_palette)
-wood_value_r <- rasterize_and_plot(df_sf, "wood_value_vals", index_palette)
-damage_r     <- rasterize_and_plot(df_sf, "risk_vals", risk_palette)
+#forage_r     <- rasterize_and_plot(df_sf, "forage_vals", index_palette)
+#connect_r    <- rasterize_and_plot(df_sf, "connect_vals", index_palette)
+#wood_value_r <- rasterize_and_plot(df_sf, "wood_value_vals", index_palette)
+#damage_r     <- rasterize_and_plot(df_sf, "risk_vals", risk_palette)
+ stars_template <- stars::st_as_stars(template_rast)
+  damage_values <- c("Low" = 1, "Low_Medium" = 2, "Medium" = 3, "Medium_High" = 4, "High" = 5)
+ df_sf$value <- damage_values[df_sf$pred_damage]
+ #Convert to raster
+ # Select the geometry and value column
+ df_sf_selected <- df_sf %>% dplyr::select(geometry, value)
+ #make a stars template
+ # Use the template raster for extent, resolution, and CRS
+ r <- stars::st_rasterize(sf = df_sf_selected, template = stars_template)
+ 
+stars::write_stars(r, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/small_deer/NFI_2023_small_deer_impact_risk_EW.tif")
+
  
 ```
 
@@ -936,18 +952,17 @@ mean_risk <- deer_risk_landcover_long %>%
 polygon_with_mean_risk <- site_woods_unmerged %>%
   left_join(mean_risk, by = "patch_ID")
 
-#Plot the risk
-ggplot() +
-  geom_sf(data = polygon_with_mean_risk, mapping = aes(fill = Weighted_Mean), color = "black", linewidth = 0.1) +
-  scale_fill_gradientn(
-  colours = c("green", "yellow", "orange", "red", "brown"),
-  limits = c(1,5),
-  breaks = 1:5,
-  name = "Damage Risk"
-) +
-  theme_minimal()
+# #Plot the risk
+# ggplot() +
+#   geom_sf(data = polygon_with_mean_risk, mapping = aes(fill = Weighted_Mean), color = "black", linewidth = 0.1) +
+#   scale_fill_gradientn(
+#   colours = c("green", "yellow", "orange", "red", "brown"),
+#   limits = c(1,5),
+#   breaks = 1:5,
+#   name = "Damage Risk"
+# ) +
+#   theme_minimal()
 
-#save map
-
-#st_write(polygon_with_mean_risk, "C:/Users/ik929086/Documents/iDeer/output/Testing/small_deer_risk_map_test_new_forest.shp",append = TRUE)
+#save map - TO DO
+st_write(polygon_with_mean_risk, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/small_deer/NFI_2023_small_deer_impact_risk_EW.shp",append = TRUE)
 ```
