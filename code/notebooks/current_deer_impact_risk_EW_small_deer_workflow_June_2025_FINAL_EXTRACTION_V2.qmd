@@ -1279,11 +1279,11 @@ small_deer_risk_poly_vals_df <- small_deer_risk_poly_vals_df %>%
 
 #Tidy up attribute table
 
-small_deer_risk_poly_vals_df_unique_ids <- small_deer_risk_poly_vals_df_unique_ids %>%
-  mutate(Wood_Area_m2 = as.numeric(st_area(geometry)))
-
-small_deer_risk_poly_vals_df_unique_ids <- small_deer_risk_poly_vals_df_unique_ids %>%
-  dplyr::select(c(patch_ID,mean_risk,Wood_Area_m2))
+# small_deer_risk_poly_vals_df_unique_ids <- small_deer_risk_poly_vals_df_unique_ids %>%
+#   mutate(Wood_Area_m2 = as.numeric(st_area(geometry)))
+# 
+# small_deer_risk_poly_vals_df_unique_ids <- small_deer_risk_poly_vals_df_unique_ids %>%
+#   dplyr::select(c(patch_ID,mean_risk,Wood_Area_m2))
 
 
 #save map - TO DO

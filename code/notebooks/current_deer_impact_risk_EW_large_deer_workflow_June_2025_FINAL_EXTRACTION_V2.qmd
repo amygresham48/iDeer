@@ -1315,7 +1315,7 @@ tiles_list <- lapply(rds_files, readRDS)
 #                                                           tiles = tiles,
 #                                                           wood_polys_chunked = site_woods_unmerged_per_tile)
 
-output_dir = "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/wood_poly_risk_extraction_by_tile"
+output_dir = "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/wood_poly_risk_extraction_by_tile_large_deer"
 source("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/extract_raster_pixels_to_wood_polygons_func_10km_chunks_mean_poly_values_NFI_LCM_merged_pre_chunked_exact.R")
 large_deer_risk_poly_vals <- extract_raster_to_wood_polygons_exact(risk_map = risk_map_terra,
                                                            tiles = tiles,
@@ -1327,33 +1327,38 @@ rds_files_risk <- list.files(output_dir, pattern = "\\.rds$", full.names = TRUE)
 # Read in tiles
 tiles_list_extraction <- lapply(rds_files_risk, readRDS)
 
-large_deer_risk_poly_vals_df <- large_deer_risk_poly_vals$result
+# Combine all tiles into one sf object
+large_deer_risk_poly_vals_df <- do.call(rbind, tiles_list_extraction)
+
+#large_deer_risk_poly_vals_df <- large_deer_risk_poly_vals$result
 
 # write_rds(large_deer_risk_poly_vals_df, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/NFI_2023_large_deer_impact_risk_EW_extracted_to_polys.rds")
 
-#Identify duplicate rows
-
-duplicates <- large_deer_risk_poly_vals_df[duplicated(large_deer_risk_poly_vals_df$patch_ID), ]
-
-## Remove duplicate rows (keep the first occurrence)
-large_deer_risk_poly_vals_df_unique <- large_deer_risk_poly_vals_df[!duplicated(large_deer_risk_poly_vals_df$patch_ID), ]
-
-# Get polygon IDs
-poly_ids <- unique(large_deer_risk_poly_vals_df_unique$patch_ID)
-#Get rows with duplicated ids
-duplicated_ids_subset <- large_deer_risk_poly_vals_df_unique %>%
-  group_by(across(1)) %>%
-  filter(n() > 1) %>%
-  ungroup()
-#Remove duplicated id rows
-large_deer_risk_poly_vals_df_unique_ids  <- large_deer_risk_poly_vals_df_unique %>%
-  distinct(patch_ID, .keep_all = TRUE)
+# #Identify duplicate rows
+# 
+# duplicates <- large_deer_risk_poly_vals_df[duplicated(large_deer_risk_poly_vals_df$patch_ID), ]
+# 
+# ## Remove duplicate rows (keep the first occurrence)
+# large_deer_risk_poly_vals_df_unique <- large_deer_risk_poly_vals_df[!duplicated(large_deer_risk_poly_vals_df$patch_ID), ]
+# 
+# # Get polygon IDs
+# poly_ids <- unique(large_deer_risk_poly_vals_df_unique$patch_ID)
+# #Get rows with duplicated ids
+# duplicated_ids_subset <- large_deer_risk_poly_vals_df_unique %>%
+#   group_by(across(1)) %>%
+#   filter(n() > 1) %>%
+#   ungroup()
+# #Remove duplicated id rows
+# large_deer_risk_poly_vals_df_unique_ids  <- large_deer_risk_poly_vals_df_unique %>%
+#   distinct(patch_ID, .keep_all = TRUE)
 
 #There are some edge effects on edge of Scottish border buffer tiles that are making some polygon risk scores < 1
 #Also from the process of merging the LCM and NFI polygons - some tiny edges remain that are not covered by the risk raster
 #The user won't see these, but we don't want values <1 on the map legend
 #Remove polys with NA or <1 mean_risk
-large_deer_risk_poly_vals_df_unique_ids <- large_deer_risk_poly_vals_df_unique_ids %>%
+# large_deer_risk_poly_vals_df_unique_ids <- large_deer_risk_poly_vals_df_unique_ids %>%
+#   filter(!is.na(mean_risk) & mean_risk >= 1)
+large_deer_risk_poly_vals_df <- large_deer_risk_poly_vals_df %>%
   filter(!is.na(mean_risk) & mean_risk >= 1)
 
 #save as shapefile
@@ -1442,14 +1447,14 @@ large_deer_risk_poly_vals_df_unique_ids <- large_deer_risk_poly_vals_df_unique_i
 
 #Tidy up attribute table
 
-large_deer_risk_poly_vals_df_unique_ids <- large_deer_risk_poly_vals_df_unique_ids %>%
-  mutate(Wood_Area_m2 = as.numeric(st_area(geometry)))
-
-large_deer_risk_poly_vals_df_unique_ids <- large_deer_risk_poly_vals_df_unique_ids %>%
-  dplyr::select(c(patch_ID,mean_risk,Wood_Area_m2))
+# large_deer_risk_poly_vals_df_unique_ids <- large_deer_risk_poly_vals_df_unique_ids %>%
+#   mutate(Wood_Area_m2 = as.numeric(st_area(geometry)))
+# 
+# large_deer_risk_poly_vals_df_unique_ids <- large_deer_risk_poly_vals_df_unique_ids %>%
+#   dplyr::select(c(patch_ID,mean_risk,Wood_Area_m2))
 
 
 #save map - TO DO
-st_write(large_deer_risk_poly_vals_df_unique_ids, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/large deer/NFI_2023_large_deer_impact_risk_EW_extraction_V2.shp",append=FALSE)
+st_write(large_deer_risk_poly_vals_df, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/large deer/NFI_2023_large_deer_impact_risk_EW_extraction_V2.shp",append=FALSE)
 #st_write(large_deer_risk_poly_vals_df_unique_ids, "C:/Users/aalg1m25/OneDrive - University of Southampton/Documents/GitHub/iDeer/output/NFI_2023_large_deer_impact_risk_test_new_forest.shp",append=FALSE)
 ```
