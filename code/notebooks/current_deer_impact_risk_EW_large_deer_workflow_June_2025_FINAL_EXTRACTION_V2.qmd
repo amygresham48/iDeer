@@ -24,19 +24,25 @@ bng <- 27700
 ```{r Read-in-spatial-datasets}
 
 #NFI 2023 dataset
-nfi <- st_read("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/nfi-2023-raw/National_Forest_Inventory_GB_2023.shp")
+#nfi <- st_read("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/nfi-2023-raw/National_Forest_Inventory_GB_2023.shp")
+nfi <- st_read("C:/Users/aalg1m25/OneDrive - University of Southampton/R_data_transfer/Deer impact EW risk maps/nfi-2023-raw/National_Forest_Inventory_GB_2023.shp")
+
 unique(nfi$IFT_IOA)
 
 #Combined NFI/LCM 2023 woodland polygons for extraction
 #See README for instructions on how to produce this layer in ArcGis Pro
-nfi_lcm_2023_polys <- st_read("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/data/NFI_LCM_2023_combined_wood_polys_EW.shp")
+#nfi_lcm_2023_polys <- st_read("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/data/NFI_LCM_2023_combined_wood_polys_EW.shp")
+nfi_lcm_2023_polys <- st_read("C:/Users/aalg1m25/OneDrive - University of Southampton/R_data_transfer/Deer impact EW risk maps/NFI_LCM_2023_combined_wood_polys_EW.shp")
+
 
 #Make template raster
-template_rast <- raster("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/lcm-2023/gblcm2023_25m.tif")
+#template_rast <- raster("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/lcm-2023/gblcm2023_25m.tif")
+template_rast <- raster("C:/Users/aalg1m25/OneDrive - University of Southampton/Documents/GitHub/iDeer/data/gblcm2023_25m.tif")
+
 crs(template_rast) <- bng
 
 #England and Wales 10k squares
-ew10k <- sf::st_read("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/10k_tiles_EW_Scotland_border_buffer.shp")
+ew10k <- sf::st_read("C:/Users/aalg1m25/OneDrive - University of Southampton/Documents/GitHub/iDeer/data/10k_tiles_EW_Scotland_border_buffer.shp")
 #DAMS
 #Interpolated from 50m resolution to 25m resolution
 #To match the resolution of other raster layers
@@ -64,7 +70,7 @@ source("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/
 #source("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/extract_raster_pixels_to_wood_polys_func_site_level.R")
 
 #function to extract risk maps to polygons per 10km square
-#source("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/extract_raster_pixels_to_wood_polys_func_10km_chunks_mean_poly_values.R")
+source("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/extract_raster_pixels_to_wood_polys_func_10km_chunks_mean_poly_values_NFI_LCM_merged.R")
 ```
 
 ```{r Make-conditional-probability-tables-for-large-deer-BBN}
@@ -172,7 +178,7 @@ assign_probabilities <- function(row, importance) {
   #if perennial cover is low and arable is high, increase importance of arable x 10
   
   if (row["Perennial_cover_1000m"] == "Low" && row["Arable_cover_1000m"] == "High") {
-  importance["Arable_cover_1000m"] <- importance["Arable_cover_1000m"] * 10 # //Increase by 100% (original value + 100% of original value)
+  importance["Arable_cover_1000m"] <- importance["Arable_cover_1000m"] * 10 
 }
   
   #if arable is high in general , increase importance of arable x 10
@@ -1254,7 +1260,8 @@ stars::write_stars(risk_vals_r, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/
 ```{r Extract to polygons using R}
 
 
-risk_vals_r <- raster("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/NFI_2023_large_deer_impact_risk_EW_V2.tif")
+#risk_vals_r <- raster("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/NFI_2023_large_deer_impact_risk_EW_V2.tif")
+risk_vals_r <- raster("C:/Users/aalg1m25/OneDrive - University of Southampton/R_data_transfer/Deer impact EW risk maps/output/NFI_2023_large_deer_impact_risk_EW_V2.tif")
 
 r_rast <- as(risk_vals_r, "Raster")
 plot(r_rast)
@@ -1269,6 +1276,12 @@ site_woods_unmerged <- st_filter(nfi_lcm_2023_polys, tiles)
 #site_woods_unmerged <- site_woods_unmerged %>% rename(Shape_Area = Shape__Are)
 #site_woods_unmerged <- site_woods_unmerged %>% rename(patch_ID = OBJECTID)
 
+#Split woodland polygons up per 10km tile
+#No duplicate polygons across tiles
+
+site_woods_unmerged_per_tile <- split_wood_polys_by_tile(wood_polys = site_woods_unmerged,
+                                                          tiles = tiles)
+
 #site level function:
 #function to extract risk maps to polygons at site level
 #source("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/extract_raster_pixels_to_wood_polys_func_site_level.R")
@@ -1278,14 +1291,34 @@ site_woods_unmerged <- st_filter(nfi_lcm_2023_polys, tiles)
 
 #England-Wales risk map:
 #function to extract risk maps to polygons per 10km square
-source("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/extract_raster_pixels_to_wood_polys_func_10km_chunks_mean_poly_values_NFI_LCM_merged.R")
+source("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/extract_raster_pixels_to_wood_polys_func_10km_chunks_mean_poly_values_NFI_LCM_merged_pre_chunked.R")
 large_deer_risk_poly_vals <- extract_raster_to_wood_polygons(risk_map = r_rast,
                                                           tiles = tiles,
-                                                          wood_polys = site_woods_unmerged)
+                                                          wood_polys_chunked = site_woods_unmerged_per_tile)
 
 large_deer_risk_poly_vals_df <- large_deer_risk_poly_vals$result
 
 # write_rds(large_deer_risk_poly_vals_df, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/NFI_2023_large_deer_impact_risk_EW_extracted_to_polys.rds")
+
+# Add a column identifying MULTIPOLYGON geometries
+large_deer_risk_poly_vals_df <- large_deer_risk_poly_vals_df %>%
+  mutate(is_NA = is.na(mean_risk) | mean_risk == 0)
+
+ggplot() +
+  geom_sf(data = large_deer_risk_poly_vals_df, aes(color = is_NA), fill = NA) +
+  scale_color_manual(values = c("FALSE" = "grey70", "TRUE" = "red")) +
+  theme_minimal() +
+  labs(color = "Mean risk NA or 0")
+
+# Subset polygons where mean_risk is NA or 0
+problem_polys <- large_deer_risk_poly_vals_df %>%
+  filter(is.na(mean_risk) | mean_risk == 0)
+
+# Plot just those geometries
+ggplot() +
+  geom_sf(data = problem_polys, fill = "red", color = "black") +
+  theme_minimal() +
+  labs(title = "Polygons with Mean Risk NA or 0")
 
 #Identify duplicate rows
 
@@ -1317,6 +1350,12 @@ large_deer_risk_poly_vals_df_unique_ids  <- large_deer_risk_poly_vals_df_unique 
 large_deer_risk_poly_vals_df_unique_ids <- large_deer_risk_poly_vals_df_unique_ids %>%
   filter(!is.na(mean_risk) & mean_risk >= 1)
 
+ggplot(large_deer_risk_poly_vals_df_unique) +
+  geom_sf(aes(fill = mean_risk), color = NA) +
+  scale_fill_viridis_c(option = "plasma", na.value = "grey90") +
+  theme_minimal() +
+  labs(fill = "Mean Risk") +
+  theme(legend.position = "right")
 
 #save as shapefile
 #st_write(large_deer_risk_poly_vals_df_unique_ids, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/NFI_2023_large_deer_impact_risk_EW_extracted_to_unique_polys.shp",append=FALSE)
@@ -1404,5 +1443,6 @@ large_deer_risk_poly_vals_df_unique_ids <- large_deer_risk_poly_vals_df_unique_i
 
 
 #save map - TO DO
-st_write(large_deer_risk_poly_vals_df_unique_ids, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/large deer/NFI_2023_large_deer_impact_risk_test_new_forest.shp",append=FALSE)
+#st_write(large_deer_risk_poly_vals_df_unique_ids, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/large deer/NFI_2023_large_deer_impact_risk_test_new_forest.shp",append=FALSE)
+st_write(large_deer_risk_poly_vals_df, "C:/Users/aalg1m25/OneDrive - University of Southampton/Documents/GitHub/iDeer/output/NFI_2023_large_deer_impact_risk_test_new_forest.shp",append=FALSE)
 ```
