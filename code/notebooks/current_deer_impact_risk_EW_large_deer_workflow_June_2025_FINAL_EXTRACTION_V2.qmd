@@ -16,6 +16,8 @@ library(dplyr)
 library(fasterize)
 library(terra)
 library(progress)
+library(exactextractr)
+library(furrr)
 
 #British national grid code
 bng <- 27700
@@ -49,8 +51,8 @@ ew10k <- sf::st_read("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact
 #Interpolated from 50m resolution to 25m resolution
 #To match the resolution of other raster layers
 #Interpolation method = bilinear
-dams <- raster("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/data/dams_25m_bng.tif")
-crs(dams) <- bng
+#dams <- raster("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/data/dams_25m_bng.tif")
+#crs(dams) <- bng
 
 tiles <- ew10k
 
@@ -1268,13 +1270,14 @@ risk_vals_r <- raster("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impac
 #risk_vals_r <- raster("C:/Users/aalg1m25/OneDrive - University of Southampton/R_data_transfer/Deer impact EW risk maps/output/NFI_2023_large_deer_impact_risk_EW_V2.tif")
 
 r_rast <- as(risk_vals_r, "Raster")
-plot(r_rast)
+risk_map_terra <- terra::rast(r_rast)
+#plot(r_rast)
 
 # Filter woods_only by tiles (spatial intersection)
 # This will result in polygons that are within the tile boundaries
 #site_woods_unmerged <- st_filter(woods_only, tiles)
 
-site_woods_unmerged <- st_filter(nfi_lcm_2023_polys, tiles)
+#site_woods_unmerged <- st_filter(nfi_lcm_2023_polys, tiles)
 
 # Rename the area column for consistency
 #site_woods_unmerged <- site_woods_unmerged %>% rename(Shape_Area = Shape__Are)
@@ -1282,10 +1285,17 @@ site_woods_unmerged <- st_filter(nfi_lcm_2023_polys, tiles)
 
 #Split woodland polygons up per 10km tile
 #No duplicate polygons across tiles
+output_dir = "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/split_polys_by_tile"
 
 source("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/split_wood_polys_by_tile.R")
-site_woods_unmerged_per_tile <- split_wood_polys_by_tile(wood_polys = site_woods_unmerged,
-                                                          tiles = tiles)
+site_woods_unmerged_per_tile <- split_wood_polys_by_tile(wood_polys = nfi_lcm_2023_polys,
+                                                          tiles = tiles,
+                                                         output_dir = output_dir)
+
+# Get list of RDS files
+rds_files <- list.files(output_dir, pattern = "\\.rds$", full.names = TRUE)
+# Read in tiles
+tiles_list <- lapply(rds_files, readRDS)
 
 #site level function:
 #function to extract risk maps to polygons at site level
@@ -1296,10 +1306,15 @@ site_woods_unmerged_per_tile <- split_wood_polys_by_tile(wood_polys = site_woods
 
 #England-Wales risk map:
 #function to extract risk maps to polygons per 10km square
-source("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/extract_raster_pixels_to_wood_polys_func_10km_chunks_mean_poly_values_NFI_LCM_merged_pre_chunked.R")
-large_deer_risk_poly_vals <- extract_raster_to_wood_polygons(risk_map = r_rast,
-                                                          tiles = tiles,
-                                                          wood_polys_chunked = site_woods_unmerged_per_tile)
+# source("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/extract_raster_pixels_to_wood_polys_func_10km_chunks_mean_poly_values_NFI_LCM_merged_pre_chunked.R")
+# large_deer_risk_poly_vals <- extract_raster_to_wood_polygons(risk_map = r_rast,
+#                                                           tiles = tiles,
+#                                                           wood_polys_chunked = site_woods_unmerged_per_tile)
+
+source("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/extract_raster_pixels_to_wood_polygons_func_10km_chunks_mean_poly_values_NFI_LCM_merged_pre_chunked_exact.R")
+large_deer_risk_poly_vals <- extract_raster_to_wood_polygons_exact(risk_map = risk_map_terra,
+                                                           tiles = tiles,
+                                                           wood_polys_chunked = tiles_list)
 
 large_deer_risk_poly_vals_df <- large_deer_risk_poly_vals$result
 
@@ -1424,6 +1439,6 @@ large_deer_risk_poly_vals_df_unique_ids <- large_deer_risk_poly_vals_df_unique_i
 
 
 #save map - TO DO
-st_write(large_deer_risk_poly_vals_df_unique_ids, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/large deer/NFI_2023_large_deer_impact_risk_test_new_forest.shp",append=FALSE)
+st_write(large_deer_risk_poly_vals_df_unique_ids, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/large deer/NFI_2023_large_deer_impact_risk_EW_extraction_V2.shp",append=FALSE)
 #st_write(large_deer_risk_poly_vals_df_unique_ids, "C:/Users/aalg1m25/OneDrive - University of Southampton/Documents/GitHub/iDeer/output/NFI_2023_large_deer_impact_risk_test_new_forest.shp",append=FALSE)
 ```
