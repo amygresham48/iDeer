@@ -1159,7 +1159,7 @@ risk_map_terra <- terra::rast(r_rast)
 
 #site_woods_unmerged <- st_filter(nfi_lcm_2023_polys, tiles)
 
-site_woods_unmerged <- lcm2023_clip_NFI_EW %>% mutate(patch_ID = 1:nrow(lcm2023_clip_NFI_EW)) %>%
+site_woods_unmerged <- lcm2023_clip_NFI_EW_parts_polys %>% mutate(patch_ID = 1:nrow(lcm2023_clip_NFI_EW_parts_polys)) %>%
   mutate(Wood_Area_m2 = as.numeric(st_area(geometry))) %>%
   dplyr::select(c(patch_ID, Wood_Area_m2))
 
