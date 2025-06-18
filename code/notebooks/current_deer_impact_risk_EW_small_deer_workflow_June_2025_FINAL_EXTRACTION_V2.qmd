@@ -59,16 +59,51 @@ plot(tiles$geometry)
 #nfi_lcm_2023_polys <- st_read("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/data/NFI_LCM_2023_combined_wood_polys_EW.shp")
 #nfi_lcm_2023_polys <- st_read("C:/Users/aalg1m25/OneDrive - University of Southampton/R_data_transfer/Deer impact EW risk maps/NFI_LCM_2023_combined_wood_polys_EW.shp")
 
+#All CEH LCM 2023 polygons (including non-woodlands)
 lcm2023 <- st_read("C:/Users/aalg1m25/Documents/Deer impact EW risk maps/lcm-2023-vec/lcm-2023-vec_6001643.gdb")
+
 #Subset to NFI woods only
 woods_only <- nfi %>% filter(CATEGORY %in% c("Woodland"))
-#clip to England-Wales 10km tiles
-nfi_clip_EW <- st_filter(woods_only, ew10k)
-lcm2023_clip_EW <- st_filter(lcm2023, ew10k)
-#Then find lcm polygons that intersect with NFI woods in England-Wales
-lcm2023_clip_NFI_EW <- st_intersection(lcm2023_clip_EW, nfi_clip_EW)
+
+#Find lcm polys that intersect NFI woods
+lcm2023_clip_NFI <- st_intersection(lcm2023, woods_only)
+
+#Then clip both to England-Wales 10km tiles
+lcm2023_clip_NFI_EW <- st_intersection(lcm2023_clip_NFI, ew10k)
+lcm2023_clip_NFI_EW <- st_as_sf(lcm2023_clip_NFI_EW)
+
+#Ensure geometries are valid
+lcm2023_clip_NFI_EW <- st_make_valid(lcm2023_clip_NFI_EW)
+
+#Check geometry types present
+geom_table <- st_geometry_type(lcm2023_clip_NFI_EW) %>% table()
+
+# > geom_table
+# .
+#           GEOMETRY              POINT         LINESTRING            POLYGON         MULTIPOINT    MULTILINESTRING       MULTIPOLYGON 
+#                  0               3318               2714            1568056                420                102             658751 
+# GEOMETRYCOLLECTION     CIRCULARSTRING      COMPOUNDCURVE       CURVEPOLYGON         MULTICURVE       MULTISURFACE              CURVE 
+#              35131                  0                  0                  0                  0                  0                  0 
+#            SURFACE  POLYHEDRALSURFACE                TIN           TRIANGLE 
+#                  0                  0                  0                  0
+
+# Explode geometry collections into individual parts
+lcm2023_clip_NFI_EW_parts <- lcm2023_clip_NFI_EW %>%
+  st_collection_extract("POLYGON", warn = FALSE)
+
+# Then remove empty geometries if any
+lcm2023_clip_NFI_EW_parts <- lcm2023_clip_NFI_EW_parts %>%
+  filter(!st_is_empty(.))
+
+#Subset out linestrings and points and convert all to POLYGON
+lcm2023_clip_NFI_EW_parts_polys <- lcm2023_clip_NFI_EW_parts %>%
+  filter(st_geometry_type(.) %in% c("POLYGON", "MULTIPOLYGON")) %>%
+  st_cast("POLYGON")
+
+#save to shp - doesn't work, file too big
+#st_write(lcm2023_clip_NFI_EW_parts_polys, "C:/Users/aalg1m25/OneDrive - University of Southampton/R_data_transfer/Deer impact EW risk maps/lcm2023_clipped_NFI_EW.shp")
 #save to gpkg
-st_write(lcm2023_clip_NFI_EW, "C:/Users/aalg1m25/OneDrive - University of Southampton/R_data_transfer/Deer impact EW risk maps/lcm2023_clipped_NFI_EW.gpkg")
+st_write(lcm2023_clip_NFI_EW_parts_polys,"C:/Users/aalg1m25/OneDrive - University of Southampton/R_data_transfer/Deer impact EW risk maps/lcm2023_clipped_NFI_EW.gpkg", append = FALSE)
 ```
 
 ```{r Read-in-functions}
