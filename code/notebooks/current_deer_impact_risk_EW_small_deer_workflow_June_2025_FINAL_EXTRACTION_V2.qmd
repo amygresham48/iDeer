@@ -18,16 +18,10 @@ bng <- 27700
 ```{r Read-in-spatial-datasets}
 
 #NFI 2023 dataset
-nfi <- st_read("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/nfi-2023-raw/National_Forest_Inventory_GB_2023.shp")
-#nfi <- st_read("C:/Users/aalg1m25/OneDrive - University of Southampton/R_data_transfer/Deer impact EW risk maps/nfi-2023-raw/National_Forest_Inventory_GB_2023.shp")
+#nfi <- st_read("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/nfi-2023-raw/National_Forest_Inventory_GB_2023.shp")
+nfi <- st_read("C:/Users/aalg1m25/OneDrive - University of Southampton/R_data_transfer/Deer impact EW risk maps/nfi-2023-raw/National_Forest_Inventory_GB_2023.shp")
 
 unique(nfi$IFT_IOA)
-
-#Combined NFI/LCM 2023 woodland polygons for extraction
-#See README for instructions on how to produce this layer in ArcGis Pro
-nfi_lcm_2023_polys <- st_read("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/data/NFI_LCM_2023_combined_wood_polys_EW.shp")
-#nfi_lcm_2023_polys <- st_read("C:/Users/aalg1m25/OneDrive - University of Southampton/R_data_transfer/Deer impact EW risk maps/NFI_LCM_2023_combined_wood_polys_EW.shp")
-
 
 #Make template raster
 template_rast <- raster("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/lcm-2023/gblcm2023_25m.tif")
@@ -36,8 +30,8 @@ template_rast <- raster("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer imp
 crs(template_rast) <- bng
 
 #England and Wales 10k squares
-#ew10k <- sf::st_read("C:/Users/aalg1m25/OneDrive - University of Southampton/Documents/GitHub/iDeer/data/10k_tiles_EW_Scotland_border_buffer.shp")
-ew10k <- sf::st_read("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/10k_tiles_EW_Scotland_border_buffer.shp")
+ew10k <- sf::st_read("C:/Users/aalg1m25/OneDrive - University of Southampton/Documents/GitHub/iDeer/data/10k_tiles_EW_Scotland_border_buffer.shp")
+#ew10k <- sf::st_read("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/10k_tiles_EW_Scotland_border_buffer.shp")
 
 #DAMS
 #Interpolated from 50m resolution to 25m resolution
@@ -56,6 +50,25 @@ tiles <- ew10k
 #tiles <- ew10k %>% filter(tile_name %in% c("SX16","SX17","SX27","SX26")) #cornwall
 tiles <- ew10k %>% filter(tile_name %in% c("SU20","SU30","SZ29","SZ39")) #new forest
 plot(tiles$geometry)
+```
+
+```{r Make-polygons-to-extract-to-from-the-final-risk-raster}
+
+#Combined NFI/LCM 2023 woodland polygons for extraction
+#See README for instructions on how to produce this layer in ArcGis Pro
+#nfi_lcm_2023_polys <- st_read("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/data/NFI_LCM_2023_combined_wood_polys_EW.shp")
+#nfi_lcm_2023_polys <- st_read("C:/Users/aalg1m25/OneDrive - University of Southampton/R_data_transfer/Deer impact EW risk maps/NFI_LCM_2023_combined_wood_polys_EW.shp")
+
+lcm2023 <- st_read("C:/Users/aalg1m25/Documents/Deer impact EW risk maps/lcm-2023-vec/lcm-2023-vec_6001643.gdb")
+#Subset to NFI woods only
+woods_only <- nfi %>% filter(CATEGORY %in% c("Woodland"))
+#clip to England-Wales 10km tiles
+nfi_clip_EW <- st_filter(woods_only, ew10k)
+lcm2023_clip_EW <- st_filter(lcm2023, ew10k)
+#Then find lcm polygons that intersect with NFI woods in England-Wales
+lcm2023_clip_NFI_EW <- st_intersection(lcm2023_clip_EW, nfi_clip_EW)
+#save to gpkg
+st_write(lcm2023_clip_NFI_EW, "C:/Users/aalg1m25/OneDrive - University of Southampton/R_data_transfer/Deer impact EW risk maps/lcm2023_clipped_NFI_EW.gpkg")
 ```
 
 ```{r Read-in-functions}
@@ -805,7 +818,7 @@ small_risk_cpt_df<- small_risk_cpt_df_full %>%
          wood_value_index=Woodland_Food_Value_Index)
 
 # Replace '.' with '_' in column names
-colnames(small_risk_cpt_df) <- gsub("\\..", "_", colnames(small_risk_cpt_df))
+colnames(small_risk_cpt_df) <- gsub("//..", "_", colnames(small_risk_cpt_df))
 
 head(small_risk_cpt_df)
 
@@ -1111,7 +1124,7 @@ risk_map_terra <- terra::rast(r_rast)
 
 #site_woods_unmerged <- st_filter(nfi_lcm_2023_polys, tiles)
 
-site_woods_unmerged <- nfi_lcm_2023_polys %>% mutate(patch_ID = 1:nrow(nfi_lcm_2023_polys)) %>%
+site_woods_unmerged <- lcm2023_clip_NFI_EW %>% mutate(patch_ID = 1:nrow(lcm2023_clip_NFI_EW)) %>%
   mutate(Wood_Area_m2 = as.numeric(st_area(geometry))) %>%
   dplyr::select(c(patch_ID, Wood_Area_m2))
 
@@ -1129,7 +1142,7 @@ site_woods_unmerged_per_tile <- split_wood_polys_by_tile(wood_polys = site_woods
                                                          output_dir = output_dir)
 
 # Get list of RDS files
-rds_files <- list.files(output_dir, pattern = "\\.rds$", full.names = TRUE)
+rds_files <- list.files(output_dir, pattern = "//.rds$", full.names = TRUE)
 # Read in tiles
 tiles_list <- lapply(rds_files, readRDS)
 
@@ -1155,7 +1168,7 @@ small_deer_risk_poly_vals <- extract_raster_to_wood_polygons_exact(risk_map = ri
                                                            output_dir = output_dir)
 
 # Get list of RDS files
-rds_files_risk <- list.files(output_dir, pattern = "\\.rds$", full.names = TRUE)
+rds_files_risk <- list.files(output_dir, pattern = "//.rds$", full.names = TRUE)
 # Read in tiles
 tiles_list_extraction <- lapply(rds_files_risk, readRDS)
 
