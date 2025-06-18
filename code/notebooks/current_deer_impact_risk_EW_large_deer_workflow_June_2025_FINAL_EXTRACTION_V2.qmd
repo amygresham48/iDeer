@@ -66,6 +66,24 @@ tiles <- ew10k %>% filter(tile_name %in% c("SU20","SU30","SZ29","SZ39")) #new fo
 plot(tiles$geometry)
 ```
 
+```{r Make-polygons-to-extract-to-from-the-final-risk-raster}
+
+#Combined NFI/LCM 2023 woodland polygons for extraction
+#See README for instructions on how to produce this layer in ArcGis Pro
+#nfi_lcm_2023_polys <- st_read("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/data/NFI_LCM_2023_combined_wood_polys_EW.shp")
+#nfi_lcm_2023_polys <- st_read("C:/Users/aalg1m25/OneDrive - University of Southampton/R_data_transfer/Deer impact EW risk maps/NFI_LCM_2023_combined_wood_polys_EW.shp")
+
+lcm2023 <- st_read("C:/Users/aalg1m25/Documents/Deer impact EW risk maps/lcm-2023-vec/lcm-2023-vec_6001643.gdb")
+#Subset to NFI woods only
+woods_only <- nfi %>% filter(CATEGORY %in% c("Woodland"))
+#Find lcm polys that intersect NFI woods
+lcm2023_clip_NFI <- st_intersection(lcm2023, woods_only)
+#Then clip to England-Wales 10km tiles
+lcm2023_clip_NFI_EW <- st_intersection(lcm2023_clip_NFI, ew10k)
+#save to gpkg
+st_write(lcm2023_clip_NFI_EW, "C:/Users/aalg1m25/OneDrive - University of Southampton/R_data_transfer/Deer impact EW risk maps/lcm2023_clipped_NFI_EW.gpkg")
+```
+
 ```{r Read-in-functions}
 #function to extract pixel values from raster layers
 source("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/extract_raster_pixels_func_10km_chunks.R")
@@ -1279,7 +1297,7 @@ risk_map_terra <- terra::rast(r_rast)
 
 #site_woods_unmerged <- st_filter(nfi_lcm_2023_polys, tiles)
 
-site_woods_unmerged <- nfi_lcm_2023_polys %>% mutate(patch_ID = 1:nrow(nfi_lcm_2023_polys)) %>%
+site_woods_unmerged <- lcm2023_clip_NFI_EW %>% mutate(patch_ID = 1:nrow(lcm2023_clip_NFI_EW)) %>%
   mutate(Wood_Area_m2 = as.numeric(st_area(geometry))) %>%
   dplyr::select(c(patch_ID, Wood_Area_m2))
 
