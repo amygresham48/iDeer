@@ -30,8 +30,8 @@ template_rast <- raster("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer imp
 crs(template_rast) <- bng
 
 #England and Wales 10k squares
-ew10k <- sf::st_read("C:/Users/aalg1m25/OneDrive - University of Southampton/Documents/GitHub/iDeer/data/10k_tiles_EW_Scotland_border_buffer.shp")
-#ew10k <- sf::st_read("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/10k_tiles_EW_Scotland_border_buffer.shp")
+#ew10k <- sf::st_read("C:/Users/aalg1m25/OneDrive - University of Southampton/Documents/GitHub/iDeer/data/10k_tiles_EW_Scotland_border_buffer.shp")
+ew10k <- sf::st_read("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/10k_tiles_EW_Scotland_border_buffer.shp")
 
 #DAMS
 #Interpolated from 50m resolution to 25m resolution
@@ -1150,11 +1150,24 @@ stars::write_stars(risk_vals_r, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/
 
 ```{r Extract-risk-raster-to-polygons}
 
-risk_vals_r <- raster("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/NFI_2023_small_deer_impact_risk_EW.tif")
+small_risk_vals_r <- raster("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/NFI_2023_small_deer_impact_risk_EW.tif")
 
-r_rast <- as(risk_vals_r, "Raster")
-risk_map_terra <- terra::rast(r_rast)
-#plot(r_rast)
+small_r_rast <- as(small_risk_vals_r, "Raster")
+small_deer_risk_map_terra <- terra::rast(small_r_rast)
+#Ensure there are no zeros in the raster as this interferes with exactextractr function
+small_deer_risk_map_terra [small_deer_risk_map_terra  == 0] <- NA
+terra::minmax(small_deer_risk_map_terra)
+#     category
+# min        1
+# max        5
+#Convert to numeric instead of categorical
+levels(small_deer_risk_map_terra) <- NULL
+#Change name of variable
+names(small_deer_risk_map_terra) <- "NFI_2023_small_deer_impact_risk_EW"
+terra::minmax(small_deer_risk_map_terra)
+#     NFI_2023_small_deer_impact_risk_EW
+# min                                  1
+# max                                  5
 
 # Filter woods_only by tiles (spatial intersection)
 # This will result in polygons that are within the tile boundaries
@@ -1165,7 +1178,7 @@ risk_map_terra <- terra::rast(r_rast)
 lcm2023_clip_NFI_EW_parts_polys <- st_as_sf(lcm2023_clip_NFI_EW_parts_polys)
 
 site_woods_unmerged <- lcm2023_clip_NFI_EW_parts_polys %>% mutate(patch_ID = 1:nrow(lcm2023_clip_NFI_EW_parts_polys)) %>%
-  mutate(Wood_Area_m2 = as.numeric(st_area(geometry))) %>%
+  mutate(Wood_Area_m2 = as.numeric(st_area(geom))) %>%
   dplyr::select(c(patch_ID, Wood_Area_m2))
 
 # Rename the area column for consistency
@@ -1182,7 +1195,7 @@ site_woods_unmerged_per_tile <- split_wood_polys_by_tile(wood_polys = site_woods
                                                          output_dir = output_dir)
 
 # Get list of RDS files
-rds_files <- list.files(output_dir, pattern = "//.rds$", full.names = TRUE)
+rds_files <- list.files(output_dir, pattern = "\\.rds$", full.names = TRUE)
 # Read in tiles
 tiles_list <- lapply(rds_files, readRDS)
 #name tiles with tile_id
@@ -1204,7 +1217,7 @@ names(tiles_list) <- sapply(tiles_list, function(x) unique(x$tile_ID))
 
 output_dir = "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/wood_poly_risk_extraction_by_tile_small_deer_V3"
 source("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/extract_raster_pixels_to_wood_polygons_func_10km_chunks_mean_poly_values_NFI_LCM_merged_pre_chunked_exact.R")
-small_deer_risk_poly_vals <- extract_raster_to_wood_polygons_exact(risk_map = risk_map_terra,
+small_deer_risk_poly_vals <- extract_raster_to_wood_polygons_exact(risk_map = small_deer_risk_map_terra,
                                                            tiles = ew10k,
                                                            wood_polys_chunked = tiles_list,
                                                            output_dir = output_dir)
@@ -1225,8 +1238,8 @@ small_deer_risk_poly_vals_df <- readRDS("E:/Data_READ_WRITE/R_Scripts_Projects/A
 
 #Remove polys where mean risk is less than 1 and where Wood_Area_m2 is 0
 small_deer_risk_poly_vals_df_clean <- small_deer_risk_poly_vals_df %>%
-  filter(!is.na(mean_risk) & mean_risk >0) %>%
-  filter(Wood_Area_m2 > 0) %>%
+  filter(!is.na(mean_risk) & mean_risk >1) %>%
+  filter(Wood_Area_m2 > 1) %>%
   dplyr::select(-c(assigned))
 
 #save map as shapefile

@@ -1324,11 +1324,18 @@ stars::write_stars(risk_vals_r, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/
 ```{r Extract to polygons using R}
 
 
-risk_vals_r <- raster("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/NFI_2023_large_deer_impact_risk_EW_V2.tif")
+large_risk_vals_r <- raster("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/NFI_2023_large_deer_impact_risk_EW_V2.tif")
 #risk_vals_r <- raster("C:/Users/aalg1m25/OneDrive - University of Southampton/R_data_transfer/Deer impact EW risk maps/output/NFI_2023_large_deer_impact_risk_EW_V2.tif")
 
-r_rast <- as(risk_vals_r, "Raster")
-risk_map_terra <- terra::rast(r_rast)
+large_r_rast <- as(large_risk_vals_r, "Raster")
+large_deer_risk_map_terra <- terra::rast(large_r_rast)
+#Ensure there are no zeros in the raster as this interferes with exactextractr function
+large_deer_risk_map_terra[large_deer_risk_map_terra == 0] <- NA
+terra::minmax(large_deer_risk_map_terra)
+# NFI_2023_large_deer_impact_risk_EW_V2
+# min                                     1
+# max                                     5
+
 #plot(r_rast)
 
 # Filter woods_only by tiles (spatial intersection)
@@ -1381,7 +1388,7 @@ names(tiles_list) <- sapply(tiles_list, function(x) unique(x$tile_ID))
 
 output_dir = "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/wood_poly_risk_extraction_by_tile_large_deer_V3"
 source("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/extract_raster_pixels_to_wood_polygons_func_10km_chunks_mean_poly_values_NFI_LCM_merged_pre_chunked_exact.R")
-large_deer_risk_poly_vals <- extract_raster_to_wood_polygons_exact(risk_map = risk_map_terra,
+large_deer_risk_poly_vals <- extract_raster_to_wood_polygons_exact(risk_map = large_deer_risk_map_terra,
                                                            tiles = ew10k,
                                                            wood_polys_chunked = tiles_list,
                                                            output_dir = output_dir)
@@ -1402,8 +1409,8 @@ write_rds(large_deer_risk_poly_vals_df, "E:/Data_READ_WRITE/R_Scripts_Projects/A
 large_deer_risk_poly_vals_df <- readRDS("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/NFI_LCM_2023_large_deer_impact_risk_EW_extracted_to_polys_V3.rds")
 
 large_deer_risk_poly_vals_df_clean <- large_deer_risk_poly_vals_df %>%
-  filter(!is.na(mean_risk) & mean_risk >0) %>%
-   filter(Wood_Area_m2 > 0) %>%
+  filter(!is.na(mean_risk) & mean_risk >1) %>%
+   filter(Wood_Area_m2 > 1) %>%
    dplyr::select(-c(assigned))
 
 #save map as shapefile 
