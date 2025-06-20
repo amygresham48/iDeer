@@ -1399,14 +1399,14 @@ large_deer_risk_poly_vals_df <- do.call(rbind, tiles_list_extraction)
 
 write_rds(large_deer_risk_poly_vals_df, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/NFI_LCM_2023_large_deer_impact_risk_EW_extracted_to_polys_V3.rds")
 
+large_deer_risk_poly_vals_df <- readRDS("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/NFI_LCM_2023_large_deer_impact_risk_EW_extracted_to_polys_V3.rds")
+
 large_deer_risk_poly_vals_df_clean <- large_deer_risk_poly_vals_df %>%
-  filter(!is.na(mean_risk) & mean_risk >= 1) %>%
+  filter(!is.na(mean_risk) & mean_risk >0) %>%
    filter(Wood_Area_m2 > 0) %>%
    dplyr::select(-c(assigned))
 
 #save map as shapefile 
 st_write(large_deer_risk_poly_vals_df_clean, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/large deer/NFI_LCM_2023_large_deer_impact_risk_EW_extraction_V3.shp",append=FALSE)
-#save map as geopackage
-st_write(large_deer_risk_poly_vals_df_clean, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/large deer/NFI_LCM_2023_large_deer_impact_risk_EW_extraction_V3.gpkg",append=FALSE)
 #st_write(large_deer_risk_poly_vals_df_unique_ids, "C:/Users/aalg1m25/OneDrive - University of Southampton/Documents/GitHub/iDeer/output/NFI_2023_large_deer_impact_risk_test_new_forest.shp",append=FALSE)
 ```
