@@ -1401,17 +1401,13 @@ tiles_list_extraction <- lapply(rds_files_risk, readRDS)
 # Combine all tiles into one sf object
 large_deer_risk_poly_vals_df <- do.call(rbind, tiles_list_extraction)
 
-
-#large_deer_risk_poly_vals_df <- large_deer_risk_poly_vals$result
-
-write_rds(large_deer_risk_poly_vals_df, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/NFI_LCM_2023_large_deer_impact_risk_EW_extracted_to_polys_V3.rds")
-
-large_deer_risk_poly_vals_df <- readRDS("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/NFI_LCM_2023_large_deer_impact_risk_EW_extracted_to_polys_V3.rds")
-
 large_deer_risk_poly_vals_df_clean <- large_deer_risk_poly_vals_df %>%
-  filter(!is.na(mean_risk) & mean_risk >1) %>%
+  filter(!is.na(mean_risk) & mean_risk >=1) %>%
    filter(Wood_Area_m2 > 1) %>%
    dplyr::select(-c(assigned))
+
+write_rds(large_deer_risk_poly_vals_df_clean, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/NFI_LCM_2023_large_deer_impact_risk_EW_extracted_to_polys_V3.rds")
+#large_deer_risk_poly_vals_df_clean <- readRDS("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/NFI_LCM_2023_large_deer_impact_risk_EW_extracted_to_polys_V3.rds")
 
 #save map as shapefile 
 st_write(large_deer_risk_poly_vals_df_clean, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/large deer/NFI_LCM_2023_large_deer_impact_risk_EW_extraction_V3.shp",append=FALSE)
