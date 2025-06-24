@@ -1228,10 +1228,7 @@ missing_tiles <- ew10k[!ew10k$tile_name %in% names(tiles_list), ]
 #Should only be missing tiles where no woods are present (coast/water)
 ggplot() +
   geom_sf(data = selected_tiles, fill = "lightblue", color = "darkblue") +
-  theme_minimal() +
-  ggtitle("Selected Tiles from ew10k")
-ggplot() +
-  geom_sf(data = missing_tiles, fill = "yellow", color = "orange") +
+    geom_sf(data = missing_tiles, fill = "yellow", color = "orange") +
   theme_minimal() +
   ggtitle("Selected Tiles from ew10k")
 
@@ -1264,10 +1261,13 @@ tiles_list_extraction <- lapply(rds_files_risk, readRDS)
 names(tiles_list_extraction) <- sapply(tiles_list_extraction, function(x) unique(x$tile_ID))
 # filter ew10k for matching tile_name
 selected_tiles <- ew10k[ew10k$tile_name %in% names(tiles_list_extraction), ]
+missing_tiles <- ew10k[!ew10k$tile_name %in% names(tiles_list_extraction), ]
+
 
 # plot using ggplot2
 ggplot() +
   geom_sf(data = selected_tiles, fill = "lightblue", color = "darkblue") +
+  geom_sf(data = missing_tiles, fill = "yellow", color = "orange") +
   theme_minimal() +
   ggtitle("Selected Tiles from ew10k")
 
@@ -1275,6 +1275,8 @@ ggplot() +
 small_deer_risk_poly_vals_df <- do.call(rbind, tiles_list_extraction)
 
 write_rds(small_deer_risk_poly_vals_df, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/NFI_2023_small_deer_impact_risk_EW_extracted_to_polys_uncleaned_V3.rds")
+
+#small_deer_risk_poly_vals_df <- readRDS("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/NFI_2023_small_deer_impact_risk_EW_extracted_to_polys_uncleaned_V3.rds")
 
 #Remove polys where mean risk is less than 1 and where Wood_Area_m2 is 0
 small_deer_risk_poly_vals_df_clean <- small_deer_risk_poly_vals_df %>%
