@@ -33,7 +33,7 @@ unique(nfi$IFT_IOA)
 
 #Combined NFI/LCM 2023 woodland polygons for extraction
 #See README for instructions on how to produce this layer in ArcGis Pro
-nfi_lcm_2023_polys <- st_read("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/data/NFI_LCM_2023_combined_wood_polys_EW.shp")
+#nfi_lcm_2023_polys <- st_read("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/data/NFI_LCM_2023_combined_wood_polys_EW.shp")
 #nfi_lcm_2023_polys <- st_read("C:/Users/aalg1m25/OneDrive - University of Southampton/R_data_transfer/Deer impact EW risk maps/NFI_LCM_2023_combined_wood_polys_EW.shp")
 
 
@@ -462,6 +462,8 @@ unique(non_woods$IFT_IOA)
 
 #Mixed structure habitats = open areas, or areas with good potential for foraging resources
 #open_woodland <- nfi %>% filter(IFT_IOA %in% c("Assumed woodland","Failed","Windblow","Ground prep","Felled","Low density", "Young trees","Shrub"))
+
+#Assumed woodland is where new woodland planting has been reported but not yes detected by satellites. Therefore we are treating it the same as "Young trees"
 
 #Closed habitats = mature woodland
 #closed_woodland <- nfi %>% filter(IFT_IOA %in% c("Conifer","Broadleaved","Mixed mainly broadleaved","Mixed mainly conifer","Coppice with standards","Coppice"))
