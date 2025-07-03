@@ -1040,6 +1040,7 @@ df_cat$pred_connect <- pred_connect
 ```{r Make-small-deer-impact-risk-raster}
 
 # Convert points dataframe to sf
+
 df_sf <- st_as_sf(df_cat, coords = c("x", "y"), crs = st_crs(bng))
 
 readr::write_rds(df_sf, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/NFI_2023_small_deer_impact_risk_sf.rds")
