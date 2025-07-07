@@ -1,0 +1,91 @@
+```{r}
+#Panel figure for iDeer risk maps ------------########
+
+#Make alluvial plots using the conditional probability tables from the iDeer models
+
+library(raster)
+library(sf)
+library(ggplot2)
+library(ggalluvial)
+library(knitr)
+
+```
+
+```{r Load in CPTs}
+
+#Large deer CPTs ####
+#Attraction index
+large_attraction_cpt_df <- read.csv("C:/Users/ik929086/OneDrive - University of Southampton/iDeer_Manuscripts/iDeer_Tool/Supplementary Info/Code/cpt-figures/Large_Deer_Attraction_Index_CPT.csv")
+#Thermoregulation Index
+large_thermoreg_cpt_df <- read.csv("C:/Users/ik929086/OneDrive - University of Southampton/iDeer_Manuscripts/iDeer_Tool/Supplementary Info/CPTs/Large_Deer_Thermoreg_Index_CPT_post_interviews.csv")
+#woodland food value index
+large_wood_food_value_cpt_df <- read.csv("C:/Users/ik929086/OneDrive - University of Southampton/iDeer_Manuscripts/iDeer_Tool/Supplementary Info/CPTs/Largedeer_Woodland_food_value_Index_two_levels.csv")
+#Large deer impact risk
+large_risk_cpt_df <- read.csv("C:/Users/ik929086/OneDrive - University of Southampton/iDeer_Manuscripts/iDeer_Tool/Supplementary Info/CPTs/Large_Deer_Damage_Risk_CPT_post_interviews.csv")
+
+#Small deer CPTs ####
+#Connectivity
+small_connectivity_cpt_df <- read.csv("C:/Users/ik929086/OneDrive - University of Southampton/iDeer_Manuscripts/iDeer_Tool/Supplementary Info/CPTs/Small_Deer_Connectivity_Index_CPT_post_interviews.csv")
+#Attraction index
+small_attraction_cpt_df <- read.csv("C:/Users/ik929086/OneDrive - University of Southampton/iDeer_Manuscripts/iDeer_Tool/Supplementary Info/CPTs/Smalldeer_Attraction_Index_Woodland_edge_cover_400m_Amy.csv")
+#small deer damage risk
+small_risk_cpt_df_full <- read.csv("C:/Users/ik929086/OneDrive - University of Southampton/iDeer_Manuscripts/iDeer_Tool/Supplementary Info/CPTs/Small_Deer_Damage_Risk_CPT_post_interviews.csv")
+#woodland food value index
+small_wood_food_value_cpt_df <- read.csv("C:/Users/ik929086/OneDrive - University of Southampton/iDeer_Manuscripts/iDeer_Tool/Supplementary Info/CPTs/Smalldeer_Woodland_food_value_Index.csv")
+
+```
+
+```{r}
+# Load knitr for neat table printing
+library(knitr)
+
+# Large deer CPT importance values ----
+large_deer_themoreg <- c(MAX_DAMS_1000m = 1, woodland_shelter_value = 0.2)
+large_deer_attraction <- c(Woodland_edge_cover_1000m = 0.1, 
+                           Arable_cover_1000m = 1, 
+                           Perennial_cover_1000m = 1)
+large_deer_woodland_value <- c(Woodland_palatability = 1)
+large_deer_impact_risk <- c(Woodland_Value_Index = 0.3, 
+                            Attraction_Index = 1, 
+                            Thermoregulation_Index = 0.2)
+
+# Combine large deer variables and values into a data frame
+large_deer_table <- data.frame(
+  Variable = c(names(large_deer_themoreg),
+               names(large_deer_attraction),
+               names(large_deer_woodland_value),
+               names(large_deer_impact_risk)),
+  Importance_Value = c(large_deer_themoreg,
+                       large_deer_attraction,
+                       large_deer_woodland_value,
+                       large_deer_impact_risk)
+)
+
+# Display Large deer table
+kable(large_deer_table, caption = "Large Deer CPT Importance Values")
+
+# Small deer CPT importance values ----
+small_deer_connectivity <- c(Woodland_cover_400m = 1, LF_cover_400m = 0.6)
+small_deer_attraction <- c(Woodland_edge_cover = 1)
+small_deer_woodland_value <- c(Woodland_palatability = 1)
+small_deer_impact_risk <- c(Connectivity_Index = 0.2, 
+                            Attraction_Index = 0.5, 
+                            Woodland_Food_Value_Index = 0.8)
+
+# Combine small deer variables and values into a data frame
+small_deer_table <- data.frame(
+  Variable = c(names(small_deer_connectivity),
+               names(small_deer_attraction),
+               names(small_deer_woodland_value),
+               names(small_deer_impact_risk)),
+  Importance_Value = c(small_deer_connectivity,
+                       small_deer_attraction,
+                       small_deer_woodland_value,
+                       small_deer_impact_risk)
+)
+
+# Display Small deer table
+kable(small_deer_table, caption = "Small Deer CPT Importance Values")
+
+```
+
