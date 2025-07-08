@@ -8,6 +8,8 @@ library(sf)
 library(ggplot2)
 library(ggalluvial)
 library(knitr)
+library(raster)
+library(viridisLite)
 
 ```
 
@@ -88,4 +90,407 @@ small_deer_table <- data.frame(
 kable(small_deer_table, caption = "Small Deer CPT Importance Values")
 
 ```
+
+```{r}
+
+titanic_wide <- data.frame(Titanic)
+head(titanic_wide)
+#>   Class    Sex   Age Survived Freq
+#> 1   1st   Male Child       No    0
+#> 2   2nd   Male Child       No    0
+#> 3   3rd   Male Child       No   35
+#> 4  Crew   Male Child       No    0
+#> 5   1st Female Child       No    0
+#> 6   2nd Female Child       No    0
+ggplot(data = titanic_wide,
+       aes(axis1 = Class, axis2 = Sex, axis3 = Age,
+           y = Freq)) +
+  scale_x_discrete(limits = c("Class", "Sex", "Age"), expand = c(.2, .05)) +
+  xlab("Demographic") +
+  geom_alluvium(aes(fill = Survived)) +
+  geom_stratum() +
+  geom_text(stat = "stratum", aes(label = after_stat(stratum))) +
+  theme_minimal() +
+  ggtitle("passengers on the maiden voyage of the Titanic",
+          "stratified by demographics and survival")
+
+```
+
+```{r}
+large_deer_alluvial <- data.frame(
+  Variable = c("MAX_DAMS_1000m", "woodland_shelter_value",
+               "Woodland_edge_cover_1000m", "Arable_cover_1000m", "Perennial_cover_1000m",
+               "Woodland_palatability"),
+  Index = c("Thermoregulation_Index", "Thermoregulation_Index",
+            "Attraction_Index", "Attraction_Index", "Attraction_Index",
+            "Woodland_Value_Index"),
+  Importance_Value = c(1, 0.2, 0.1, 1, 1, 1)
+)
+
+large_deer_impact_risk <- c(
+  Woodland_Value_Index = 0.3,
+  Attraction_Index = 1,
+  Thermoregulation_Index = 0.2
+)
+
+# Add Impact risk weight to each record via matching Index
+large_deer_alluvial <- large_deer_alluvial %>%
+  mutate(Impact_Risk = "Impact Risk",
+         Impact_Importance = large_deer_impact_risk[Index])
+
+# Calculate final flow value for each alluvium
+large_deer_alluvial <- large_deer_alluvial %>%
+  mutate(Flow_Value = Importance_Value * Impact_Importance)
+
+# Check data
+large_deer_alluvial
+
+
+# Build proportional weighted alluvial plot
+large_deer_alluvial_template <- ggplot(large_deer_alluvial,
+       aes(axis1 = Variable, axis2 = Index, axis3 = Impact_Risk,
+           y = Flow_Value)) +
+  geom_alluvium(aes(fill = Index), width = 0.2, alpha = 0.6) +
+  geom_stratum(width = 0.3, fill = "white", color = "black") +
+  scale_x_discrete(limits = c("Variable", "Index", "Impact Risk"), expand = c(.05, .05)) +
+  theme_minimal() +
+  theme(
+    #legend.position = "none",
+    axis.title = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks = element_blank(),
+    panel.grid = element_blank()
+  ) +
+  ggtitle("Large Deer CPT Alluvial Plot (weighted)") +
+  ylab("Importance Value") +
+  xlab("")
+
+ggsave("C:/Users/ik929086/Documents/iDeer/output/plots/large_deer_alluvial_template.pdf", plot = large_deer_alluvial_template, width = 6, height = 4)
+
+
+
+```
+
+```{r}
+library(ggplot2)
+library(ggalluvial)
+library(dplyr)
+
+# Small deer variable to index mapping
+small_deer_alluvial <- data.frame(
+  Variable = c("Woodland_cover_400m", "LF_cover_400m",
+               "Woodland_edge_cover", "Woodland_palatability"),
+  Index = c("Connectivity_Index", "Connectivity_Index",
+            "Attraction_Index", "Woodland_Value_Index"),
+  Importance_Value = c(1, 0.6, 1, 1)
+)
+
+# Impact risk values for each index
+small_deer_impact_risk <- c(Connectivity_Index = 0.2, 
+                            Attraction_Index = 0.5, 
+                            Woodland_Value_Index = 0.8)  # used consistent name
+
+# Merge Impact Risk values into the data frame by matching on Index
+small_deer_alluvial <- small_deer_alluvial %>%
+  mutate(Impact_Risk = "Impact Risk",
+         Impact_Importance = small_deer_impact_risk[Index])
+
+# Final combined Importance Value (variable to index to impact risk flow)
+small_deer_alluvial <- small_deer_alluvial %>%
+  mutate(Flow_Value = Importance_Value * Impact_Importance)
+
+# Inspect structure
+small_deer_alluvial
+
+# Build weighted alluvial plot
+small_deer_alluvial_template <- ggplot(small_deer_alluvial,
+       aes(axis1 = Variable, axis2 = Index, axis3 = Impact_Risk,
+           y = Flow_Value)) +
+  geom_alluvium(aes(fill = Index), width = 0.2, alpha = 0.6) +
+  geom_stratum(width = 0.3, fill = "white", color = "black") +
+  scale_x_discrete(limits = c("Variable", "Index", "Impact Risk"), expand = c(.05, .05)) +
+  theme_minimal() +
+  theme(
+    #legend.position = "none",
+    axis.title = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks = element_blank(),
+    panel.grid = element_blank()
+  ) +
+  ggtitle("Small Deer CPT Alluvial Plot (weighted)") +
+  ylab("Importance Value") +
+  xlab("")
+
+ggsave("C:/Users/ik929086/Documents/iDeer/output/plots/small_deer_alluvial_template.pdf", plot = small_deer_alluvial_template, width = 6, height = 4)
+
+
+```
+
+```{r}
+#Save raster tiles to be used in the figure
+
+#Read in rasters for variables
+#large deer
+max_dams <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/polys_unmerged_max_summed_DAMS_raster_normalised.tif")
+shelter_quality <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/NFI_woodland_shelter_value_index_large_deer.tif")
+arable_cover <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023//large_deer/percentage_cover_arable_1000_2023.tif")
+perennial_cover <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/percentage_cover_perennial_1000m_2023.tif")
+wood_value_large_deer <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/NFI_woodland_food_value_index_large_deer_two_levels.tif")
+wood_edges_1000m <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/NFI_focal_woodland_edge_area_1000m_percentage_cover.tif")
+
+#small deer
+LF_cover <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/small_deer/NFI_mean_percentage_focal_area_lf_extracted_to_polys_400m.tif")
+wood_value_small_deer <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/small_deer/NFI_woodland_food_value_index_small_deer_bng.tif")
+wood_edges_400m <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/small_deer/NFI_focal_woodland_edge_area_400m_percentage_cover.tif")
+wood_area_400m <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/small_deer/NFI_mean_percentage_focal_area_woods_extracted_to_polys_400m.tif")
+
+
+
+#Make a 5x5km tile around point 50.477566, -4.847737 (Cornwall)
+#crop all rasters to this tile
+# Define the center point (longitude, latitude)
+center_point <- SpatialPoints(matrix(c(-4.847737, 50.477566), ncol=2), 
+                              proj4string=CRS("+proj=longlat +datum=WGS84"))
+
+# Transform to same CRS as rasters (assuming all rasters have same CRS)
+target_crs <- crs(max_dams)
+center_point_proj <- spTransform(center_point, target_crs)
+
+# Define a 5x5 km extent (2500 m in each direction from the center)
+buffer_size <- 2500  # in meters
+x_center <- coordinates(center_point_proj)[1]
+y_center <- coordinates(center_point_proj)[2]
+
+# Create extent object
+tile_extent <- extent(x_center - buffer_size, x_center + buffer_size,
+                      y_center - buffer_size, y_center + buffer_size)
+
+# Crop all rasters to this extent
+max_dams_crop <- crop(max_dams, tile_extent)
+#make non-values in raster NAs
+#non-values were assigned -0.02747456 in normalisation process
+max_dams_crop[max_dams_crop <= -0.02747456] <- NA
+shelter_quality_crop <- crop(shelter_quality, tile_extent)
+arable_cover_crop <- crop(arable_cover, tile_extent)
+perennial_cover_crop <- crop(perennial_cover, tile_extent)
+wood_value_large_deer_crop <- crop(wood_value_large_deer, tile_extent)
+wood_edges_1000m_crop <- crop(wood_edges_1000m, tile_extent)
+
+LF_crop <- crop(LF_cover, tile_extent)
+wood_edges_400m_crop <- crop(wood_edges_400m, tile_extent)
+wood_value_small_deer_crop <- crop(wood_value_small_deer, tile_extent)
+wood_area_crop <- crop(wood_area_400m, tile_extent)
+
+# Optionally: stack them together for joint operations
+large_deer_raster_stack <- stack(max_dams_crop, shelter_quality_crop, arable_cover_crop, 
+                      perennial_cover_crop, wood_value_large_deer_crop, wood_edges_1000m_crop)
+
+small_deer_raster_stack <- stack(LF_crop, wood_edges_400m_crop, wood_value_small_deer_crop, wood_area_crop)
+
+# Plot to check
+plot(large_deer_raster_stack)
+plot(small_deer_raster_stack)
+
+# Define custom colour palette
+custom_palette <- colorRampPalette(c("#354A9A", "#6EA6CD", "#FEDA8B", "#F67E4B", "#A50026"))
+
+# Define file paths for each raster plot
+output_dir <- "C:/Users/ik929086/Documents/iDeer/output/plots/"
+
+# List of rasters and corresponding filenames
+raster_list <- list(
+  max_dams_crop = max_dams_crop,
+  shelter_quality_crop = shelter_quality_crop,
+  arable_cover_crop = arable_cover_crop,
+  perennial_cover_crop = perennial_cover_crop,
+  wood_value_large_deer_crop = wood_value_large_deer_crop,
+  wood_value_small_deer_crop = wood_value_small_deer_crop,
+  wood_edges_400m_crop = wood_edges_400m_crop,
+  wood_edges_1000m_crop = wood_edges_1000m_crop,
+  wood_area_crop = wood_area_crop,
+  LF_crop = LF_crop
+)
+
+# Function to save each raster in a stack as an individual PDF with custom colours
+save_stack_as_individual_pdfs <- function(raster_stack, prefix) {
+  for (i in 1:nlayers(raster_stack)) {
+    layer_name <- names(raster_stack)[i]
+    pdf_filename <- paste0(prefix, "_", layer_name, ".pdf")
+    
+    pdf(file.path(output_dir, pdf_filename))
+    plot(raster_stack[[i]], 
+         main=layer_name,
+         col=custom_palette(100),
+         legend=TRUE)
+    dev.off()
+  }
+}
+
+# Save large deer cropped stack — individual PDFs
+save_stack_as_individual_pdfs(large_deer_raster_stack, "large_deer")
+
+# Save small deer cropped stack — individual PDFs
+save_stack_as_individual_pdfs(small_deer_raster_stack, "small_deer")
+
+```
+
+```{r}
+#Save index tiles to be used in figure
+#large deer
+thermoreg_index <- raster("C:/Users/ik929086/Documents/iDeer/output/Index_maps/large_deer_predicted_thermoreg_index_EW.tif")
+wood_value_large_deer_index <- raster("C:/Users/ik929086/Documents/iDeer/output/Index_maps/large_deer_predicted_wood_palatability_EW.tif")
+large_deer_attraction_index <- raster("C:/Users/ik929086/Documents/iDeer/output/Index_maps/large_deer_predicted_attraction_index_EW.tif")
+
+#small deer
+connectivity_index <- raster("C:/Users/ik929086/Documents/iDeer/output/Index_maps/small_deer_predicted_connectivity_EW.tif")
+wood_value_small_deer_index <- raster("C:/Users/ik929086/Documents/iDeer/output/Index_maps/small_deer_predicted_wood_palatability_EW.tif")
+small_deer_attraction_index <- raster("C:/Users/ik929086/Documents/iDeer/output/Index_maps/small_deer_attraction_index_EW.tif")
+
+# --- Define the center point and tile extent ---
+
+center_point <- SpatialPoints(matrix(c(-4.847737, 50.477566), ncol=2), 
+                              proj4string=CRS("+proj=longlat +datum=WGS84"))
+
+# Assuming all rasters have the same CRS as max_dams (modify if different)
+target_crs <- crs(max_dams)
+center_point_proj <- spTransform(center_point, target_crs)
+
+buffer_size <- 2500  # 5km tile radius (meters)
+x_center <- coordinates(center_point_proj)[1]
+y_center <- coordinates(center_point_proj)[2]
+
+tile_extent <- extent(x_center - buffer_size, x_center + buffer_size,
+                      y_center - buffer_size, y_center + buffer_size)
+
+# --- Crop rasters to extent ---
+
+large_deer_indices_stack <- stack(
+  crop(thermoreg_index, tile_extent),
+  crop(wood_value_large_deer_index, tile_extent),
+  crop(large_deer_attraction_index, tile_extent)
+)
+names(large_deer_indices_stack) <- c("Thermoregulation", "Wood Value", "Attraction")
+
+small_deer_indices_stack <- stack(
+  crop(connectivity_index, tile_extent),
+  crop(wood_value_small_deer_index, tile_extent),
+  crop(small_deer_attraction_index, tile_extent)
+)
+names(small_deer_indices_stack) <- c("Connectivity", "Wood Value", "Attraction")
+
+replace_zeros_with_na <- function(r_stack) {
+  for (i in 1:nlayers(r_stack)) {
+    r <- r_stack[[i]]
+    r[r == 0] <- NA
+    r_stack[[i]] <- r
+  }
+  return(r_stack)
+}
+
+large_deer_indices_stack <- replace_zeros_with_na(large_deer_indices_stack)
+small_deer_indices_stack <- replace_zeros_with_na(small_deer_indices_stack)
+
+# --- Define your custom colour palette ---
+
+custom_palette <- colorRampPalette(c("#354A9A", "#6EA6CD", "#FEDA8B", "#F67E4B", "#A50026"))
+
+# --- Function to save individual raster layers as PDFs with custom colors ---
+
+output_dir <- "C:/Users/ik929086/Documents/iDeer/output/plots/"
+if (!dir.exists(output_dir)) dir.create(output_dir)
+
+save_stack_as_individual_pdfs <- function(r_stack, prefix) {
+  for (i in 1:nlayers(r_stack)) {
+    layer_name <- names(r_stack)[i]
+    pdf_filename <- paste0(prefix, "_", layer_name, ".pdf")
+    
+    pdf(file.path(output_dir, pdf_filename))
+    plot(r_stack[[i]], 
+         main = layer_name,
+         col = custom_palette(100),
+         legend = TRUE,
+         theme_void())
+    dev.off()
+  }
+}
+
+# --- Save the cropped stacks as individual PDFs ---
+
+save_stack_as_individual_pdfs(large_deer_indices_stack, "large_deer_index")
+save_stack_as_individual_pdfs(small_deer_indices_stack, "small_deer_index")
+
+```
+
+```{r}
+#Finally, plot and save the risk maps
+
+small_deer_risk_raster <- raster("C:/Users/ik929086/OneDrive - University of Southampton/R_data_transfer/Deer impact EW risk maps/output/NFI_2023_small_deer_impact_risk_EW.tif")
+
+large_deer_risk_raster <- raster("C:/Users/ik929086/OneDrive - University of Southampton/R_data_transfer/Deer impact EW risk maps/output/NFI_2023_large_deer_impact_risk_EW_V2.tif")
+
+# --- Define the center point and tile extent ---
+
+center_point <- SpatialPoints(matrix(c(-4.847737, 50.477566), ncol=2), 
+                              proj4string=CRS("+proj=longlat +datum=WGS84"))
+
+# Assuming all rasters have the same CRS as max_dams (modify if different)
+target_crs <- crs(max_dams)
+center_point_proj <- spTransform(center_point, target_crs)
+
+buffer_size <- 2500  # 5km tile radius (meters)
+x_center <- coordinates(center_point_proj)[1]
+y_center <- coordinates(center_point_proj)[2]
+
+tile_extent <- extent(x_center - buffer_size, x_center + buffer_size,
+                      y_center - buffer_size, y_center + buffer_size)
+
+#crop rasters
+
+small_deer_risk_crop <- crop(small_deer_risk_raster, tile_extent)
+small_deer_risk_crop[small_deer_risk_crop <= 0] <- NA
+
+large_deer_risk_crop <- crop(large_deer_risk_raster, tile_extent)
+
+# Plot small deer raster with magma palette
+plot(small_deer_risk_crop, 
+     col = plasma(100), 
+     main = "Small Deer Risk")
+
+# Plot large deer raster with viridis palette
+plot(large_deer_risk_crop, 
+     col = viridis(100), 
+     main = "Large Deer Risk")
+
+#Plot sf objects
+
+small_deer_risk_sf <- st_read("~/iDeer-tool/data/NFI_2023_small_deer_impact_risk_EW_extraction_V3.gpkg")
+large_deer_risk_sf <- st_read("~/iDeer-tool/data/NFI_LCM_2023_large_deer_impact_risk_EW_extraction_V3.gpkg")
+
+small_deer_risk_sf_crop <- st_crop(small_deer_risk_sf, tile_extent)
+large_deer_risk_sf_crop <- st_crop(large_deer_risk_sf, tile_extent)
+
+# Plot small deer risk with plasma palette
+small_deer_plot <- ggplot() +
+  geom_sf(data = small_deer_risk_sf_crop, aes(fill = mean_risk), colour = NA) +
+  scale_fill_viridis_c(option = "plasma", na.value = "transparent") +
+  theme_void() +
+  ggtitle("Small Deer Impact Risk") +
+  theme(plot.title = element_text(size = 14, face = "bold"))
+
+# Save small deer risk PDF
+ggsave("C:/Users/ik929086/Documents/iDeer/output/plots/small_deer_risk_map.pdf", plot = small_deer_plot, width = 6, height = 6)
+
+# Plot large deer risk with viridis palette
+large_deer_plot <- ggplot() +
+  geom_sf(data = large_deer_risk_sf_crop, aes(fill = mean_risk), colour = NA) +
+  scale_fill_viridis_c(option = "viridis", na.value = "transparent") +
+  theme_void() +
+  ggtitle("Large Deer Impact Risk") +
+  theme(plot.title = element_text(size = 14, face = "bold"))
+
+# Save large deer risk PDF
+ggsave("C:/Users/ik929086/Documents/iDeer/output/plots/large_deer_risk_map.pdf", plot = large_deer_plot, width = 6, height = 6)
+
+```
+
 
