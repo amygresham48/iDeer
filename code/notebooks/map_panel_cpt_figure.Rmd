@@ -258,8 +258,10 @@ wood_edges_1000m_crop <- crop(wood_edges_1000m, tile_extent)
 
 LF_crop <- crop(LF_cover, tile_extent)
 wood_edges_400m_crop <- crop(wood_edges_400m, tile_extent)
+crs(wood_edges_400m_crop) <- 27700
 wood_value_small_deer_crop <- crop(wood_value_small_deer, tile_extent)
 wood_area_crop <- crop(wood_area_400m, tile_extent)
+crs(wood_area_crop) <- 27700
 
 # Optionally: stack them together for joint operations
 large_deer_raster_stack <- stack(max_dams_crop, shelter_quality_crop, arable_cover_crop, 
@@ -418,16 +420,23 @@ save_stack_as_individual_pdfs <- function(raster_stack, prefix, var_to_index_df,
     # After terra::project, layer name might be lost or changed, so let's assign a generic name:
     names(raster_layer_proj_crop) <- "value"
     
+    # Create extent polygon as sf for outlining
+extent_sf <- st_as_sfc(st_bbox(raster_layer_proj_crop))
+st_crs(extent_sf) <- crs(raster_layer_proj_crop)
+    
     pdf(file.path(output_dir, pdf_filename), width = 7, height = 7)
     
-    p <- ggplot() +
+     p <- ggplot() +
       geom_spatraster_rgb(data = map_tiles) +
-      geom_spatraster(data = raster_layer_proj_crop, aes(fill = value)) +  # use "value" for fill
-      scale_fill_gradientn(colors = pal_fun(100), na.value = "transparent", name = index_group) +
-      coord_sf(crs = crs_mercator, xlim = c(bbox_merc["xmin"], bbox_merc["xmax"]), ylim = c(bbox_merc["ymin"], bbox_merc["ymax"])) +
-      labs(title = layer_name, fill = index_group) +
+      geom_spatraster(data = raster_layer_proj_crop, aes(fill = value)) +
+      scale_fill_gradientn(colors = pal_fun(100), na.value = "transparent", name = layer_name) +
+      geom_sf(data = extent_sf, fill = NA, color = "black", size = 0.3) +  # thin black outline
+      coord_sf(crs = crs_mercator, 
+               xlim = c(bbox_merc["xmin"], bbox_merc["xmax"]), 
+               ylim = c(bbox_merc["ymin"], bbox_merc["ymax"])) +
+      labs(title = layer_name, fill = layer_name) +
       theme_minimal()
-    
+
     print(p)
     
     dev.off()
@@ -440,7 +449,15 @@ save_stack_as_individual_pdfs(
   var_to_index_df = large_deer_alluvial,
   bbox_merc = bbox_merc,
   crs_mercator = crs_mercator,
-  sf_polygons = small_sf_mercator,   # or NULL if you don’t want polygons
+  output_dir = output_dir
+)
+
+save_stack_as_individual_pdfs(
+  raster_stack = small_deer_raster_stack,
+  prefix = "small_deer",
+  var_to_index_df = small_deer_alluvial,
+  bbox_merc = bbox_merc,
+  crs_mercator = crs_mercator,
   output_dir = output_dir
 )
 
@@ -536,6 +553,9 @@ save_stack_as_individual_pdfs <- function(r_stack, prefix) {
     "Connectivity" = custom_palette_connectivity
   )
   
+   # Fetch OSM basemap tiles for the bbox area
+  map_tiles <- get_tiles(bbox_merc, provider = "Esri.WorldTopoMap", zoom = 15)
+  
   for (i in 1:nlayers(r_stack)) {
     layer_name <- names(r_stack)[i]
     pdf_filename <- paste0(prefix, "_", gsub(" ", "_", tolower(layer_name)), ".pdf")
@@ -552,12 +572,34 @@ save_stack_as_individual_pdfs <- function(r_stack, prefix) {
       pal_fun <- colorRampPalette(c("white", "black"))  # fallback palette
     }
     
-    # Plot and save
+     # Convert to SpatRaster and project to Web Mercator
+    raster_layer <- terra::rast(r_stack[[i]])
+    raster_layer_proj <- terra::project(raster_layer, crs_mercator)
+    
+    # Crop to basemap bounding box
+    bbox_spat <- terra::ext(c(bbox_merc["xmin"], bbox_merc["xmax"], bbox_merc["ymin"], bbox_merc["ymax"]))
+    raster_layer_proj_crop <- terra::crop(raster_layer_proj, bbox_spat)
+    names(raster_layer_proj_crop) <- "value"
+    
+       # Create extent polygon as sf for outlining
+extent_sf <- st_as_sfc(st_bbox(raster_layer_proj_crop))
+st_crs(extent_sf) <- crs(raster_layer_proj_crop)
+    
+    # Create and save plot
     pdf(file.path(output_dir, pdf_filename), width = 7, height = 7)
-    plot(r_stack[[i]], 
-         main = layer_name,
-         col = pal_fun(100),
-         legend = TRUE)
+    
+    p <- ggplot() +
+      geom_spatraster_rgb(data = map_tiles) +
+      geom_spatraster(data = raster_layer_proj_crop, aes(fill = value)) +
+      scale_fill_gradientn(colors = pal_fun(100), na.value = "transparent", name = layer_name) +
+      geom_sf(data = extent_sf, fill = NA, color = "black", size = 0.3) +
+      coord_sf(crs = crs_mercator, 
+               xlim = c(bbox_merc["xmin"], bbox_merc["xmax"]), 
+               ylim = c(bbox_merc["ymin"], bbox_merc["ymax"])) +
+      labs(title = layer_name, fill = layer_name) +
+      theme_minimal()
+    
+    print(p)
     dev.off()
   }
 }
