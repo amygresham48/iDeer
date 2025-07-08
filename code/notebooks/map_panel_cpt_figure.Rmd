@@ -10,6 +10,8 @@ library(ggalluvial)
 library(knitr)
 library(raster)
 library(viridisLite)
+library(leaflet)
+library(stars)
 
 ```
 
@@ -91,30 +93,6 @@ kable(small_deer_table, caption = "Small Deer CPT Importance Values")
 
 ```
 
-```{r}
-
-titanic_wide <- data.frame(Titanic)
-head(titanic_wide)
-#>   Class    Sex   Age Survived Freq
-#> 1   1st   Male Child       No    0
-#> 2   2nd   Male Child       No    0
-#> 3   3rd   Male Child       No   35
-#> 4  Crew   Male Child       No    0
-#> 5   1st Female Child       No    0
-#> 6   2nd Female Child       No    0
-ggplot(data = titanic_wide,
-       aes(axis1 = Class, axis2 = Sex, axis3 = Age,
-           y = Freq)) +
-  scale_x_discrete(limits = c("Class", "Sex", "Age"), expand = c(.2, .05)) +
-  xlab("Demographic") +
-  geom_alluvium(aes(fill = Survived)) +
-  geom_stratum() +
-  geom_text(stat = "stratum", aes(label = after_stat(stratum))) +
-  theme_minimal() +
-  ggtitle("passengers on the maiden voyage of the Titanic",
-          "stratified by demographics and survival")
-
-```
 
 ```{r}
 large_deer_alluvial <- data.frame(
@@ -164,6 +142,8 @@ large_deer_alluvial_template <- ggplot(large_deer_alluvial,
   ggtitle("Large Deer CPT Alluvial Plot (weighted)") +
   ylab("Importance Value") +
   xlab("")
+
+large_deer_alluvial_template
 
 ggsave("C:/Users/ik929086/Documents/iDeer/output/plots/large_deer_alluvial_template.pdf", plot = large_deer_alluvial_template, width = 6, height = 4)
 
@@ -311,31 +291,163 @@ raster_list <- list(
   LF_crop = LF_crop
 )
 
-# Function to save each raster in a stack as an individual PDF with custom colours
-save_stack_as_individual_pdfs <- function(raster_stack, prefix) {
+# --- Define your custom colour palette ---
+
+# Base colors
+col_wood_value <- "#619cff"
+col_attraction <- "#f8766d"
+col_connectivity <- "#00ba38"
+col_thermoreg <- "#00ba38"
+
+# Function to darken base colors
+darken_color <- function(col, amount = 0.2) {
+  colorspace::darken(col, amount = amount)
+}
+
+# Pale yellow starting color for all palettes
+yellow_start <- "#FFFF99"  # pale yellow
+
+# Create palettes transitioning from yellow to the darkened base color
+custom_palette_wood_value <- colorRampPalette(c(yellow_start, darken_color(col_wood_value)))
+custom_palette_attraction <- colorRampPalette(c(yellow_start, darken_color(col_attraction)))
+custom_palette_connectivity <- colorRampPalette(c(yellow_start, darken_color(col_connectivity)))
+custom_palette_thermoreg <- colorRampPalette(c(yellow_start, darken_color(col_thermoreg)))
+
+#create lookup table for maps
+name_map <- c(
+  "polys_unmerged_max_summed_DAMS_raster_normalised" = "MAX_DAMS_1000m",
+  "NFI_woodland_shelter_value_index_large_deer" = "woodland_shelter_value",
+  "NFI_focal_woodland_edge_area_1000m_percentage_cover"="Woodland_edge_cover_1000m" ,
+ "percentage_cover_arable_1000_2023" = "Arable_cover_1000m",
+ "percentage_cover_perennial_1000m_2023" = "Perennial_cover_1000m",
+  "NFI_woodland_food_value_index_large_deer_two_levels" = "Woodland_palatability",
+ "NFI_mean_percentage_focal_area_lf_extracted_to_polys_400m" = "LF_cover_400m",
+ "NFI_focal_woodland_edge_area_400m_percentage_cover" =  "Woodland_edge_cover",
+ "NFI_woodland_food_value_index_small_deer_bng" = "Woodland_palatability",
+ "NFI_mean_percentage_focal_area_woods_extracted_to_polys_400m" = "Woodland_cover_400m" 
+  )
+
+save_stack_as_individual_pdfs <- function(raster_stack, prefix, var_to_index_df) {
+  
+  # Map index to palette functions
+  palette_map <- list(
+    "Thermoregulation_Index" = custom_palette_thermoreg,
+    "Woodland_Value_Index" = custom_palette_wood_value,
+    "Attraction_Index" = custom_palette_attraction,
+    "Connectivity_Index" = custom_palette_connectivity
+  )
+  
   for (i in 1:nlayers(raster_stack)) {
     layer_name <- names(raster_stack)[i]
-    pdf_filename <- paste0(prefix, "_", layer_name, ".pdf")
+    pdf_filename <- paste0(prefix, "_", gsub(" ", "_", tolower(layer_name)), ".pdf")
     
-    pdf(file.path(output_dir, pdf_filename))
-    plot(raster_stack[[i]], 
-         main=layer_name,
-         col=custom_palette(100),
-         legend=TRUE)
+    # Look up the index group for the layer_name
+    mapped_name <- name_map[[layer_name]]
+    index_group <- var_to_index_df$Index[match(mapped_name, var_to_index_df$Variable)]
+    
+    # Get the palette function from palette_map; fallback to grayscale palette if not found
+    pal_fun <- palette_map[[index_group]]
+    if (is.null(pal_fun)) {
+      pal_fun <- colorRampPalette(c("white", "black"))
+    }
+    
+    pdf(file.path(output_dir, pdf_filename), width = 7, height = 7)
+    plot(raster_stack[[i]],
+         main = layer_name,
+         col = pal_fun(100),
+         legend = TRUE)
     dev.off()
   }
 }
 
 # Save large deer cropped stack — individual PDFs
-save_stack_as_individual_pdfs(large_deer_raster_stack, "large_deer")
+save_stack_as_individual_pdfs(large_deer_raster_stack, "large_deer", large_deer_alluvial)
 
 # Save small deer cropped stack — individual PDFs
-save_stack_as_individual_pdfs(small_deer_raster_stack, "small_deer")
+save_stack_as_individual_pdfs(small_deer_raster_stack, "small_deer", small_deer_alluvial)
+```
+
+
+```{r Function that saves plots with underlying basemap}
+
+library(terra)    # for SpatRaster
+library(ggplot2)
+library(rosm)
+library(sf)
+
+ # Convert to Web Mercator (EPSG:3857)
+crs_mercator <- "EPSG:3857"
+raster_layer <- terra::rast(small_deer_raster_stack[[1]])
+raster_mercator <- terra::project(raster_layer, crs_mercator)
+# Get bounding box of the sf object
+bbox_merc <- st_bbox(raster_mercator)
+# Fetch OpenStreetMap tiles for the bounding box region
+map_tiles <- get_tiles(bbox_merc, provider = "Esri.WorldTopoMap", zoom = 15)
+
+save_stack_as_individual_pdfs <- function(raster_stack, prefix, var_to_index_df, bbox_merc, crs_mercator, output_dir) {
+  
+  # Map index to palette functions
+  palette_map <- list(
+    "Thermoregulation_Index" = custom_palette_thermoreg,
+    "Woodland_Value_Index" = custom_palette_wood_value,
+    "Attraction_Index" = custom_palette_attraction,
+    "Connectivity_Index" = custom_palette_connectivity
+  )
+  
+  # Fetch OSM tiles once
+  map_tiles <- get_tiles(bbox_merc, provider = "Esri.WorldTopoMap", zoom = 15)
+  
+  for (i in 1:nlayers(raster_stack)) {
+    layer_name <- names(raster_stack)[i]
+    pdf_filename <- paste0(prefix, "_", gsub(" ", "_", tolower(layer_name)), ".pdf")
+    
+    mapped_name <- if (exists("name_map") && !is.null(name_map[[layer_name]])) name_map[[layer_name]] else layer_name
+    index_group <- var_to_index_df$Index[match(mapped_name, var_to_index_df$Variable)]
+    pal_fun <- palette_map[[index_group]]
+    if (is.null(pal_fun)) pal_fun <- colorRampPalette(c("white", "black"))
+    
+    # Convert to SpatRaster and project
+    raster_layer <- terra::rast(raster_stack[[i]])
+    raster_layer_proj <- terra::project(raster_layer, crs_mercator)
+    
+    # Crop to bounding box of base map (bbox_merc)
+    bbox_spat <- terra::ext(c(bbox_merc["xmin"], bbox_merc["xmax"], bbox_merc["ymin"], bbox_merc["ymax"]))
+    raster_layer_proj_crop <- terra::crop(raster_layer_proj, bbox_spat)
+    
+    # For aes(fill=...), the name should correspond to the raster layer's layer name after projection
+    # After terra::project, layer name might be lost or changed, so let's assign a generic name:
+    names(raster_layer_proj_crop) <- "value"
+    
+    pdf(file.path(output_dir, pdf_filename), width = 7, height = 7)
+    
+    p <- ggplot() +
+      geom_spatraster_rgb(data = map_tiles) +
+      geom_spatraster(data = raster_layer_proj_crop, aes(fill = value)) +  # use "value" for fill
+      scale_fill_gradientn(colors = pal_fun(100), na.value = "transparent", name = index_group) +
+      coord_sf(crs = crs_mercator, xlim = c(bbox_merc["xmin"], bbox_merc["xmax"]), ylim = c(bbox_merc["ymin"], bbox_merc["ymax"])) +
+      labs(title = layer_name, fill = index_group) +
+      theme_minimal()
+    
+    print(p)
+    
+    dev.off()
+  }
+}
+
+save_stack_as_individual_pdfs(
+  raster_stack = large_deer_raster_stack,
+  prefix = "large_deer",
+  var_to_index_df = large_deer_alluvial,
+  bbox_merc = bbox_merc,
+  crs_mercator = crs_mercator,
+  sf_polygons = small_sf_mercator,   # or NULL if you don’t want polygons
+  output_dir = output_dir
+)
 
 ```
 
-```{r}
-#Save index tiles to be used in figure
+```{r Save index tiles to be used in figure}
+
 #large deer
 thermoreg_index <- raster("C:/Users/ik929086/Documents/iDeer/output/Index_maps/large_deer_predicted_thermoreg_index_EW.tif")
 wood_value_large_deer_index <- raster("C:/Users/ik929086/Documents/iDeer/output/Index_maps/large_deer_predicted_wood_palatability_EW.tif")
@@ -392,7 +504,22 @@ small_deer_indices_stack <- replace_zeros_with_na(small_deer_indices_stack)
 
 # --- Define your custom colour palette ---
 
-custom_palette <- colorRampPalette(c("#354A9A", "#6EA6CD", "#FEDA8B", "#F67E4B", "#A50026"))
+# Function to darken colors (using scales::darken)
+darken_color <- function(col, amount = 0.5) {
+  colorspace::darken(col, amount = amount)
+}
+
+# Base colors
+col_wood_value <- "#619cff"
+col_attraction <- "#f8766d"
+col_connectivity <- "#00ba38"
+col_thermoreg <- "#00ba38"
+
+# Custom palettes from base color to darker shade
+custom_palette_wood_value <- colorRampPalette(c(col_wood_value, darken_color(col_wood_value)))
+custom_palette_attraction <- colorRampPalette(c(col_attraction, darken_color(col_attraction)))
+custom_palette_connectivity <- colorRampPalette(c(col_connectivity, darken_color(col_connectivity)))
+custom_palette_thermoreg <- colorRampPalette(c(col_thermoreg, darken_color(col_thermoreg)))
 
 # --- Function to save individual raster layers as PDFs with custom colors ---
 
@@ -400,16 +527,37 @@ output_dir <- "C:/Users/ik929086/Documents/iDeer/output/plots/"
 if (!dir.exists(output_dir)) dir.create(output_dir)
 
 save_stack_as_individual_pdfs <- function(r_stack, prefix) {
+  
+  # Define palette mapping by layer name patterns
+  palette_map <- list(
+    "Thermoregulation" = custom_palette_thermoreg,
+    "Wood.Value" = custom_palette_wood_value,
+    "Attraction" = custom_palette_attraction,
+    "Connectivity" = custom_palette_connectivity
+  )
+  
   for (i in 1:nlayers(r_stack)) {
     layer_name <- names(r_stack)[i]
-    pdf_filename <- paste0(prefix, "_", layer_name, ".pdf")
+    pdf_filename <- paste0(prefix, "_", gsub(" ", "_", tolower(layer_name)), ".pdf")
     
-    pdf(file.path(output_dir, pdf_filename))
+    # Find palette function that matches layer name
+    pal_fun <- NULL
+    for (key in names(palette_map)) {
+      if (grepl(key, layer_name, ignore.case = TRUE)) {
+        pal_fun <- palette_map[[key]]
+        break
+      }
+    }
+    if (is.null(pal_fun)) {
+      pal_fun <- colorRampPalette(c("white", "black"))  # fallback palette
+    }
+    
+    # Plot and save
+    pdf(file.path(output_dir, pdf_filename), width = 7, height = 7)
     plot(r_stack[[i]], 
          main = layer_name,
-         col = custom_palette(100),
-         legend = TRUE,
-         theme_void())
+         col = pal_fun(100),
+         legend = TRUE)
     dev.off()
   }
 }
@@ -460,7 +608,10 @@ plot(small_deer_risk_crop,
 plot(large_deer_risk_crop, 
      col = viridis(100), 
      main = "Large Deer Risk")
+```
 
+
+```{r}
 #Plot sf objects
 
 small_deer_risk_sf <- st_read("~/iDeer-tool/data/NFI_2023_small_deer_impact_risk_EW_extraction_V3.gpkg")
@@ -476,6 +627,7 @@ small_deer_plot <- ggplot() +
   theme_void() +
   ggtitle("Small Deer Impact Risk") +
   theme(plot.title = element_text(size = 14, face = "bold"))
+small_deer_plot
 
 # Save small deer risk PDF
 ggsave("C:/Users/ik929086/Documents/iDeer/output/plots/small_deer_risk_map.pdf", plot = small_deer_plot, width = 6, height = 6)
@@ -493,4 +645,43 @@ ggsave("C:/Users/ik929086/Documents/iDeer/output/plots/large_deer_risk_map.pdf",
 
 ```
 
+```{r}
+#Use leaflet to line up with basemaps
+
+library(sf)
+library(rosm)
+library(ggplot2)
+library(dplyr)
+
+
+ # Convert to Web Mercator (EPSG:3857)
+crs_mercator <- "EPSG:3857"
+small_sf_mercator <- st_transform(small_deer_risk_sf_crop, crs_mercator)
+
+# Get bounding box of the sf object
+bbox_merc <- st_bbox(small_sf_mercator)
+
+# Fetch OpenStreetMap tiles for the bounding box region using rosm
+# Define a bounding box extent for rosm
+bbox_extent <- as.vector(bbox_merc)  # xmin, ymin, xmax, ymax
+
+# Fetch OpenStreetMap tiles for the bounding box region
+map_tiles <- get_tiles(bbox_merc, provider = "OpenStreetMap", zoom = 15)
+
+ggplot() +
+  geom_spatraster_rgb(data = map_tiles) +  # OSM tiles base layer
+  
+  geom_sf(data = small_sf_mercator, 
+          aes(fill = mean_risk), 
+          color = NA, alpha = 1) +     # polygons filled by mean_risk
+  
+  scale_fill_viridis_c(option = "plasma") +  # continuous plasma palette
+  
+  coord_sf(crs = crs_mercator) +
+  
+  theme_minimal() +
+  labs(fill = "Mean Risk")
+
+     
+```
 
