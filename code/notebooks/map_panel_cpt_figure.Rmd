@@ -113,15 +113,19 @@ large_deer_impact_risk <- c(
 
 # Add Impact risk weight to each record via matching Index
 large_deer_alluvial <- large_deer_alluvial %>%
-  mutate(Impact_Risk = "Impact Risk",
+  dplyr::mutate(Impact_Risk = "Impact Risk",
          Impact_Importance = large_deer_impact_risk[Index])
 
 # Calculate final flow value for each alluvium
 large_deer_alluvial <- large_deer_alluvial %>%
-  mutate(Flow_Value = Importance_Value * Impact_Importance)
+  dplyr::mutate(Flow_Value = Importance_Value * Impact_Importance)
 
 # Check data
 large_deer_alluvial
+
+# Make sure Variable is a factor with the desired order
+large_deer_alluvial <- large_deer_alluvial %>%
+  mutate(Variable = factor(Variable, levels = Variable))
 
 
 # Build proportional weighted alluvial plot
@@ -307,7 +311,7 @@ darken_color <- function(col, amount = 0.2) {
 }
 
 # Pale yellow starting color for all palettes
-yellow_start <- "#FFFF99"  # pale yellow
+yellow_start <- "goldenrod1"  # pale yellow
 
 # Create palettes transitioning from yellow to the darkened base color
 custom_palette_wood_value <- colorRampPalette(c(yellow_start, darken_color(col_wood_value)))
@@ -376,6 +380,8 @@ library(terra)    # for SpatRaster
 library(ggplot2)
 library(rosm)
 library(sf)
+library(maptiles)
+library(tidyterra)
 
  # Convert to Web Mercator (EPSG:3857)
 crs_mercator <- "EPSG:3857"
@@ -384,7 +390,7 @@ raster_mercator <- terra::project(raster_layer, crs_mercator)
 # Get bounding box of the sf object
 bbox_merc <- st_bbox(raster_mercator)
 # Fetch OpenStreetMap tiles for the bounding box region
-map_tiles <- get_tiles(bbox_merc, provider = "Esri.WorldTopoMap", zoom = 15)
+map_tiles <-get_tiles(bbox_merc, provider = "Esri.WorldTopoMap", zoom = 15)
 
 save_stack_as_individual_pdfs <- function(raster_stack, prefix, var_to_index_df, bbox_merc, crs_mercator, output_dir) {
   
@@ -528,7 +534,8 @@ darken_color <- function(col, amount = 0.5) {
 
 # Base colors
 col_wood_value <- "#619cff"
-col_attraction <- "#f8766d"
+#col_attraction <- "#f8766d"
+col_attraction <- "goldenrod1"
 col_connectivity <- "#00ba38"
 col_thermoreg <- "#00ba38"
 
