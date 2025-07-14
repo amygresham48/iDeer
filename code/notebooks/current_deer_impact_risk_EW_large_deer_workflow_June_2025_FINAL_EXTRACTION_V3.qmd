@@ -1396,7 +1396,7 @@ ggplot() +
 
 #England-Wales risk map:
 #function to extract risk maps to polygons per 10km square
-# source("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/extract_raster_pixels_to_wood_polys_func_10km_chunks_mean_poly_values_NFI_LCM_merged_pre_chunked.R")
+#source("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/extract_raster_pixels_to_wood_polys_func_10km_chunks_mean_poly_values_NFI_LCM_merged_pre_chunked.R")
 # large_deer_risk_poly_vals <- extract_raster_to_wood_polygons(risk_map = r_rast,
 #                                                           tiles = tiles,
 #                                                           wood_polys_chunked = site_woods_unmerged_per_tile)
