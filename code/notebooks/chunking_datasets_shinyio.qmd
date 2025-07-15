@@ -19,6 +19,10 @@ ew10k <- st_read("C:/Users/ik929086/OneDrive - University of Southampton/R_data_
 small_deer_risk_tile_dir <- "C:/Users/ik929086/OneDrive - University of Southampton/R_data_transfer/Deer impact EW risk maps/wood_poly_risk_extraction_by_tile_small_deer_V3"
 
 rds_small_risk_tiled_files <-list.files(small_deer_risk_tile_dir, pattern = "\\.rds$", full.names = TRUE)
+small_deer_tile_list <- lapply(rds_small_risk_tiled_files, readRDS)
+
+# Extract tile_IDs from each list of RDS files
+small_tile_ids <- sapply(small_deer_tile_list, function(x) unique(x$tile_ID))
 
 #large deer impact risk tiles
 large_deer_risk_tile_dir <- "C:/Users/ik929086/OneDrive - University of Southampton/R_data_transfer/Deer impact EW risk maps/wood_poly_risk_extraction_by_tile_large_deer_V3"
@@ -65,6 +69,8 @@ dams_tiles_chunked <- split_raster_by_tile(raster_data = Focal1000_DAMS,
                                            file_prefix = "focal1000_dams_tile_",
                                            output_dir =  "C:/Users/ik929086/Documents/iDeer/output/focal1000_dams_10km_chunked")
 
+dams_tiled_files <- list.files(dams_tiles_dir, pattern ="\\.tif$", full.names = TRUE)
+
 #Raw NFI dataset
 nfi <- st_read("~/iDeer/data/raw-data/nfi-2023-raw/National_Forest_Inventory_GB_2023.shp")
 
@@ -74,6 +80,11 @@ nfi_per_tile <- split_wood_polys_by_tile(wood_polys = nfi,
                                   output_dir = nfi_output_dir)
 
 nfi_tiled_files <- rds_small_risk_tiled_files <-list.files(nfi_output_dir, pattern = "\\.rds$", full.names = TRUE)
+nfi_files <- lapply(nfi_tiled_files, readRDS)
+
+# Extract tile_IDs from each list of RDS files
+nfi_tile_ids <- sapply(nfi_files, function(x) unique(x$tile_ID))
+
 
 #Merged NFI polys
 GB_polys_unmerged <- readRDS("C:/Users/ik929086/OneDrive - University of Southampton/R_data_transfer/Deer impact EW risk maps/NFI_2023_all_woods_UK_touching_groups.rds")
@@ -83,6 +94,27 @@ GB_merged_output_dir <- "C:/Users/ik929086/Documents/iDeer/output/GB_nfi_polys_m
 GB_merged_polys_per_tile <- split_wood_polys_by_tile(wood_polys = GB_polys_unmerged,
                                   tiles = selected_tiles,
                                   output_dir = GB_merged_output_dir)
+
+GB_merged_poly_files <- list.files(GB_merged_output_dir,pattern ="\\.rds$", full.names = TRUE)
+
+#which tiles are missing?
+nfi_small_diff <- setdiff(small_tile_ids,nfi_tile_ids)
+
+# The missing tile IDs
+#These tiles don't contain NFI woodlands
+missing_tiles <- c("SN36", "SS75", "SW81", "SX14", "SY38", "TR33")
+
+# Add a column to flag missing tiles
+ew10k$missing <- ifelse(ew10k$tile_name %in% missing_tiles, "Missing", "Present")
+
+# Plot
+ggplot() +
+  geom_sf(data = ew10k, aes(fill = missing), color = "black", size = 0.2) +
+  scale_fill_manual(values = c("Present" = "white", "Missing" = "red")) +
+  theme_minimal() +
+  theme(legend.position = "bottom") +
+  labs(title = "EW 10k Tiles — Missing vs Present",
+       fill = "Tile Status")
 
 
 ```
