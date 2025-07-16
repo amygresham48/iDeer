@@ -14,27 +14,19 @@ library(terra)
 ew10k <- st_read("C:/Users/ik929086/OneDrive - University of Southampton/R_data_transfer/Deer impact EW risk maps/10k_tiles_EW_Scotland_border_buffer.shp")
 
 #Read in chunked datasets
-
 #small deer impact risk tiles
 small_deer_risk_tile_dir <- "C:/Users/ik929086/OneDrive - University of Southampton/R_data_transfer/Deer impact EW risk maps/wood_poly_risk_extraction_by_tile_small_deer_V3"
-
 rds_small_risk_tiled_files <-list.files(small_deer_risk_tile_dir, pattern = "\\.rds$", full.names = TRUE)
 small_deer_tile_list <- lapply(rds_small_risk_tiled_files, readRDS)
-
 # Extract tile_IDs from each list of RDS files
 small_tile_ids <- sapply(small_deer_tile_list, function(x) unique(x$tile_ID))
-
 #large deer impact risk tiles
 large_deer_risk_tile_dir <- "C:/Users/ik929086/OneDrive - University of Southampton/R_data_transfer/Deer impact EW risk maps/wood_poly_risk_extraction_by_tile_large_deer_V3"
-
 rds_large_risk_tiled_files <-list.files(large_deer_risk_tile_dir, pattern = "\\.rds$", full.names = TRUE)
-
 #lcm polys chunked into tiles
 tile_dir = "C:/Users/ik929086/OneDrive - University of Southampton/R_data_transfer/Deer impact EW risk maps/split_polys_by_tile_lcm_polys"
 
 #These are all done, now just need to chunk up the rasters
-
-
 ```
 
 ```{r Get tiles for chunking datasets}
@@ -57,9 +49,12 @@ missing_tiles <- ew10k[!ew10k$tile_name %in% names(tiles_list), ]
 #Function to split polygon datasets:
 source("C:/Users/ik929086/Documents/iDeer/code/functions/split_wood_polys_by_tile.R")
 
-#Function to split raster:
+#Function to split rasters:
 source("C:/Users/ik929086/Documents/iDeer/code/functions/split_raster_by_tile.R")
 
+```
+
+```{r}
 #Focal DAMS extraction at 1000m
 Focal1000_DAMS <- terra::rast("~/iDeer/output/GB_datasets_2023/large_deer/focal_DAMS_1000m.tif")
 crs(Focal1000_DAMS) <- "EPSG:27700"
@@ -71,31 +66,42 @@ dams_tiles_chunked <- split_raster_by_tile(raster_data = Focal1000_DAMS,
 
 dams_tiled_files <- list.files(dams_tiles_dir, pattern ="\\.tif$", full.names = TRUE)
 
+```
+
+```{r}
 #Raw NFI dataset
 nfi <- st_read("~/iDeer/data/raw-data/nfi-2023-raw/National_Forest_Inventory_GB_2023.shp")
+st_crs(nfi) <- 27700
 
 nfi_output_dir <- "C:/Users/ik929086/Documents/iDeer/output/nfi_chunked_10km"
 nfi_per_tile <- split_wood_polys_by_tile(wood_polys = nfi,
                                   tiles = selected_tiles,
                                   output_dir = nfi_output_dir)
 
-nfi_tiled_files <- rds_small_risk_tiled_files <-list.files(nfi_output_dir, pattern = "\\.rds$", full.names = TRUE)
+nfi_tiled_files <-list.files(nfi_output_dir, pattern = "\\.rds$", full.names = TRUE)
 nfi_files <- lapply(nfi_tiled_files, readRDS)
 
 # Extract tile_IDs from each list of RDS files
 nfi_tile_ids <- sapply(nfi_files, function(x) unique(x$tile_ID))
 
+```
 
+```{r}
 #Merged NFI polys
 GB_polys_unmerged <- readRDS("C:/Users/ik929086/OneDrive - University of Southampton/R_data_transfer/Deer impact EW risk maps/NFI_2023_all_woods_UK_touching_groups.rds")
 GB_polys_unmerged <- st_as_sf(GB_polys_unmerged)
-GB_merged_output_dir <- "C:/Users/ik929086/Documents/iDeer/output/GB_nfi_polys_merged_chunked_10km"
+GB_merged_output_dir <- "C:/Users/ik929086/Documents/iDeer/output/GB_nfi_polys_unmerged_chunked_10km"
 
 GB_merged_polys_per_tile <- split_wood_polys_by_tile(wood_polys = GB_polys_unmerged,
                                   tiles = selected_tiles,
                                   output_dir = GB_merged_output_dir)
 
 GB_merged_poly_files <- list.files(GB_merged_output_dir,pattern ="\\.rds$", full.names = TRUE)
+
+
+```
+
+```{r}
 
 #which tiles are missing?
 nfi_small_diff <- setdiff(small_tile_ids,nfi_tile_ids)
@@ -116,11 +122,151 @@ ggplot() +
   labs(title = "EW 10k Tiles — Missing vs Present",
        fill = "Tile Status")
 
+```
 
+```{r Custom 200km grid square shapefile}
+
+#The 10km chunks are too small for Andrew to upload to the geoserver
+
+#CEH land cover map 2023
+lcm <- raster("~/iDeer/data/raw-data/lcm-2023/gblcm2023_25m.tif")
+
+#focal1000 dams raster
+dams <- raster("C:/Users/ik929086/OneDrive - University of Southampton/R_data_transfer/Amy-iDeer-tool/data/data/focal_DAMS_1000m.tif")
+
+res <- 200000 # change this to something which splits the country into the desired 4-5 sections.
+e <- ext(lcm) #lcm = template raster
+
+# Manually extend to ensure full coverage
+x_seq <- seq(e[1], e[2] + res, by = res)
+y_seq <- seq(e[3], e[4] + res, by = res)
+
+# Create polygons
+grid_polys <- list()
+id <- 1
+
+for (i in seq_along(x_seq[-length(x_seq)])) {
+  for (j in seq_along(y_seq[-length(y_seq)])) {
+    x1 <- x_seq[i]; x2 <- x_seq[i+1]
+    y1 <- y_seq[j]; y2 <- y_seq[j+1]
+    coords <- matrix(c(x1,y1, x2,y1, x2,y2, x1,y2, x1,y1), ncol=2, byrow=TRUE)
+    grid_polys[[id]] <- vect(list(coords), type = "polygons", crs = as.character(crs(lcm)))
+    id <- id + 1
+  }
+}
+
+# Combine into a single SpatVector
+grid <- do.call(rbind, grid_polys)
+
+# Optional: assign IDs
+grid$id <- seq_len(nrow(grid))
+
+#Give tiles names
+grid$tile_name <- paste0("tile_", seq_len(nrow(grid)))
+names(grid)
+
+grid <- st_as_sf(grid)
+st_crs(grid) <- 27700 #ignore warning, crs is correct
+
+# Save as ESRI Shapefile (creates .shp + associated files)
+st_write(grid, "C:/Users/ik929086/Documents/iDeer/output/custom_grid_200km.shp", overwrite = TRUE)
+
+# Plot geometries
+plot(grid$geometry, main = "Custom 200km Grid", col = "lightblue", border = "grey40")
+plot(lcm, add=TRUE)
+
+plot(grid$geometry, main = "Custom 200km Grid", col = "lightblue", border = "grey40")
+plot(dams, add=TRUE)
+
+##
+
+```
+
+```{r Raw NFI dataset chunked to 200km}
+nfi <- st_read("~/iDeer/data/raw-data/nfi-2023-raw/National_Forest_Inventory_GB_2023.shp")
+st_crs(nfi) <- 27700
+
+nfi_output_dir <- "C:/Users/ik929086/Documents/iDeer/output/nfi_chunked_200km"
+nfi_per_tile <- split_wood_polys_by_tile(wood_polys = nfi,
+                                  tiles = grid,
+                                  output_dir = nfi_output_dir)
+
+nfi_tiled_files <-list.files(nfi_output_dir, pattern = "\\.rds$", full.names = TRUE)
+nfi_files <- lapply(nfi_tiled_files, readRDS)
+
+# Extract tile_IDs from each list of RDS files
+nfi_tile_ids <- sapply(nfi_files, function(x) unique(x$tile_ID))
+```
+
+```{r Unmerged NFI polys chunked to 200km}
+
+GB_polys_unmerged <- readRDS("C:/Users/ik929086/OneDrive - University of Southampton/R_data_transfer/Deer impact EW risk maps/NFI_2023_all_woods_UK_touching_groups.rds")
+GB_polys_unmerged <- st_as_sf(GB_polys_unmerged)
+GB_merged_output_dir <- "C:/Users/ik929086/Documents/iDeer/output/GB_nfi_polys_unmerged_chunked_200km"
+
+GB_merged_polys_per_tile <- split_wood_polys_by_tile(wood_polys = GB_polys_unmerged,
+                                  tiles = grid,
+                                  output_dir = GB_merged_output_dir)
+
+GB_merged_poly_files <- list.files(GB_merged_output_dir,pattern ="\\.rds$", full.names = TRUE)
+```
+
+```{r Focal DAMS extraction at 1000m}
+
+Focal1000_DAMS <- terra::rast("~/iDeer/output/GB_datasets_2023/large_deer/focal_DAMS_1000m.tif")
+crs(Focal1000_DAMS) <- "EPSG:27700"
+dams_tiles_dir <- "C:/Users/ik929086/Documents/iDeer/output/focal1000_dams_200km_chunked"
+dams_tiles_chunked <- split_raster_by_tile(raster_data = Focal1000_DAMS,
+                                           tiles = grid,
+                                           file_prefix = "focal1000_dams_tile_",
+                                           output_dir =  dams_tiles_dir)
+
+dams_tiled_files <- list.files(dams_tiles_dir, pattern ="\\.tif$", full.names = TRUE)
+
+```
+
+```{r nfi_lcm_polys chunked to 200km}
+
+nfi_lcm_polys_2023 <- st_read("C:/Users/ik929086/Documents/iDeer-tool/data/lcm2023_clipped_NFI_EW.gpkg")
+crs(nfi_lcm_polys_2023) <- 27700
+nfi_lcm_polys_2023_dir <- "C:/Users/ik929086/Documents/iDeer/output/nfi_lcm_2023_polys_200km_chunked"
+nfi_lcm_polys_chunked <- split_wood_polys_by_tile(wood_polys = nfi_lcm_polys_2023,
+                                  tiles = grid,
+                                  output_dir = nfi_lcm_polys_2023_dir)
+
+nfi_lcm_polys_2023_files <- list.files(nfi_lcm_polys_2023_dir,pattern ="\\.rds$", full.names = TRUE)
+```
+
+```{r Small deer impact risk gpkg chunked to 200km}
+
+small.deer.risk <- st_read("C:/Users/ik929086/Documents/iDeer-tool/data/NFI_2023_small_deer_impact_risk_EW_extraction_V3.gpkg")
+small.deer.risk  <- st_as_sf(small.deer.risk)
+small_deer_risk_output_dir <- "C:/Users/ik929086/Documents/iDeer/output/small_deer_risk_200km_chunked"
+
+small_deer_risk_per_tile <- split_wood_polys_by_tile(wood_polys = small.deer.risk,
+                                  tiles = grid,
+                                  output_dir = small_deer_risk_output_dir)
+
+small_deer_risk_files <- list.files(small_deer_risk_output_dir,pattern ="\\.rds$", full.names = TRUE)
+```
+
+```{r large deer impact risk gpkg chunked to 200km}
+
+large.deer.risk <- st_read("C:/Users/ik929086/Documents/iDeer-tool/data/NFI_LCM_2023_large_deer_impact_risk_EW_extraction_V3.gpkg")
+large.deer.risk  <- st_as_sf(large.deer.risk)
+large_deer_risk_output_dir <- "C:/Users/ik929086/Documents/iDeer/output/large_deer_risk_200km_chunked"
+
+large_deer_risk_per_tile <- split_wood_polys_by_tile(wood_polys = large.deer.risk,
+                                  tiles = grid,
+                                  output_dir = large_deer_risk_output_dir)
+
+large_deer_risk_files <- list.files(large_deer_risk_output_dir,pattern ="\\.rds$", full.names = TRUE)
 ```
 
 ```{r}
 #Read in small datasets that don't need to be chunked:
+
+#BDS raster layers
 
 #BDS presence-only deer species maps
 red_bds <- raster("C:/Users/ik929086/Documents/iDeer-tool/data/derived-data/BDS-data/Red_presence_raster_EW_2005_to_2022_BDS.tif")
