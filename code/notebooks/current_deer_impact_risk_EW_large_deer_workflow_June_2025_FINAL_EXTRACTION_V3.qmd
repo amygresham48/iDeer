@@ -187,13 +187,19 @@ assign_probabilities <- function(row, importance) {
   min_score <- sum(c(1, 1) * importance)
   max_score <- sum(c(3, 3) * importance)
   scaled_score <- (total_score - min_score) / (max_score - min_score) * 2 + 1 # Scale to 1-3
+  print("scaled_score")
+  print(scaled_score)
 
   # Calculate probabilities for each level (Low to High) using a normal distribution.
   # The mean of the distribution is determined by the scaled total score.
   #Higher number of sd = curve becomes flatter - probabilities more evenly distributed.
   #Smaller number of sd = curve becomes steeper - greater difference in probabilities between categories.
+  
+  print(mean(scaled_score))
   base_probs <- dnorm(1:3, mean = scaled_score, sd = 0.41)
+  print(base_probs)
   base_probs <- base_probs / sum(base_probs) # Normalize probabilities to sum to 1.
+  print(base_probs)
   
   # Assign names to the probability levels.
   names(base_probs) <- c("Low", "Medium", "High")
