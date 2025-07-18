@@ -9,7 +9,11 @@ bng <- "27700"
 library(raster)
 library(sf)
 library(terra)
+library(ggplot2)
 
+```
+
+```{r}
 
 ew10k <- st_read("C:/Users/ik929086/OneDrive - University of Southampton/R_data_transfer/Deer impact EW risk maps/10k_tiles_EW_Scotland_border_buffer.shp")
 
@@ -194,24 +198,195 @@ nfi_per_tile <- split_wood_polys_by_tile(wood_polys = nfi,
 nfi_tiled_files <-list.files(nfi_output_dir, pattern = "\\.rds$", full.names = TRUE)
 nfi_files <- lapply(nfi_tiled_files, readRDS)
 
+# Read in RDS files
+nfi_tiled_files <- list.files(nfi_output_dir, pattern = "\\.rds$", full.names = TRUE)
+nfi_files <- lapply(nfi_tiled_files, readRDS)
+
 # Extract tile_IDs from each list of RDS files
 nfi_tile_ids <- sapply(nfi_files, function(x) unique(x$tile_ID))
+
+# Simplify geometries with a tolerance of 5 metres
+nfi_files_simplified <- lapply(nfi_files, function(x) {
+  st_simplify(x, dTolerance = 5, preserveTopology = TRUE)
+})
+
+#save simplified tiles
+simplified_nfi_dir <- "C:/Users/ik929086/Documents/iDeer/output/nfi_chunked_200m_simplified_5m"
+
+# Save each simplified RDS using original filenames
+invisible(mapply(function(data, original_file) {
+  file_name <- basename(original_file)
+  saveRDS(data, file.path(simplified_nfi_dir, file_name))
+}, nfi_files_simplified, nfi_tiled_files))
+
 ```
 
-```{r Unmerged NFI polys chunked to 200km}
+```{r Chunk-raw-nfi-into-5}
+
+nfi <- st_read("~/iDeer/data/raw-data/nfi-2023-raw/National_Forest_Inventory_GB_2023.shp")
+st_crs(nfi) <- 27700
+
+nfi_output_dir <- "C:/Users/ik929086/Documents/iDeer/output/nfi_EW_chunked"
+nfi_per_tile <- split_wood_polys_by_tile(wood_polys = nfi,
+                                  tiles = EW_chunks,
+                                  output_dir = nfi_output_dir,
+                                  file_prefix = "nfi_EW_chunked_")
+
+nfi_tiled_files <-list.files(nfi_output_dir, pattern = "\\.rds$", full.names = TRUE)
+nfi_files <- lapply(nfi_tiled_files, readRDS)
+
+# Read in RDS files
+nfi_tiled_files <- list.files(nfi_output_dir, pattern = "\\.rds$", full.names = TRUE)
+nfi_files <- lapply(nfi_tiled_files, readRDS)
+
+# Extract tile_IDs from each list of RDS files
+nfi_tile_ids <- sapply(nfi_files, function(x) unique(x$tile_ID))
+
+# Simplify geometries with a tolerance of 5 metres
+nfi_files_simplified <- lapply(nfi_files, function(x) {
+  st_simplify(x, dTolerance = 5, preserveTopology = TRUE)
+})
+
+#save simplified tiles
+simplified_nfi_dir <- "C:/Users/ik929086/Documents/iDeer/output/nfi_EW_chunked_simplified_5m"
+
+#save as shapefiles for Andrew
+mapply(function(data, original_file) {
+  # Extract base filename without extension
+  base_name <- tools::file_path_sans_ext(basename(original_file))
+  # Construct full path for shapefile (must end with .shp)
+  shp_path <- file.path(simplified_nfi_dir, paste0(base_name, ".shp"))
+  # Write shapefile, overwrite if exists
+  st_write(data, shp_path, delete_layer = TRUE, quiet = TRUE)
+}, nfi_files_simplified , nfi_tiled_files )
+
+```
+
+```{r Code-for-testing-st_simplify-tolerance}
+
+# Calculate sizes in bytes for the original files
+sizes_before <- sapply(nfi_files, object.size)
+# Calculate sizes in bytes for the simplified files
+sizes_after  <- sapply(nfi_files_simplified, object.size)
+
+# Create a data frame for clear comparison
+comparison <- data.frame(
+  tile_ID = nfi_tile_ids,
+  size_before_bytes = sizes_before,
+  size_after_bytes = sizes_after,
+  reduction_percent = round(100 * (1 - sizes_after / sizes_before), 2)
+)
+
+# Pick a tile index to inspect
+i <- 1  # you can change this index to view other tiles
+
+# Original and simplified objects
+original_geom <- nfi_files[[i]]
+simplified_geom <- nfi_files_simplified[[i]]
+
+# Create plots
+p1 <- ggplot() +
+  geom_sf(data = original_geom, fill = "lightblue", color = "black") +
+  ggtitle("Original Geometry") +
+  theme_minimal()
+
+p2 <- ggplot() +
+  geom_sf(data = simplified_geom, fill = "lightgreen", color = "black") +
+  ggtitle("Simplified Geometry (100m)") +
+  theme_minimal()
+
+# Combine plots side by side
+p1
+p2
+
+#export to shapefiles to compare in ArcGIS
+  st_write(nfi_files[[i]], "C:/Users/ik929086/Documents/iDeer/output/Testing/original_polys_pre_simplify_TEST.shp", delete_layer = TRUE, quiet = TRUE)
+  st_write(nfi_files_simplified[[i]], "C:/Users/ik929086/Documents/iDeer/output/Testing/simplified_polys_TEST.shp",, delete_layer = TRUE, quiet = TRUE)
+
+```
+
+```{r Unmerged-NFI-polys-chunked-to-200km}
 
 GB_polys_unmerged <- readRDS("C:/Users/ik929086/OneDrive - University of Southampton/R_data_transfer/Deer impact EW risk maps/NFI_2023_all_woods_UK_touching_groups.rds")
 GB_polys_unmerged <- st_as_sf(GB_polys_unmerged)
-GB_merged_output_dir <- "C:/Users/ik929086/Documents/iDeer/output/GB_nfi_polys_unmerged_chunked_200km"
+GB_unmerged_output_dir <- "C:/Users/ik929086/Documents/iDeer/output/GB_nfi_polys_unmerged_chunked_200km"
 
-GB_merged_polys_per_tile <- split_wood_polys_by_tile(wood_polys = GB_polys_unmerged,
+GB_unmerged_polys_per_tile <- split_wood_polys_by_tile(wood_polys = GB_polys_unmerged,
                                   tiles = grid,
                                   output_dir = GB_merged_output_dir)
 
-GB_merged_poly_files <- list.files(GB_merged_output_dir,pattern ="\\.rds$", full.names = TRUE)
+# Read in RDS files
+GB_unmerged_poly_files <- list.files(GB_unmerged_output_dir,pattern ="\\.rds$", full.names = TRUE)
+GB_unmerged_polys_tiled <- lapply(GB_unmerged_poly_files, readRDS)
+
+# Extract tile_IDs from each list of RDS files
+GB_unmerged_polys_tile_ids <- sapply(GB_unmerged_polys_tiled, function(x) unique(x$tile_ID))
+
+# Simplify geometries with a tolerance of 5 metres
+GB_unmerged_polys_simplified <- lapply(GB_unmerged_polys_tiled, function(x) {
+  st_simplify(x, dTolerance = 5, preserveTopology = TRUE)
+})
+
+#save simplified tiles
+simplified_GB_unmerged_polys_dir <- "C:/Users/ik929086/Documents/iDeer/output/GB_nfi_polys_unmerged_chunked_200km_simplified_5m"
+
+# Save each simplified RDS using original filenames
+invisible(mapply(function(data, original_file) {
+  file_name <- basename(original_file)
+  saveRDS(data, file.path(simplified_GB_unmerged_polys_dir, file_name))
+}, GB_unmerged_polys_simplified, GB_unmerged_poly_files))
 ```
 
-```{r Focal DAMS extraction at 1000m}
+```{r Chunk-GB-nfi-unmerged-polys-into-5}
+
+EW_chunks <- st_read("C:/Users/ik929086/Documents/iDeer/data/derived-data/EW_subdivided_for_shinyio.shp")
+
+EW_chunks$tile_name <- paste0("tile_",1:nrow(EW_chunks))
+EW_chunks$id <- 1:nrow(EW_chunks)
+EW_chunks <- EW_chunks %>% dplyr::select(-c("Shape_Area","Shape_Leng"))
+
+GB_polys_unmerged <- readRDS("C:/Users/ik929086/OneDrive - University of Southampton/R_data_transfer/Deer impact EW risk maps/NFI_2023_all_woods_UK_touching_groups.rds")
+GB_polys_unmerged <- st_as_sf(GB_polys_unmerged)
+GB_unmerged_output_dir <- "C:/Users/ik929086/Documents/iDeer/output/GB_nfi_polys_unmerged_EW_chunked"
+
+GB_unmerged_polys_per_tile <- split_wood_polys_by_tile(wood_polys = GB_polys_unmerged,
+                                  tiles = EW_chunks,
+                                  output_dir = GB_unmerged_output_dir,
+                                  file_prefix = "GB_polys_unmerged_")
+
+# Read in RDS files
+GB_unmerged_poly_files <- list.files(GB_unmerged_output_dir,pattern ="\\.rds$", full.names = TRUE)
+GB_unmerged_polys_tiled <- lapply(GB_unmerged_poly_files, readRDS)
+
+# Extract tile_IDs from each list of RDS files
+GB_unmerged_polys_tile_ids <- sapply(GB_unmerged_polys_tiled, function(x) unique(x$tile_ID))
+
+# Simplify geometries with a tolerance of 5 metres
+GB_unmerged_polys_simplified <- lapply(GB_unmerged_polys_tiled, function(x) {
+  st_simplify(x, dTolerance = 5, preserveTopology = TRUE)
+})
+
+#save simplified tiles
+simplified_GB_unmerged_polys_dir <- "C:/Users/ik929086/Documents/iDeer/output/GB_nfi_polys_unmerged_chunked_EW_chunked_simplified_5m"
+
+# # Save each simplified RDS using original filenames
+# invisible(mapply(function(data, original_file) {
+#   file_name <- basename(original_file)
+#   saveRDS(data, file.path(simplified_GB_unmerged_polys_dir, file_name))
+# }, GB_unmerged_polys_simplified, GB_unmerged_poly_files))
+
+#save as shapefiles for Andrew
+mapply(function(data, original_file) {
+  # Extract base filename without extension
+  base_name <- tools::file_path_sans_ext(basename(original_file))
+  # Construct full path for shapefile (must end with .shp)
+  shp_path <- file.path(simplified_GB_unmerged_polys_dir, paste0(base_name, ".shp"))
+  # Write shapefile, overwrite if exists
+  st_write(data, shp_path, delete_layer = TRUE, quiet = TRUE)
+}, GB_unmerged_polys_simplified, GB_unmerged_poly_files)
+```
+
+```{r Focal-DAMS-extraction-at-1000m}
 
 Focal1000_DAMS <- terra::rast("~/iDeer/output/GB_datasets_2023/large_deer/focal_DAMS_1000m.tif")
 crs(Focal1000_DAMS) <- "EPSG:27700"
@@ -225,6 +400,41 @@ dams_tiled_files <- list.files(dams_tiles_dir, pattern ="\\.tif$", full.names = 
 
 ```
 
+```{r Chunk-focal1000-dams-into-5}
+
+EW_chunks <- st_read("C:/Users/ik929086/Documents/iDeer/data/derived-data/EW_subdivided_for_shinyio.shp")
+
+EW_chunks$tile_name <- paste0("tile_",1:nrow(EW_chunks))
+EW_chunks$id <- 1:nrow(EW_chunks)
+EW_chunks <- EW_chunks %>% dplyr::select(-c("Shape_Area","Shape_Leng"))
+
+Focal1000_DAMS <- terra::rast("~/iDeer/output/GB_datasets_2023/large_deer/focal_DAMS_1000m.tif")
+crs(Focal1000_DAMS) <- "EPSG:27700"
+dams_tiles_dir <- "C:/Users/ik929086/Documents/iDeer/output/focal1000_dams_EW_chunked"
+
+dams_tiles_chunked <- split_raster_by_tile(raster_data = Focal1000_DAMS,
+                                           tiles = EW_chunks,
+                                           file_prefix = "focal1000_dams_tile_",
+                                           output_dir =  dams_tiles_dir)
+dams_tiled_files <- list.files(dams_tiles_dir, pattern ="\\.tif$", full.names = TRUE)
+
+raster_types <- sapply(dams_tiled_files, function(f) {
+  r <- raster::raster(f)
+  raster::dataType(r)
+})
+
+# Combine filenames and types into a data frame for clarity
+raster_type_df <- data.frame(
+  filename = basename(dams_tiled_files),
+  data_type = raster_types,
+  stringsAsFactors = FALSE
+)
+
+print(raster_type_df)
+
+#Rasters signed format type, all good :)
+```
+
 ```{r nfi_lcm_polys chunked to 200km}
 
 nfi_lcm_polys_2023 <- st_read("C:/Users/ik929086/Documents/iDeer-tool/data/lcm2023_clipped_NFI_EW.gpkg")
@@ -234,10 +444,74 @@ nfi_lcm_polys_chunked <- split_wood_polys_by_tile(wood_polys = nfi_lcm_polys_202
                                   tiles = grid,
                                   output_dir = nfi_lcm_polys_2023_dir)
 
+#Read in RDS files
 nfi_lcm_polys_2023_files <- list.files(nfi_lcm_polys_2023_dir,pattern ="\\.rds$", full.names = TRUE)
+nfi_lcm_polys_2023_tiled <- lapply(nfi_lcm_polys_2023_files, readRDS)
+
+# Extract tile_IDs from each list of RDS files
+nfi_lcm_polys_2023_tile_ids <- sapply(nfi_lcm_polys_2023_tiled, function(x) unique(x$tile_ID))
+
+# Simplify geometries with a tolerance of 5 metres
+nfi_lcm_polys_2023_simplified <- lapply(nfi_lcm_polys_2023_tiled, function(x) {
+  st_simplify(x, dTolerance = 5, preserveTopology = TRUE)
+})
+
+#save simplified tiles
+simplified_nfi_lcm_polys_2023_dir <- "C:/Users/ik929086/Documents/iDeer/output/nfi_lcm_2023_polys_200km_chunked_simplified_5m"
+
+# Save each simplified RDS using original filenames
+invisible(mapply(function(data, original_file) {
+  file_name <- basename(original_file)
+  saveRDS(data, file.path(simplified_nfi_lcm_polys_2023_dir, file_name))
+}, nfi_lcm_polys_2023_simplified, nfi_lcm_polys_2023_files))
 ```
 
-```{r Small deer impact risk gpkg chunked to 200km}
+```{r Chunk-nfi_lcm_polys-into 5}
+EW_chunks <- st_read("C:/Users/ik929086/Documents/iDeer/data/derived-data/EW_subdivided_for_shinyio.shp")
+
+EW_chunks$tile_name <- paste0("tile_",1:nrow(EW_chunks))
+EW_chunks$id <- 1:nrow(EW_chunks)
+EW_chunks <- EW_chunks %>% dplyr::select(-c("Shape_Area","Shape_Leng"))
+
+nfi_lcm_polys_2023 <- st_read("C:/Users/ik929086/Documents/iDeer-tool/data/lcm2023_clipped_NFI_EW.gpkg")
+st_crs(nfi_lcm_polys_2023) <- 27700
+nfi_lcm_polys_2023_dir <- "C:/Users/ik929086/Documents/iDeer/output/nfi_lcm_2023_polys_EW_chunked"
+
+nfi_lcm_polys_chunked <- split_wood_polys_by_tile(wood_polys = nfi_lcm_polys_2023,
+                                  tiles = EW_chunks,
+                                  output_dir = nfi_lcm_polys_2023_dir,
+                                  file_prefix = "nfi_lcm_polys_2023_")
+
+#Read in RDS files
+nfi_lcm_polys_2023_files <- list.files(nfi_lcm_polys_2023_dir,pattern ="\\.rds$", full.names = TRUE)
+nfi_lcm_polys_2023_tiled <- lapply(nfi_lcm_polys_2023_files, readRDS)
+
+# Extract tile_IDs from each list of RDS files
+nfi_lcm_polys_2023_tile_ids <- sapply(nfi_lcm_polys_2023_tiled, function(x) unique(x$tile_ID))
+
+# Simplify geometries with a tolerance of 5 metres
+nfi_lcm_polys_2023_simplified <- lapply(nfi_lcm_polys_2023_tiled, function(x) {
+  st_simplify(x, dTolerance = 5, preserveTopology = TRUE)
+})
+
+#save simplified tiles
+simplified_nfi_lcm_polys_2023_dir <- "C:/Users/ik929086/Documents/iDeer/output/nfi_lcm_2023_polys_EW_chunked_simplified_5m"
+
+
+invisible(mapply(function(data, original_file) {
+  base_name <- tools::file_path_sans_ext(basename(original_file))
+  shp_path <- file.path(simplified_nfi_lcm_polys_2023_dir, paste0(base_name, ".shp"))
+  
+  # Drop Shape_Area if present
+  if ("Shape_Area" %in% names(data)) {
+    data <- dplyr::select(data, -Shape_Area)
+  }
+  
+  st_write(data, shp_path, delete_layer = TRUE, quiet = TRUE)
+}, nfi_lcm_polys_2023_simplified, nfi_lcm_polys_2023_files))
+```
+
+```{r Small-deer-impact-risk-gpkg-chunked-to-200km}
 
 small.deer.risk <- st_read("C:/Users/ik929086/Documents/iDeer-tool/data/NFI_2023_small_deer_impact_risk_EW_extraction_V3.gpkg")
 small.deer.risk  <- st_as_sf(small.deer.risk)
@@ -247,7 +521,70 @@ small_deer_risk_per_tile <- split_wood_polys_by_tile(wood_polys = small.deer.ris
                                   tiles = grid,
                                   output_dir = small_deer_risk_output_dir)
 
+#Read in RDS files
 small_deer_risk_files <- list.files(small_deer_risk_output_dir,pattern ="\\.rds$", full.names = TRUE)
+small_deer_risk_tiled <- lapply(small_deer_risk_files, readRDS)
+
+# Extract tile_IDs from each list of RDS files
+small_deer_risk_tile_ids <- sapply(small_deer_risk_tiled, function(x) unique(x$tile_ID))
+
+# Simplify geometries with a tolerance of 5 metres
+small_deer_risk_simplified <- lapply(small_deer_risk_tiled, function(x) {
+  st_simplify(x, dTolerance = 5, preserveTopology = TRUE)
+})
+
+#save simplified tiles
+simplified_small_deer_risk_dir <- "C:/Users/ik929086/Documents/iDeer/output/small_deer_risk_200km_chunked_simplified_5m"
+
+# Save each simplified RDS using original filenames
+invisible(mapply(function(data, original_file) {
+  file_name <- basename(original_file)
+  saveRDS(data, file.path(simplified_small_deer_risk_dir, file_name))
+}, small_deer_risk_simplified, small_deer_risk_files))
+```
+
+```{r Chunk-small-deer-risk-dataset-into-5}
+
+EW_chunks <- st_read("C:/Users/ik929086/Documents/iDeer/data/derived-data/EW_subdivided_for_shinyio.shp")
+
+EW_chunks$tile_name <- paste0("tile_",1:nrow(EW_chunks))
+EW_chunks$id <- 1:nrow(EW_chunks)
+EW_chunks <- EW_chunks %>% dplyr::select(-c("Shape_Area","Shape_Leng"))
+
+small.deer.risk <- st_read("C:/Users/ik929086/Documents/iDeer-tool/data/NFI_2023_small_deer_impact_risk_EW_extraction_V3.gpkg")
+small.deer.risk  <- st_as_sf(small.deer.risk)
+
+small_deer_risk_output_dir <- "C:/Users/ik929086/Documents/iDeer/output/small_deer_risk_EW_chunks"
+
+small_deer_risk_chunked_EW <- split_wood_polys_by_tile(wood_polys = small.deer.risk,
+                                  tiles = EW_chunks,
+                                  output_dir = small_deer_risk_output_dir,
+                                  file_prefix = "small_deer_risk_")
+
+#Read in RDS files
+small_deer_risk_files <- list.files(small_deer_risk_output_dir,pattern ="\\.rds$", full.names = TRUE)
+small_deer_risk_tiled <- lapply(small_deer_risk_files, readRDS)
+
+# Extract tile_IDs from each list of RDS files
+small_deer_risk_tile_ids <- sapply(small_deer_risk_tiled, function(x) unique(x$tile_ID))
+
+# Simplify geometries with a tolerance of 5 metres
+small_deer_risk_simplified <- lapply(small_deer_risk_tiled, function(x) {
+  st_simplify(x, dTolerance = 5, preserveTopology = TRUE)
+})
+
+#save simplified tiles
+simplified_small_deer_risk_dir <- "C:/Users/ik929086/Documents/iDeer/output/small_deer_risk_EW_chunks_simplified_5m"
+
+#save as shapefiles for Andrew
+mapply(function(data, original_file) {
+  # Extract base filename without extension
+  base_name <- tools::file_path_sans_ext(basename(original_file))
+  # Construct full path for shapefile (must end with .shp)
+  shp_path <- file.path(simplified_small_deer_risk_dir, paste0(base_name, ".shp"))
+  # Write shapefile, overwrite if exists
+  st_write(data, shp_path, delete_layer = TRUE, quiet = FALSE)
+}, small_deer_risk_simplified, small_deer_risk_files)
 ```
 
 ```{r large deer impact risk gpkg chunked to 200km}
@@ -260,7 +597,71 @@ large_deer_risk_per_tile <- split_wood_polys_by_tile(wood_polys = large.deer.ris
                                   tiles = grid,
                                   output_dir = large_deer_risk_output_dir)
 
+#Read in RDS files
 large_deer_risk_files <- list.files(large_deer_risk_output_dir,pattern ="\\.rds$", full.names = TRUE)
+large_deer_risk_tiled <- lapply(large_deer_risk_files, readRDS)
+
+# Extract tile_IDs from each list of RDS files
+large_deer_risk_tile_ids <- sapply(large_deer_risk_tiled, function(x) unique(x$tile_ID))
+
+# Simplify geometries with a tolerance of 5 metres
+large_deer_risk_simplified <- lapply(large_deer_risk_tiled, function(x) {
+  st_simplify(x, dTolerance = 5, preserveTopology = TRUE)
+})
+
+#save simplified tiles
+simplified_large_deer_risk_dir <- "C:/Users/ik929086/Documents/iDeer/output/large_deer_risk_200km_chunked_simplified_5m"
+
+# Save each simplified RDS using original filenames
+invisible(mapply(function(data, original_file) {
+  file_name <- basename(original_file)
+  saveRDS(data, file.path(simplified_large_deer_risk_dir, file_name))
+}, large_deer_risk_simplified, large_deer_risk_files))
+
+```
+
+```{r Chunk-large-deer-risk-dataset-into-5}
+#
+EW_chunks <- st_read("C:/Users/ik929086/Documents/iDeer/data/derived-data/EW_subdivided_for_shinyio.shp")
+
+EW_chunks$tile_name <- paste0("tile_",1:nrow(EW_chunks))
+EW_chunks$id <- 1:nrow(EW_chunks)
+EW_chunks <- EW_chunks %>% dplyr::select(-c("Shape_Area","Shape_Leng"))
+
+large.deer.risk <- st_read("C:/Users/ik929086/Documents/iDeer-tool/data/NFI_LCM_2023_large_deer_impact_risk_EW_extraction_V3.gpkg")
+large.deer.risk  <- st_as_sf(large.deer.risk)
+
+large_deer_risk_output_dir <- "C:/Users/ik929086/Documents/iDeer/output/large_deer_risk_EW_chunks"
+
+large_deer_risk_chunked_EW <- split_wood_polys_by_tile(wood_polys = large.deer.risk,
+                                  tiles = EW_chunks,
+                                  output_dir = large_deer_risk_output_dir,
+                                  file_prefix = "large_deer_risk_")
+
+#Read in RDS files
+large_deer_risk_files <- list.files(large_deer_risk_output_dir,pattern ="\\.rds$", full.names = TRUE)
+large_deer_risk_tiled <- lapply(large_deer_risk_files, readRDS)
+
+# Extract tile_IDs from each list of RDS files
+large_deer_risk_tile_ids <- sapply(large_deer_risk_tiled, function(x) unique(x$tile_ID))
+
+# Simplify geometries with a tolerance of 5 metres
+large_deer_risk_simplified <- lapply(large_deer_risk_tiled, function(x) {
+  st_simplify(x, dTolerance = 5, preserveTopology = TRUE)
+})
+
+#save simplified tiles
+simplified_large_deer_risk_dir <- "C:/Users/ik929086/Documents/iDeer/output/large_deer_risk_EW_chunks_simplified_5m"
+
+#save as shapefile for Andrew
+mapply(function(data, original_file) {
+  # Extract base filename without extension
+  base_name <- tools::file_path_sans_ext(basename(original_file))
+  # Construct full path for shapefile (must end with .shp)
+  shp_path <- file.path(simplified_large_deer_risk_dir, paste0(base_name, ".shp"))
+  # Write shapefile, overwrite if exists
+  st_write(data, shp_path, delete_layer = TRUE, quiet = TRUE)
+}, large_deer_risk_simplified, large_deer_risk_files)
 ```
 
 ```{r}
