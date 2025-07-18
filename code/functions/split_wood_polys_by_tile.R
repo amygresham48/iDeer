@@ -2,7 +2,7 @@ library(sf)
 library(dplyr)
 library(progress)
 
-split_wood_polys_by_tile <- function(tiles, wood_polys, output_dir, file_prefix = "wood_tile_") {
+split_wood_polys_by_tile <- function(tiles, wood_polys, output_dir, file_prefix) {
   dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
   
   wood_polys$patch_ID <- 1:nrow(wood_polys)
