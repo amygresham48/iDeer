@@ -260,6 +260,11 @@ mapply(function(data, original_file) {
   st_write(data, shp_path, delete_layer = TRUE, quiet = TRUE)
 }, nfi_files_simplified , nfi_tiled_files )
 
+# List all shapefiles in the output directory
+nfi_shp_files <- list.files(simplified_nfi_dir, pattern = "\\.shp$", full.names = TRUE)
+nfi_shp_data <- lapply(nfi_shp_files, st_read, quiet = TRUE)
+
+
 ```
 
 ```{r Code-for-testing-st_simplify-tolerance}
@@ -384,6 +389,11 @@ mapply(function(data, original_file) {
   # Write shapefile, overwrite if exists
   st_write(data, shp_path, delete_layer = TRUE, quiet = TRUE)
 }, GB_unmerged_polys_simplified, GB_unmerged_poly_files)
+
+# Read all .shp files from the directory
+gb_shp_files <- list.files(simplified_GB_unmerged_polys_dir, pattern = "\\.shp$", full.names = TRUE)
+gb_shp_data <- lapply(gb_shp_files, st_read, quiet = TRUE)
+
 ```
 
 ```{r Focal-DAMS-extraction-at-1000m}
@@ -509,6 +519,36 @@ invisible(mapply(function(data, original_file) {
   
   st_write(data, shp_path, delete_layer = TRUE, quiet = TRUE)
 }, nfi_lcm_polys_2023_simplified, nfi_lcm_polys_2023_files))
+
+#Read in shapefiles
+my_shp_files <- list.files(simplified_nfi_lcm_polys_2023_dir, pattern = "\\.shp$", full.names = TRUE)
+
+my_shp_data <- lapply(my_shp_files, st_read)
+
+#Calculate Area columns properly!! Then remove polygons < 0.01 ha
+#At the moment there are millions of anomalous polygons that are really tiny
+#This will massivly reduce the size of the dataset
+
+# Process each shapefile: calculate area in hectares and filter polygons
+my_shp_data_filtered <- lapply(my_shp_data, function(x) {
+  # Ensure CRS is projected (not geographic) for accurate area calc
+  if (st_is_longlat(x)) {
+    stop("Input data is in geographic coordinates. Please reproject to a projected CRS before calculating area.")
+  }
+
+  x <- x %>%
+    mutate(Area_Ha = as.numeric(st_area(.)) / 10000) %>%  # convert m² to ha
+    filter(Area_Ha >= 0.01)
+})
+
+# Create new filenames with "_filtered.shp" suffix
+filtered_shp_files <- sub("\\.shp$", "_filtered.shp", my_shp_files)
+
+# Write filtered shapefiles
+invisible(mapply(function(data, path) {
+  st_write(data, path, delete_layer = TRUE, quiet = TRUE)
+}, my_shp_data_filtered, filtered_shp_files))
+
 ```
 
 ```{r Small-deer-impact-risk-gpkg-chunked-to-200km}
@@ -585,6 +625,27 @@ mapply(function(data, original_file) {
   # Write shapefile, overwrite if exists
   st_write(data, shp_path, delete_layer = TRUE, quiet = FALSE)
 }, small_deer_risk_simplified, small_deer_risk_files)
+
+# Read in the simplified shapefiles
+small_shp_files <- list.files(simplified_small_deer_risk_dir, pattern = "\\.shp$", full.names = TRUE)
+small_shp_data <- lapply(small_shp_files, st_read, quiet = TRUE)
+
+# Process: calculate area in hectares and filter polygons < 0.01 ha
+small_shp_filtered <- lapply(small_shp_data, function(x) {
+  if (st_is_longlat(x)) {
+    stop("One or more files are in geographic coordinates. Please reproject before calculating area.")
+  }
+  x %>%
+    mutate(Area_Ha = as.numeric(st_area(.)) / 10000) %>%
+    filter(Area_Ha >= 0.01)
+})
+
+# Save filtered versions with "_filtered.shp" suffix
+small_shp_filtered_files <- sub("\\.shp$", "_filtered.shp", small_shp_files)
+
+invisible(mapply(function(data, path) {
+  st_write(data, path, delete_layer = TRUE, quiet = TRUE)
+}, small_shp_filtered, small_shp_filtered_files))
 ```
 
 ```{r large deer impact risk gpkg chunked to 200km}
@@ -617,6 +678,7 @@ invisible(mapply(function(data, original_file) {
   file_name <- basename(original_file)
   saveRDS(data, file.path(simplified_large_deer_risk_dir, file_name))
 }, large_deer_risk_simplified, large_deer_risk_files))
+
 
 ```
 
@@ -662,6 +724,29 @@ mapply(function(data, original_file) {
   # Write shapefile, overwrite if exists
   st_write(data, shp_path, delete_layer = TRUE, quiet = TRUE)
 }, large_deer_risk_simplified, large_deer_risk_files)
+
+# Read in the simplified shapefiles
+large_shp_files <- list.files(simplified_large_deer_risk_dir, pattern = "\\.shp$", full.names = TRUE)
+large_shp_data <- lapply(large_shp_files, st_read, quiet = TRUE)
+
+# Process: calculate area in hectares and filter polygons < 0.01 ha
+large_shp_filtered <- lapply(large_shp_data, function(x) {
+  if (st_is_longlat(x)) {
+    stop("One or more files are in geographic coordinates. Please reproject before calculating area.")
+  }
+  x %>%
+    mutate(Area_Ha = as.numeric(st_area(.)) / 10000) %>%
+    filter(Area_Ha >= 0.01)
+})
+
+# Save filtered versions with "_filtered.shp" suffix
+large_shp_filtered_files <- sub("\\.shp$", "_filtered.shp", large_shp_files)
+
+invisible(mapply(function(data, path) {
+  st_write(data, path, delete_layer = TRUE, quiet = TRUE)
+}, large_shp_filtered, large_shp_filtered_files))
+
+#Why are there still less polygons in this dataset than in the small deer dataset??
 ```
 
 ```{r}
