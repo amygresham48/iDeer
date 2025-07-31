@@ -446,13 +446,13 @@ write.csv(result,"E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW 
 ```{r Read-in-all-conditional-probability-tables}
 
 #Attraction index
-large_attraction_cpt_df <- read.csv("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/large deer/Large_Deer_Attraction_Index_CPT.csv")
+large_attraction_cpt_df <- read.csv("C:/Users/aalg1m25/OneDrive - University of Southampton/iDeer_Manuscripts/iDeer_Tool/Supplementary Info/CPTs/Large_Deer_Attraction_Index_CPT.csv")
 #Thermoregulation Index
-large_thermoreg_cpt_df <- read.csv("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/large deer/Large_Deer_Thermoreg_Index_CPT_post_interviews.csv")
+large_thermoreg_cpt_df <- read.csv("C:/Users/aalg1m25/OneDrive - University of Southampton/iDeer_Manuscripts/iDeer_Tool/Supplementary Info/CPTs/Large_Deer_Thermoreg_Index_CPT_post_interviews.csv")
 #woodland food value index
-large_wood_food_value_cpt_df <- read.csv("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/large deer/Largedeer_Woodland_food_value_Index_two_levels.csv")
+large_wood_food_value_cpt_df <- read.csv("C:/Users/aalg1m25/OneDrive - University of Southampton/iDeer_Manuscripts/iDeer_Tool/Supplementary Info/CPTs/Largedeer_Woodland_food_value_Index_two_levels.csv")
 #Large deer impact risk
-large_risk_cpt_df <- read.csv("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/large deer/Large_Deer_Damage_Risk_CPT_post_interviews.csv")
+large_risk_cpt_df <- read.csv("C:/Users/aalg1m25/OneDrive - University of Southampton/iDeer_Manuscripts/iDeer_Tool/Supplementary Info/CPTs/Large_Deer_Damage_Risk_CPT_post_interviews.csv")
 
 ```
 
