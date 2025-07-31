@@ -242,13 +242,6 @@ assign_probabilities <- function(row, importance) {
     Woodland_Food_Value_Index_Index = as.numeric(factor(row["Woodland_Food_Value_Index"], levels = c("Low", "Medium", "High")))
   )
   
-  # # Conditionally reduce the importance of Attraction_Index if Thermoregulation_Index is High.
-  # # This implements the rule that high thermoregulation reduces the influence of attraction.
-  # if (row["Woodland_Food_Value_Index"] == "High") {
-  #   importance["Attraction_Index"] <- importance["Attraction_Index"] * 0.5
-  #   # Re-normalize importance weights so they sum to 1 after adjustment.
-  #   importance <- importance / sum(importance)
-  # }
   
   # Calculate the total weighted score for the row. This combines the numerical scores
   # with their respective importance weights.
@@ -298,16 +291,16 @@ write.csv(result,"E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW 
 ```{r Read-in-all-conditional-probability-tables}
 
 #Connectivity
-small_connectivity_cpt_df <- read.csv("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/small deer/Small_Deer_Connectivity_Index_CPT_post_interviews.csv")
+small_connectivity_cpt_df <- read.csv("C:/Users/aalg1m25/OneDrive - University of Southampton/iDeer_Manuscripts/iDeer_Tool/Supplementary Info/CPTs/Small_Deer_Connectivity_Index_CPT_post_interviews.csv")
 
 #Attraction index
-small_attraction_cpt_df <- read.csv("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/small deer/Smalldeer_Attraction_Index_Woodland_edge_cover_400m_Amy.csv")
+small_attraction_cpt_df <- read.csv("C:/Users/aalg1m25/OneDrive - University of Southampton/iDeer_Manuscripts/iDeer_Tool/Supplementary Info/CPTs/Smalldeer_Attraction_Index_Woodland_edge_cover_400m_Amy.csv")
 
 #small deer damage risk
-small_risk_cpt_df_full <- read.csv("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/small deer/Small_Deer_Damage_Risk_CPT_post_interviews.csv")
+small_risk_cpt_df_full <- read.csv("C:/Users/aalg1m25/OneDrive - University of Southampton/iDeer_Manuscripts/iDeer_Tool/Supplementary Info/CPTs/Small_Deer_Damage_Risk_CPT_post_interviews.csv")
 
 #woodland food value index
-small_wood_food_value_cpt_df <- read.csv("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/small deer/Smalldeer_Woodland_food_value_Index.csv")
+small_wood_food_value_cpt_df <- read.csv("C:/Users/aalg1m25/OneDrive - University of Southampton/iDeer_Manuscripts/iDeer_Tool/Supplementary Info/CPTs/Smalldeer_Woodland_food_value_Index.csv")
 ```
 
 ```{r Determine-woodland-categories-NFI}
