@@ -133,10 +133,10 @@ ggplot() +
 #The 10km chunks are too small for Andrew to upload to the geoserver
 
 #CEH land cover map 2023
-lcm <- raster("~/iDeer/data/raw-data/lcm-2023/gblcm2023_25m.tif")
+lcm <- raster("C:/Users/aalg1m25/OneDrive - University of Southampton/Documents/GitHub/iDeer/data/gblcm2023_25m.tif")
 
 #focal1000 dams raster
-dams <- raster("C:/Users/ik929086/OneDrive - University of Southampton/R_data_transfer/Amy-iDeer-tool/data/data/focal_DAMS_1000m.tif")
+dams <- raster("C:/Users/ik929086/OneDrive - University of Southampton/R_data_transfer/Amy-iDeer-tool/data/focal_DAMS_1000m.tif")
 
 res <- 200000 # change this to something which splits the country into the desired 4-5 sections.
 e <- ext(lcm) #lcm = template raster
@@ -173,7 +173,7 @@ grid <- st_as_sf(grid)
 st_crs(grid) <- 27700 #ignore warning, crs is correct
 
 # Save as ESRI Shapefile (creates .shp + associated files)
-st_write(grid, "C:/Users/ik929086/Documents/iDeer/output/custom_grid_200km.shp", overwrite = TRUE)
+st_write(grid, "C:/Users/aalg1m25/OneDrive - University of Southampton/Documents/GitHub/iDeer/output/custom_grid_200km.shp", overwrite = TRUE)
 
 # Plot geometries
 plot(grid$geometry, main = "Custom 200km Grid", col = "lightblue", border = "grey40")
@@ -344,11 +344,14 @@ invisible(mapply(function(data, original_file) {
 
 ```{r Chunk-GB-nfi-unmerged-polys-into-5}
 
-EW_chunks <- st_read("C:/Users/ik929086/Documents/iDeer/data/derived-data/EW_subdivided_for_shinyio.shp")
+EW_chunks <- st_read("C:/Users/aalg1m25/OneDrive - University of Southampton/iDeer_Manuscripts/iDeer_Tool/Supplementary Info/ideer_shinyio/EW_subdivided_for_shinyio.shp")
 
 EW_chunks$tile_name <- paste0("tile_",1:nrow(EW_chunks))
 EW_chunks$id <- 1:nrow(EW_chunks)
 EW_chunks <- EW_chunks %>% dplyr::select(-c("Shape_Area","Shape_Leng"))
+
+plot(EW_chunks$geometry)
+plot(lcm, add=TRUE)
 
 GB_polys_unmerged <- readRDS("C:/Users/ik929086/OneDrive - University of Southampton/R_data_transfer/Deer impact EW risk maps/NFI_2023_all_woods_UK_touching_groups.rds")
 GB_polys_unmerged <- st_as_sf(GB_polys_unmerged)
@@ -646,6 +649,14 @@ small_shp_filtered_files <- sub("\\.shp$", "_filtered.shp", small_shp_files)
 invisible(mapply(function(data, path) {
   st_write(data, path, delete_layer = TRUE, quiet = TRUE)
 }, small_shp_filtered, small_shp_filtered_files))
+
+#Read in and check chunk 1 - not loading into app properly. Throwing error that user is clicking on the sea
+
+small_risk_chunk_1 <- st_read("C:/Users/aalg1m25/OneDrive - University of Southampton/iDeer-data-FR-geoserver/small_deer_risk_EW_chunks_simplified_5m_filtered/small_deer_risk_tile_1_filtered.shp")
+
+#compare with a working chunk
+
+small_risk_chunk_2 <- st_read("C:/Users/aalg1m25/OneDrive - University of Southampton/iDeer-data-FR-geoserver/small_deer_risk_EW_chunks_simplified_5m_filtered/small_deer_risk_tile_2_filtered.shp")
 ```
 
 ```{r large deer impact risk gpkg chunked to 200km}
@@ -746,7 +757,14 @@ invisible(mapply(function(data, path) {
   st_write(data, path, delete_layer = TRUE, quiet = TRUE)
 }, large_shp_filtered, large_shp_filtered_files))
 
-#Why are there still less polygons in this dataset than in the small deer dataset??
+#Read in and check chunk 1 - not loading into app properly. Throwing error that user is clicking on the sea
+
+large_risk_chunk_1 <- st_read("C:/Users/aalg1m25/OneDrive - University of Southampton/iDeer-data-FR-geoserver/large_deer_risk_EW_chunks_simplified_5m_filtered/large_deer_risk_tile_1_filtered.shp")
+
+#compare with a working chunk
+
+large_risk_chunk_2 <- st_read("C:/Users/aalg1m25/OneDrive - University of Southampton/iDeer-data-FR-geoserver/large_deer_risk_EW_chunks_simplified_5m_filtered/large_deer_risk_tile_2_filtered.shp")
+
 ```
 
 ```{r}
