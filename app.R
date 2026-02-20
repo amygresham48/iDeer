@@ -1479,26 +1479,26 @@ server <- function(input, output, session) {
     # Small Deer Logic
     if (show_small_risk) {
       updated_small_risk_pal <- colorNumeric(palette = rev(viridisLite::plasma(5)), domain = c(1,5))
-      s_img <- get_viridis_base64("plasma")
+      s_img_updated <- get_viridis_base64("plasma")
       
       map2 <- map2 %>%
         addPolygons(data = updated_small_risk_buf$dat %>% st_transform(4326),
                     fillColor = ~updated_small_risk_pal(6 - mean_risk),
                     color = "transparent", fillOpacity = 1, group = "Updated impact risk from small deer") %>%
-        addControl(html = create_deer_legend(s_img, "Predicted impact risk from small deer after woodland planting"), 
+        addControl(html = create_deer_legend(s_img_updated, "Predicted impact risk from small deer after woodland planting"), 
                    position = "bottomright", layerId = "future_legend_small")
     }
     
     # Large Deer Logic
     if (show_large_risk) {
       updated_large_risk_pal <- colorNumeric(palette = rev(viridisLite::viridis(5)), domain = c(1,5))
-      l_img <- get_viridis_base64("viridis")
+      l_img_updated <- get_viridis_base64("viridis")
       
       map2 <- map2 %>%
         addPolygons(data = updated_large_risk_buf$dat %>% st_transform(4326),
                     fillColor = ~updated_large_risk_pal(6 - mean_risk),
                     color = "transparent", fillOpacity = 1, group = "Updated impact risk from large deer") %>%
-        addControl(html = create_deer_legend(l_img, "Predicted impact risk from large deer after woodland planting"), 
+        addControl(html = create_deer_legend(l_img_updated, "Predicted impact risk from large deer after woodland planting"), 
                    position = "bottomright", layerId = "future_legend_large")
     }
     
@@ -1523,8 +1523,8 @@ server <- function(input, output, session) {
     
     # Handle Small Deer (Use the _future IDs we created in the UI)
     if ("Updated impact risk from small deer" %in% groups) {
-      s_img <- get_viridis_base64("plasma")
-      proxy %>% addControl(html = create_deer_legend(s_img, "Predicted impact risk from small deer after woodland planting"), 
+      s_img_updated <- get_viridis_base64("plasma")
+      proxy %>% addControl(html = create_deer_legend(s_img_updated, "Predicted impact risk from small deer after woodland planting"), 
                            position = "bottomright", layerId = "future_legend_small")
       shinyjs::show("arrow_small_container_future")
     } else {
@@ -1534,8 +1534,8 @@ server <- function(input, output, session) {
     
     # Handle Large Deer
     if ("Updated impact risk from large deer" %in% groups) {
-      l_img <- get_viridis_base64("viridis")
-      proxy %>% addControl(html = create_deer_legend(l_img, "Future Risk (Large)"), 
+      l_img_updated <- get_viridis_base64("viridis")
+      proxy %>% addControl(html = create_deer_legend(l_img_updated, "Future Risk (Large)"), 
                            position = "bottomright", layerId = "future_legend_large")
       shinyjs::show("arrow_large_container_future")
     } else {
@@ -1936,11 +1936,16 @@ You can select your area of interest by clicking anywhere on the map within Engl
                                     p("Current deer impact risk", style = "font-size: 20px; font-style: italic; color: #2c3e50;"),
                                     
                                     
-                                    p("The maps in this tab will depend on the deer species identified in the landscape. If the deer species list contained any of the small deer species (roe deer, Chinese water deer or Reeve's muntjac), 
-                                    you will see a impact risk map for the small deer. If the deer species list contained any of the large deer species (red deer, sika deer or fallow deer), you will see 
-                                    an impact risk map for the large deer. You can toggle between the two maps using the tick-box menu on the right (7).
-The risk score for both maps can range from 1 (low impact risk) to 5 (high impact risk). There is a separate colour scale for each map. You can download the map(s) as a Shapefile ending in .shp 
-(which can be used in GIS mapping software) or a Portable Network Graphic (.png) image by clicking the buttons above the maps (8). The files may take a few seconds to save and should appear in your computer downloads folder in zip files. 
+                                    p("The maps displayed in this tab will depend on the deer species in the landscape in the previous tab. If the 
+                                    deer species list contained any of the small deer species (roe deer, Chinese water deer or Reeve's muntjac), 
+                                    you will see a Deer Impact Risk map for the small deer. If the deer species list contained any of the large deer 
+                                    species (red deer, sika deer or fallow deer), you will see a Deer Impact Risk map for the large deer. 
+                                    If both maps are displayed, you can switch between them by selecting the relevant map using the tick-box menu on 
+                                    the top right corner (7).
+The Deer Impact Risk score in each map can range from 1 (low Deer Impact Risk) to 5 (high Deer Impact Risk). There is a separate colour scale for the map displaying the Deer Impact Risk posed by small deer and the map displaying the Deer Impact Risk posed by large deer. 
+You can download the map(s) as a Shapefile ending in .shp (which can be used in GIS mapping software) or a screenshot as a Portable Network Graphic (.png) image (which can be pasted directly into word processing software or email or be printed out) by clicking the buttons above
+the maps (8). The Shapefiles may take a few seconds to save and should appear in your
+computer downloads folder in a zipped folder.
 If you download the map(s) as a Shapefile, the column “mean_risk” is the impact risk score for each woodland, “wood_ID” is the ID number for each woodland, and “Area_Ha” is the area of each woodland in hectares. 
 If there are no woodlands present in your landscape, a message will appear informing you of this. Don't worry, you can still test different woodland planting scenarios in the next tab!
 ", style = "font-size: 16px;"),
@@ -1960,7 +1965,7 @@ When you have finished drawing and confirmed the woodland planting, click 'Run d
 ", style = "font-size: 16px;"),
                                     div(
                                       style = "display: flex; justify-content: center; gap: 20px; margin-bottom: 10px;",
-                                      img(src = "planted_woods_tool_panel_clicks.png", style = "width: 70%;"),
+                                      #img(src = "planted_woods_tool_panel_clicks.png", style = "width: 70%;"),
                                       img(src = "new_woods_planted_clicks.png", style = "width: 70%;")
                                       
                                     ),
@@ -1975,7 +1980,7 @@ As before, you can download the maps as a Shapefile ending in .shp (which can be
                                     div(
                                       style = "display: flex; justify-content: center; gap: 20px; margin-bottom: 10px;",
                                       
-                                      img(src = "updated_impact_risk_maps_clicks.png", style = "width: 80%;")
+                                      img(src = "updated_impact_risk_maps_clicks.png", style = "width: 45%;")
                                     ),
                                     
                                     column(2)  # Right margin (correctly placed outside central column)
