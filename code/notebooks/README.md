@@ -1,1 +1,0 @@
-#Relative_forage_quality.Rmd = creating Nutritional Landscape Index. Approach 1 treats all edges the same, approach 2 scores edges according to their type. The script uses land cover quality scores for the expert survey.
