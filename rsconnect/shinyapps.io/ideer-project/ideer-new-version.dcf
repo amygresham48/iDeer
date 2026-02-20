@@ -1,0 +1,10 @@
+name: ideer-new-version
+title:
+username: ideer-project
+account: ideer-project
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 16723323
+bundleId:
+url: https://ideer-project.shinyapps.io/ideer-new-version/
+version: 1
