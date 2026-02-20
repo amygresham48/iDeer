@@ -1,0 +1,10 @@
+name: ideer_shinyio
+title:
+username: amygresham48
+account: amygresham48
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 15062551
+bundleId:
+url: https://amygresham48.shinyapps.io/ideer_shinyio/
+version: 1

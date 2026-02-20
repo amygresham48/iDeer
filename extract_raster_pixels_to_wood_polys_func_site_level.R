@@ -1,0 +1,31 @@
+extract_raster_to_wood_polygons <- function(risk_map, site_woods_unmerged) {
+  
+    #Matt's code:
+    #will tell me how many of each pixel is in each polygon
+    risk_map_poly_vals <- raster::extract(risk_map, site_woods_unmerged, df = TRUE)
+    
+    #get row number and patch_ID from
+    wood_site_IDs <- data.frame(ID = rep(seq_len(nrow(site_woods_unmerged))),
+                                OBJECTID = site_woods_unmerged$OBJECTID)
+    # Get name of map
+    raster_name <- deparse(substitute(risk_map))
+    
+    # Create a data frame with the extracted values and patch_IDs
+    vals <- data.frame(
+      ID = risk_map_poly_vals$ID,
+      raster_values = risk_map_poly_vals$layer  # Extracted raster values
+    )
+    
+    #left_join the patch_IDs to this df
+    
+    vals <- left_join(vals, wood_site_IDs, by = c("ID"))
+    vals <- vals %>% dplyr::select(-c("ID"))
+    
+    # Filter out NA values
+    vals <- vals[!is.na(vals$raster_values), ]
+    
+    # Rename raster_values column to the map name
+    names(vals)[names(vals) == "raster_values"] <- raster_name
+  
+  return(vals)
+}
