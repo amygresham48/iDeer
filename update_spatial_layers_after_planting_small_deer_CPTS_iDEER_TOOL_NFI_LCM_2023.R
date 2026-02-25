@@ -817,7 +817,7 @@ r_rast[r_rast== 0] <- NA
 #mean_risk <- raster::extract(r_rast, nfi_lcm_unmerged_polys, fun=mean, na.rm=TRUE,df=TRUE)
 
 #NEED TO USE SAME EXTRACTION METHOD AS ORIGINAL CURRENT RISK MAP
-#OTHER EXTRACTED VALUES FOR EXISTING POLYGONS DO NOT MATCH
+#OTHERWISE EXTRACTED VALUES FOR EXISTING POLYGONS DO NOT MATCH
 #SEE FUNCTION extract_raster_pixels_to_wood_polygons_func_10km_chunks_mean_poly_values_NFI_LCM_merged_pre_chunked_exact.R
 #Ensure patch_IDs line up
 nfi_lcm_unmerged_polys$patch_ID <- 1:nrow(nfi_lcm_unmerged_polys)
