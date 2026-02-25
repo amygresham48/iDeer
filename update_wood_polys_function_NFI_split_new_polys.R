@@ -284,7 +284,11 @@ update_wood_polys_nfi <-function(wood_polys, #new woodland polygon(s)
   
     #rename(geometry = geom)
   
-  # Bind the new polygon with the modified existing polygons
+  #Add a column showing if polygon is a new woodland
+  nfi_lcm_woods_no_overlap$new_woodland <- "No"
+  wood_polys_unmerged$new_woodland <- "Yes"
+  
+  # Bind the new polygon(s) with the modified existing polygons
   nfi_lcm_unmerged_polys <- rbind(nfi_lcm_woods_no_overlap, wood_polys_unmerged)
   
   nfi_lcm_unmerged_polys$patch_ID <- 1:nrow(nfi_lcm_unmerged_polys)
@@ -300,7 +304,6 @@ update_wood_polys_nfi <-function(wood_polys, #new woodland polygon(s)
   
 return(list(buffered_woods_3km = buffered_woods_3km,
             lcm_updated = lcm_updated, 
-            #site_woods_merged = site_woods_merged,
             woods_binary=woods_binary,
             site_woods_unmerged = site_woods_unmerged,
             nfi_lcm_unmerged_polys = nfi_lcm_unmerged_polys))
