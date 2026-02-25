@@ -564,7 +564,13 @@ server <- function(input, output, session) {
     has_large_risk <- nrow(large_risk_buf$dat) > 0
     
     # Base map setup
-    map <- leaflet(height='200%', width='200%') %>%
+    map <- leaflet(height='200%', 
+                   width='200%',
+                   options = leafletOptions(
+                     zoomSnap = 0.25,  # Allows the map to stop at quarter-steps (e.g., 10, 10.25, 10.5)
+                     zoomDelta = 0.10   # Clicking '+' or '-' will move the zoom by 0.5 levels instead of 1
+                   )
+    ) %>%
       addProviderTiles("CartoDB.Positron", group = "Grey street map") %>%
       addTiles(group = "Colour street map") %>%
       addProviderTiles("Esri.WorldImagery", group = "Satellite view") %>%
@@ -1406,7 +1412,6 @@ server <- function(input, output, session) {
       #LARGE DEER MAP UPDATE ------------#
       
       updated_large_risk_buf$dat <- large_deer_risk_update(
-        wood_polys = woodpoly$dat,      # New woodland polygon(s)
         sitebuf = sitebuf$dat,          # User's landscape extent
         lcm = lcm,                      # CEH GB land cover map 2023
         dams = Focal1000_DAMS,                    # GB dams map
@@ -1468,7 +1473,13 @@ server <- function(input, output, session) {
     show_small_risk <- has_small_data && any(detected_species %in% c("Roe deer", "Muntjac deer", "Chinese water deer"))
     show_large_risk <- has_large_data && any(detected_species %in% c("Red deer", "Sika deer", "Fallow deer"))
     
-    map2 <- leaflet(height = '100%', width = '100%') %>%
+    map2 <- leaflet(height = '100%', 
+                    width = '100%',
+                    options = leafletOptions(
+                      zoomSnap = 0.25,  # Allows the map to stop at quarter-steps (e.g., 10, 10.25, 10.5)
+                      zoomDelta = 0.10   # Clicking '+' or '-' will move the zoom by 0.5 levels instead of 1
+                    )
+                  ) %>%
       addProviderTiles("CartoDB.Positron", group = "Grey street map") %>%
       addTiles(group = "Colour street map") %>%
       addProviderTiles("Esri.WorldImagery", group = "Satellite view") %>%
@@ -1484,7 +1495,14 @@ server <- function(input, output, session) {
       map2 <- map2 %>%
         addPolygons(data = updated_small_risk_buf$dat %>% st_transform(4326),
                     fillColor = ~updated_small_risk_pal(6 - mean_risk),
-                    color = "transparent", fillOpacity = 1, group = "Updated impact risk from small deer") %>%
+                    fillOpacity = 1,
+                    # Logic for the outline color
+                    color = ~ifelse(new_woodland == "Yes", "black", "transparent"), 
+                    # Logic for the outline thickness
+                    weight = ~ifelse(new_woodland == "Yes", 1, 0),
+                    opacity = 1,
+                    group = "Updated impact risk from small deer"
+        ) %>%
         addControl(html = create_deer_legend(s_img_updated, "Predicted impact risk from small deer after woodland planting"), 
                    position = "bottomright", layerId = "future_legend_small")
     }
@@ -1497,7 +1515,14 @@ server <- function(input, output, session) {
       map2 <- map2 %>%
         addPolygons(data = updated_large_risk_buf$dat %>% st_transform(4326),
                     fillColor = ~updated_large_risk_pal(6 - mean_risk),
-                    color = "transparent", fillOpacity = 1, group = "Updated impact risk from large deer") %>%
+                    fillOpacity = 1,
+                    # Logic for the outline color
+                    color = ~ifelse(new_woodland == "Yes", "black", "transparent"), 
+                    # Logic for the outline thickness
+                    weight = ~ifelse(new_woodland == "Yes", 1, 0),
+                    opacity = 1,
+                    group = "Updated impact risk from large deer"
+        ) %>%
         addControl(html = create_deer_legend(l_img_updated, "Predicted impact risk from large deer after woodland planting"), 
                    position = "bottomright", layerId = "future_legend_large")
     }
@@ -1515,6 +1540,13 @@ server <- function(input, output, session) {
       )
     map2
   })
+  
+  #Reset button
+  observeEvent(input$reset_app_future, {
+    
+    session$reload()
+    
+  })  
   
   # 2. OBSERVE LAYER CHANGES FOR FUTURE MAP
   observeEvent(input$future_risk_map_groups, {
@@ -1535,7 +1567,7 @@ server <- function(input, output, session) {
     # Handle Large Deer
     if ("Updated impact risk from large deer" %in% groups) {
       l_img_updated <- get_viridis_base64("viridis")
-      proxy %>% addControl(html = create_deer_legend(l_img_updated, "Future Risk (Large)"), 
+      proxy %>% addControl(html = create_deer_legend(l_img_updated, "Predicted impact risk from large deer after woodland planting"), 
                            position = "bottomright", layerId = "future_legend_large")
       shinyjs::show("arrow_large_container_future")
     } else {
@@ -1576,8 +1608,6 @@ server <- function(input, output, session) {
     # State: Success (Return NULL to hide the message box so the map is clear)
     return(NULL)
   })
-  
-  
   
   #EXPORT FUTURE RISK MAPS----------####
   
@@ -2061,7 +2091,7 @@ As before, you can download the maps as a Shapefile ending in .shp (which can be
                                       # Map container
                                       div(
                                         id = "map_capture_area", # Target this for the square screenshot
-                                        style = "position: relative; width: 850px; height: 850px; margin: auto; background: white; padding: 10px; border: 1px solid #eee;",
+                                        style = "position: relative; width: 1200px; height: 850px; margin: auto; background: white; padding: 10px; border: 1px solid #eee;",
                                         
                                         leafletOutput("current_risk_map", width = "100%", height = "100%"),
                                         
@@ -2109,7 +2139,6 @@ As before, you can download the maps as a Shapefile ending in .shp (which can be
                                     column(5, 
                                            br(), 
                                            br(), 
-                                           # leafletOutput("new_woodland_map", width = "200%", height = "600px"),
                                            editModUI("new_woodland_map", width = "200%", height = "600px")
                                     )
                                   ),
@@ -2170,7 +2199,7 @@ As before, you can download the maps as a Shapefile ending in .shp (which can be
                                       # Map container
                                       div(
                                         id = "map_capture_area_future", 
-                                        style = "position: relative; width: 850px; height: 850px; margin: auto; background: white; padding: 10px; border: 1px solid #eee;",
+                                        style = "position: relative; width: 1200px; height: 850px; margin: auto; background: white; padding: 10px; border: 1px solid #eee;",
                                         
                                         leafletOutput("future_risk_map", width = "100%", height = "100%"),
                                         
