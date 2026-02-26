@@ -31,47 +31,26 @@ nfi <- st_read("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW ri
 
 unique(nfi$IFT_IOA)
 
-#Combined NFI/LCM 2023 woodland polygons for extraction
-#See README for instructions on how to produce this layer in ArcGis Pro
-#nfi_lcm_2023_polys <- st_read("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/data/NFI_LCM_2023_combined_wood_polys_EW.shp")
-#nfi_lcm_2023_polys <- st_read("C:/Users/aalg1m25/OneDrive - University of Southampton/R_data_transfer/Deer impact EW risk maps/NFI_LCM_2023_combined_wood_polys_EW.shp")
-
-
-#Make template raster
+#Make template raster using UK CEH Land cover map 2023 tif
 template_rast <- raster("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/lcm-2023/gblcm2023_25m.tif")
 #template_rast <- raster("C:/Users/aalg1m25/OneDrive - University of Southampton/Documents/GitHub/iDeer/data/gblcm2023_25m.tif")
 
 crs(template_rast) <- bng
 
 #England and Wales 10k squares
-#ew10k <- sf::st_read("C:/Users/aalg1m25/OneDrive - University of Southampton/Documents/GitHub/iDeer/data/10k_tiles_EW_Scotland_border_buffer.shp")
 ew10k <- sf::st_read("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/10k_tiles_EW_Scotland_border_buffer.shp")
 
 #DAMS
 #Interpolated from 50m resolution to 25m resolution
 #To match the resolution of other raster layers
 #Interpolation method = bilinear
-#dams <- raster("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/data/dams_25m_bng.tif")
-#crs(dams) <- bng
+dams <- raster("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/data/dams_25m_bng.tif")
+crs(dams) <- bng
 
 tiles <- ew10k
-
-#Use a group of tiles as an example for testing:
-#tiles <- ew10k[1:20,]
-#tiles <- ew10k %>% filter(tile_name %in% c("TL87","TL88","TL97","TL98")) #northampton
-#tiles <- ew10k %>% filter(tile_name %in% c("NY21","NY22","NY12","NY11")) #lake district
-#tiles <- ew10k %>% filter(tile_name %in% c("SE71","SE72","SE61","SE62")) #thorne moors
-#tiles <- ew10k %>% filter(tile_name %in% c("SX16","SX17","SX27","SX26")) #cornwall
-#tiles <- ew10k %>% filter(tile_name %in% c("SU20","SU30","SZ29","SZ39")) #new forest
-#plot(tiles$geometry)
 ```
 
 ```{r Make-polygons-to-extract-to-from-the-final-risk-raster}
-
-#Combined NFI/LCM 2023 woodland polygons for extraction
-#See README for instructions on how to produce this layer in ArcGis Pro
-#nfi_lcm_2023_polys <- st_read("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/data/NFI_LCM_2023_combined_wood_polys_EW.shp")
-#nfi_lcm_2023_polys <- st_read("C:/Users/aalg1m25/OneDrive - University of Southampton/R_data_transfer/Deer impact EW risk maps/NFI_LCM_2023_combined_wood_polys_EW.shp")
 
 #All CEH LCM 2023 polygons (including non-woodlands)
 #lcm2023 <- st_read("C:/Users/aalg1m25/Documents/Deer impact EW risk maps/lcm-2023-vec/lcm-2023-vec_6001643.gdb")
@@ -147,12 +126,6 @@ lcm2023_clip_NFI_EW_parts_polys <- st_read("E:/Data_READ_WRITE/R_Scripts_Project
 ```{r Read-in-functions}
 #function to extract pixel values from raster layers
 source("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/extract_raster_pixels_func_10km_chunks.R")
-
-#function to extract risk maps to polygons at site level
-#source("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/extract_raster_pixels_to_wood_polys_func_site_level.R")
-
-#function to extract risk maps to polygons per 10km square
-#source("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/extract_raster_pixels_to_wood_polys_func_10km_chunks_mean_poly_values_NFI_LCM_merged.R")
 ```
 
 ```{r Make-conditional-probability-tables-for-large-deer-BBN}
@@ -244,20 +217,7 @@ assign_probabilities <- function(row, importance) {
 
   )
 
-  #WITHOUT THESE INTERACTIONS, THE ATTRACTION INDEX MAP GOES ALL SPECKLY
-    # Conditionally reduce the importance of Perennial cover if Arable cover is High
-  #*0.75 means influence of Perennial cover is reduced by 25%
-  ## Conditionally increase the importance of Perennial cover cover if Arable cover is Low
-  #/0.75 means influence of Perennial cover is increased by 25%
-  # if (row["Arable_cover_1000m"] == "Low") {
-  #   importance["Arable_cover_1000m"] <- importance["Arable_cover_1000m"] *  0.99
-  # } 
-  # 
-  # else if (row["Perennial_cover_1000m"] == "Low") {
-  #   importance["Perennial_cover_1000m"] <- importance["Perennial_cover_1000m"] * 0.99
-  # } 
-  
-  #if perennial cover is low and arable is high, increase importance of arable x 10
+  #If perennial cover is low and arable is high, increase importance of arable x 10
   
   if (row["Perennial_cover_1000m"] == "Low" && row["Arable_cover_1000m"] == "High") {
   importance["Arable_cover_1000m"] <- importance["Arable_cover_1000m"] * 10 
@@ -353,20 +313,6 @@ importance <- c(Woodland_Value_Index = 0.3, Attraction_Index = 1,
     Attraction_Index = as.numeric(factor(row["Attraction_Index"], levels = c("Low", "Medium", "High"))),
     Thermoregulation_Index = as.numeric(factor(row["Thermoregulation_Index"], levels = c("Low", "Medium", "High")))
   )
-
-  # # Conditionally reduce the importance of Attraction_Index if Thermoregulation_Index is High.
-  # # This implements the rule that high thermoregulation reduces the influence of attraction (resources outside woods)
-  # #* 0.75 means influence of attraction is reduced by 25%
-  # if (row["Thermoregulation_Index"] == "High") {
-  #   importance["Attraction_Index"] <- importance["Attraction_Index"] * 0.75
-  # }
-  
-  # # Conditionally increase the importance of Attraction_Index if Thermoregulation_Index is Medium or Low.
-  # #/ 0.5 means influence of attraction is increased by 50%
-  # if (row["Thermoregulation_Index"] %in% c("Low","Medium")) {
-  #   importance["Attraction_Index"] <- importance["Attraction_Index"] / 0.50
-  # }
-
   # If Thermoreg is Low, reduce importance to almost 0
   #* 0.99 means influence of thermoregulation is reduced by 99%
   if (row["Thermoregulation_Index"] %in% c("Low")) {
@@ -492,13 +438,13 @@ nfi_rast <- fasterize::fasterize(nfi, template_rast, field = "group_ID")
  plot(boundaries_nfi)
 crs(boundaries_nfi) <- bng
 
-terra::writeRaster(boundaries_nfi, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/boundaries_open_closed_woods_NFI_2023_bng.tif",overwrite=TRUE)
+terra::writeRaster(boundaries_nfi, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/boundaries_open_closed_woods_NFI_2023_bng.tif",overwrite=TRUE)
 ```
 
 ```{r PERCENTAGE-COVER-WOODLAND-EDGE-1000m}
 #Edges now include both external woodland edges and interior woodland edges produced in boundaries_nfi above
 
-boundaries_nfi <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/boundaries_open_closed_woods_NFI_2023_bng.tif")
+boundaries_nfi <- raster("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/boundaries_open_closed_woods_NFI_2023_bng.tif")
 
 #create circular buffers around every pixel of 1000 metres
 circle.buff = raster::focalWeight (boundaries_nfi, d=1000, type="circle",fillNA=T )#Create buffer
@@ -507,7 +453,7 @@ Focal1000_EDGES= raster::focal(boundaries_nfi, w=circle.buff, fun=sum, na.rm=T,p
 
 crs(Focal1000_EDGES) <- bng
 
-writeRaster(Focal1000_EDGES, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/NFI_focal_woodland_edge_area_1000m.tif",
+writeRaster(Focal1000_EDGES, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/NFI_focal_woodland_edge_area_1000m.tif",
              overwrite=TRUE)
 
 #Divide number of pixels by the total number of 25m2 pixels in a 1000m buffer*100
@@ -515,7 +461,7 @@ Focal1000_EDGES_PERC <- (Focal1000_EDGES/5027)*100
 plot(Focal1000_EDGES_PERC)
 plot(boundaries_nfi_sample,add=TRUE)
 
-writeRaster(Focal1000_EDGES_PERC, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/NFI_focal_woodland_edge_area_1000m_percentage_cover.tif",
+writeRaster(Focal1000_EDGES_PERC, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/NFI_focal_woodland_edge_area_1000m_percentage_cover.tif",
              overwrite=TRUE)
 ```
 
@@ -542,11 +488,11 @@ woodland_food_value_raster <- fasterize::fasterize(woods_only, template_rast,
 
 crs(woodland_food_value_raster) <- bng
 
-writeRaster(woodland_food_value_raster, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/NFI_woodland_food_value_index_large_deer_two_levels.tif",
+writeRaster(woodland_food_value_raster, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/NFI_woodland_food_value_index_large_deer_two_levels.tif",
              overwrite=TRUE)
 #plot(woodland_food_value_raster)
 
-woodland_food_value_raster <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/NFI_woodland_food_value_index_large_deer_two_levels.tif")
+woodland_food_value_raster <- raster("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/NFI_woodland_food_value_index_large_deer_two_levels.tif")
 
 ```
 
@@ -609,7 +555,7 @@ plot(polys_unmerged_max_summed_DAMS_raster)
 
 #Import
 
-polys_unmerged_max_summed_DAMS_raster <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/ocal_1000m_DAMS_max_unmerged_NFI_2023_polys.tif")
+polys_unmerged_max_summed_DAMS_raster <- raster("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/focal_1000m_DAMS_max_unmerged_NFI_2023_polys.tif")
 
 #polys_unmerged_max_summed_DAMS_raster[polys_unmerged_max_summed_DAMS_raster == 0] <- NA #make zero's NAs
 
@@ -629,7 +575,7 @@ polys_unmerged_max_summed_DAMS_raster_normalised <- (polys_unmerged_max_summed_D
 
 plot(polys_unmerged_max_summed_DAMS_raster_normalised)
 
-writeRaster(polys_unmerged_max_summed_DAMS_raster_normalised, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/polys_unmerged_max_summed_DAMS_raster_normalised.tif",overwrite=TRUE)
+writeRaster(polys_unmerged_max_summed_DAMS_raster_normalised, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/polys_unmerged_max_summed_DAMS_raster_normalised.tif",overwrite=TRUE)
 ```
 
 
@@ -646,8 +592,6 @@ peren_raster_GB <- reclassify(lcm, reclass_peren)
 crs(peren_raster_GB) <- bng
 writeRaster(peren_raster_GB, here("./output/GB_datasets_2023/peren_raster_GB_2023.tif"),overwrite=TRUE)
 
-#peren_raster_GB <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/peren_raster_GB_2023.tif")
-
 #Focal extraction of perennial cover
 circle.buff = raster::focalWeight(peren_raster_GB, d=1000, type="circle",fillNA=T )#Create buffer
 circle.buff[circle.buff > 0] <- 1   # replacing weights by 1
@@ -658,7 +602,7 @@ Focal1000_PEREN_PERC <- (Focal1000_peren/5027)*100
 
 plot(Focal1000_PEREN_PERC)
 
-writeRaster(Focal1000_PEREN_PERC, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/percentage_cover_perennial_1000m_2023.tif")
+writeRaster(Focal1000_PEREN_PERC, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/percentage_cover_perennial_1000m_2023.tif")
 ```
 
 ```{r PERCENTAGE-COVER-ARABLE}
@@ -671,9 +615,9 @@ reclass_arable <- data.frame(is = c(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,
                               18,19,20,21), becomes = c(0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0))
 arable_raster_GB <- reclassify(lcm, reclass_arable)
 crs(arable_raster_GB) <- bng
-writeRaster(arable_raster_GB, here("output/GB_datasets_2023/2023/arable_raster_GB_2023.tif"),overwrite=TRUE)
+writeRaster(arable_raster_GB, here("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/arable_raster_GB_2023.tif"),overwrite=TRUE)
 
-arable_raster_GB <- raster("C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/arable_raster_GB_2023.tif")
+arable_raster_GB <- raster("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/GB_datasets_2023/arable_raster_GB_2023.tif")
 
 #arable_raster_test <- crop(arable_raster_GB, tiles)
 #plot(arable_raster_test)
@@ -684,7 +628,7 @@ Focal1000_arable= raster::focal(x=arable_raster_GB, w=circle.buff, fun=sum, na.r
 #Divide number of pixels by the total number of 25m2 pixels in a buffer*100 = percentage arable
 Focal1000_ARABLE_PERC <- (Focal1000_arable/5027)*100
 plot(Focal1000_ARABLE_PERC)
-writeRaster(Focal1000_ARABLE_PERC, "./output/GB_datasets_2023/large_deer/percentage_cover_arable_1000_2023.tif")
+writeRaster(Focal1000_ARABLE_PERC, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/percentage_cover_arable_1000_2023.tif")
 ```
 
 ```{r WOODLAND-SHELTER-VALUE}
@@ -712,7 +656,7 @@ woodland_shelter_value_raster <- fasterize::fasterize(woods_only, template_rast,
 
 crs(woodland_shelter_value_raster) <- bng
 
-writeRaster(woodland_shelter_value_raster, "C:/Users/ik929086/Documents/iDeer/output/GB_datasets_2023/large_deer/NFI_woodland_shelter_value_index_large_deer.tif",overwrite=TRUE)
+writeRaster(woodland_shelter_value_raster, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/NFI_woodland_shelter_value_index_large_deer.tif",overwrite=TRUE)
 
 
 #woodland_shelter_value_raster <- crop(woodland_shelter_value_raster, tiles)
@@ -743,16 +687,15 @@ edgepix <- extract_raster(map= Focal1000_EDGES_PERC,
                           lcm = template_rast, #lcm
                           tiles = tiles) #ew10k
 
-#saveRDS(edgepix, "C:/Users/ik929086/Documents/iDeer/output/edge_pix_1000m_df_EW.RDS")
-#read
-#edgepix<- readRDS("C:/Users/ik929086/Documents/iDeer/output/edge_pix_1000m_df_EW.RDS")
-
+saveRDS(edgepix, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/NFI_wood_edgepix_1000m_df_EW.RDS")
 
 #EXTRACT WOODLAND FOOD QUALITY
 
 foodpix <- extract_raster(map = woodland_food_value_raster,
                           lcm = template_rast,
                           tiles = tiles)
+saveRDS(foodpix, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/NFI_wood_foodpix_1000m_df_EW.RDS")
+
 
 #EXTRACT WOODLAND SHELTER QUALITY
 
@@ -760,15 +703,15 @@ shelterpix <- extract_raster(map = woodland_shelter_value_raster,
                              lcm = template_rast,
                              tiles = tiles)
 
+saveRDS(shelterpix, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/NFI_wood_shelterpix_1000m_df_EW.RDS")
+
+
 #EXTRACT summed DAMS
 damspix <- extract_raster(map = polys_unmerged_max_summed_DAMS_raster_normalised,
                           lcm = template_rast,
                           tiles = tiles)
 
-#saveRDS(damspix, "C:/Users/ik929086/Documents/iDeer/output/dams_1000m_df_EW.RDS")
-#read
-#damspix <- readRDS("C:/Users/ik929086/Documents/iDeer/output/dams_1000m_df_EW.RDS")
-
+saveRDS(damspix, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/dams_1000m_df_EW.RDS")
 
 #EXTRACT PERENNIAL COVER
 
@@ -776,18 +719,14 @@ perenpix <- extract_raster(map = Focal1000_PEREN_PERC,
                          lcm = template_rast,
                          tiles = tiles)
 
-#saveRDS(perenpix, "C:/Users/ik929086/Documents/iDeer/output/perenpix_1000m_df_EW.RDS")
-#read
-#perenpix <- readRDS("C:/Users/ik929086/Documents/iDeer/output/perenpix_1000m_df_EW.RDS")
+saveRDS(perenpix, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/perenpix_1000m_df_EW.RDS")
 
 #EXTRACT ARABLE AREA WITHIN 1000M
 
 arablepix <- extract_raster(map = Focal1000_ARABLE_PERC,
                            lcm = template_rast,
                          tiles = tiles)
-#saveRDS(arablepix, "C:/Users/ik929086/Documents/iDeer/output/arablepix_1000m_df_EW.RDS")
-#read
-#arablepix <- readRDS("C:/Users/ik929086/Documents/iDeer/output/arablepix_1000m_df_EW.RDS")
+saveRDS(arablepix, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/arablepix_1000m_df_EW.RDS")
 
 #left_join the datasets together #---------------
 
@@ -816,15 +755,6 @@ df.no.nas.full <- df.no.nas
 
 saveRDS(df.no.nas, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/large_deer_full_df_no_nas_V2.RDS")
 
-# #read
-# df.no.nas <- readRDS("C:/Users/ik929086/Documents/iDeer/output/large_deer_full_df_no_nas.RDS")
-# 
-#  #FOR TESTING: TAKE SUBSET
-#  df.no.nas.full <- df.no.nas
-#    df.no.nas <- df.no.nas.full %>%
-#      slice(1:100000) %>%
-#      st_as_sf(coords = c("x","y"))
-   
 beepr::beep()
 
 ```
@@ -1187,13 +1117,6 @@ predict_dat$wood_value_index <- pred_wood_value
 pred_damage = predict(dfit,node = "large_risk_index",data = predict_dat,method = "parents")
 predict_dat$large_risk <- pred_damage
 
-# # scatter plot of forage pressure index and alt forage quality
-# predict_dat_sample <- predict_dat[sample(nrow(predict_dat), 10000), ]
-# ggplot(predict_dat_sample, aes(x = alt_forage_qual_1000m, y = attraction_index)) +
-#   geom_jitter(width = 0.2, height = 0.2, size = 3, color = "blue") +
-#   labs(x = "Alt forage Q", y = "Index") +
-#   theme_minimal()
-
 #Add damage risk back into spatial dataset
 
 df_cat$pred_damage <- pred_damage
@@ -1211,88 +1134,6 @@ df_sf <- st_as_sf(df_cat, coords = c("x", "y"), crs = st_crs(bng))
 
 write_rds(df_sf, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/NFI_2023_large_deer_impact_risk_sf_V2.rds")
 
-# # Define palettes
-# #wood_value_palette <- c("0" = NA, "1" = "orange","2" = "red")
-# index_palette <- c("1" = "green", "2" = "orange", "3" = "red")
-# risk_palette  <- c("1" = "green", "2" = "yellow", "3" = "orange", "4" = "red", "5" = "brown")
-# 
-# # Map categorical predictions to numeric values
-# df_sf <- df_sf %>%
-#   mutate(
-#     forage_vals    = c("Low"=1, "Medium"=2, "High"=3)[pred_attraction_index],
-#     thermoreg_vals   = c("Low"=1, "Medium"=2, "High"=3)[pred_thermoreg],
-#     wood_value_vals= c("Medium"=2, "High"=3)[pred_wood_value_index],
-#     risk_vals      = c("Low"=1, "Low_Medium"=2, "Medium"=3, "Medium_High"=4, "High"=5)[pred_damage]
-#   )
-# 
-# #Wood value index #### ----------------------------------------------------------------------
-# df_sf_selected <- df_sf%>%dplyr::select(geometry, wood_value_vals)
-#  #forage_r <- stars::st_rasterize(sf = df_sf_selected, template = stars_template)
-# wood_value_vals_r <- stars::st_rasterize(sf = df_sf_selected)
-# wood_value_vals_r[wood_value_vals_r== 0] <- NA #make zero's NAs
-# 
-# # Convert raster to dataframe for ggplot
-# df_rast <- as.data.frame(wood_value_vals_r, xy = TRUE, na.rm = FALSE)
-# 
-# ggplot() +
-#   geom_raster(
-#     data = df_rast %>% dplyr::filter(!is.na(wood_value_vals)),
-#     aes(x = x, y = y, fill = factor(wood_value_vals))
-#   ) +
-#   scale_fill_manual(
-#     values = index_palette,
-#     name = "Woodland food value Index"
-#   ) +
-#   coord_equal() +
-#   theme_minimal()
-# 
-# #Thermoregulation index ####---------------------------------------------------------------------
-# 
-# df_sf_selected <- df_sf%>%dplyr::select(geometry, thermoreg_vals)
-#  #forage_r <- stars::st_rasterize(sf = df_sf_selected, template = stars_template)
-# thermoreg_vals_r <- stars::st_rasterize(sf = df_sf_selected)
-# thermoreg_vals_r[thermoreg_vals_r== 0] <- NA #make zero's NAs
-# 
-# # Convert raster to dataframe for ggplot
-# df_rast <- as.data.frame(thermoreg_vals_r, xy = TRUE, na.rm = FALSE)
-# 
-# ggplot() +
-#   geom_raster(
-#     data = df_rast %>% dplyr::filter(!is.na(thermoreg_vals)),
-#     aes(x = x, y = y, fill = factor(thermoreg_vals))
-#   ) +
-#   scale_fill_manual(
-#     values = index_palette,
-#     name = "Thermoreg Index",
-#     drop=FALSE
-#   ) +
-#   coord_equal() +
-#   theme_minimal()
-# 
-# #Attraction index #### ---------------------------------------------------------------------
-# 
-# df_sf_selected <- df_sf%>%dplyr::select(geometry, forage_vals)
-#  #forage_r <- stars::st_rasterize(sf = df_sf_selected, template = stars_template)
-# forage_vals_r <- stars::st_rasterize(sf = df_sf_selected)
-# forage_vals_r[forage_vals_r== 0] <- NA #make zero's NAs
-# 
-# #stars::write_stars(forage_vals_r, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/NFI_2023_large_deer_attraction_index_TEST.tif")
-# 
-# # Convert raster to dataframe for ggplot
-# df_rast <- as.data.frame(forage_vals_r, xy = TRUE, na.rm = FALSE)
-# 
-# ggplot() +
-#   geom_raster(
-#     data = df_rast %>% dplyr::filter(!is.na(forage_vals)),
-#     aes(x = x, y = y, fill = factor(forage_vals))
-#   ) +
-#   scale_fill_manual(
-#     values = index_palette,
-#     name = "Attraction Index"
-#   ) +
-#   coord_equal() +
-#   theme_minimal()
-
 #Impact risk index ####------------------------------------------------------------------------
 
 df_sf_selected <- df_sf%>%dplyr::select(geometry, risk_vals)
@@ -1300,29 +1141,7 @@ df_sf_selected <- df_sf%>%dplyr::select(geometry, risk_vals)
 risk_vals_r <- stars::st_rasterize(sf = df_sf_selected)
 risk_vals_r[risk_vals_r== 0] <- NA #make zero's NAs
 
-# # Convert raster to dataframe for ggplot
-# df_rast <- as.data.frame(risk_vals_r, xy = TRUE, na.rm = FALSE)
-# 
-# ggplot() +
-#   geom_raster(
-#     data = df_rast %>% dplyr::filter(!is.na(risk_vals)),
-#     aes(x = x, y = y, fill = factor(risk_vals, levels = names(risk_palette)))
-#   ) +
-#   scale_fill_manual(
-#     values = risk_palette,
-#     name = "Large deer impact risk index",
-#     drop = FALSE
-#   ) +
-#   coord_equal() +
-#   theme_minimal()
-
-
-
 stars::write_stars(risk_vals_r, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/NFI_2023_large_deer_impact_risk_EW_V2.tif")
-
-#stars::write_stars(risk_vals_r, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/NFI_2023_large_deer_impact_risk_TEST.tif")
-
-
 ```
 
 
@@ -1342,12 +1161,6 @@ terra::minmax(large_deer_risk_map_terra)
 # max                                     5
 
 #plot(r_rast)
-
-# Filter woods_only by tiles (spatial intersection)
-# This will result in polygons that are within the tile boundaries
-#site_woods_unmerged <- st_filter(woods_only, tiles)
-
-#site_woods_unmerged <- st_filter(nfi_lcm_2023_polys, tiles)
 
 lcm2023_clip_NFI_EW_parts_polys <- st_as_sf(lcm2023_clip_NFI_EW_parts_polys)
 
@@ -1386,20 +1199,6 @@ ggplot() +
   theme_minimal() +
   ggtitle("Selected Tiles from ew10k")
 
-#site level function:
-#function to extract risk maps to polygons at site level
-#source("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/extract_raster_pixels_to_wood_polys_func_site_level.R")
-# large_deer_risk_poly_vals <- extract_raster_to_wood_polygons(risk_map = r_rast,
-#                                                              site_woods_unmerged = site_woods_unmerged
-#                                                              )
-
-#England-Wales risk map:
-#function to extract risk maps to polygons per 10km square
-# source("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/extract_raster_pixels_to_wood_polys_func_10km_chunks_mean_poly_values_NFI_LCM_merged_pre_chunked.R")
-# large_deer_risk_poly_vals <- extract_raster_to_wood_polygons(risk_map = r_rast,
-#                                                           tiles = tiles,
-#                                                           wood_polys_chunked = site_woods_unmerged_per_tile)
-
 output_dir = "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/wood_poly_risk_extraction_by_tile_large_deer_V3"
 source("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/extract_raster_pixels_to_wood_polygons_func_10km_chunks_mean_poly_values_NFI_LCM_merged_pre_chunked_exact.R")
 large_deer_risk_poly_vals <- extract_raster_to_wood_polygons_exact(risk_map = large_deer_risk_map_terra,
@@ -1420,16 +1219,27 @@ write_rds(large_deer_risk_poly_vals_df, "E:/Data_READ_WRITE/R_Scripts_Projects/A
 #large_deer_risk_poly_vals_df <- readRDS("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/NFI_LCM_2023_large_deer_impact_risk_EW_extracted_to_polys_unclean_V3.rds")
 
 large_deer_risk_poly_vals_df_clean <- large_deer_risk_poly_vals_df %>%
-  filter(!is.na(mean_risk) & mean_risk >=1) %>%
+  dplyr::filter(!is.na(mean_risk) & mean_risk >=1) %>%
    filter(Wood_Area_m2 > 1) %>%
-   dplyr::select(-c(assigned))
+   dplyr::select(-c(assigned)) %>%
+  dplyr::mutate(
+    patch_ID = 1:n(),
+    mean_risk = round(mean_risk, 2),
+    Wood_Area_m2 = round(Wood_Area_m2, 2) # Rounds to 2 decimal places
+  )
 
 write_rds(large_deer_risk_poly_vals_df_clean, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/NFI_LCM_2023_large_deer_impact_risk_EW_extracted_to_polys_V3.rds")
 #large_deer_risk_poly_vals_df_clean <- readRDS("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/NFI_LCM_2023_large_deer_impact_risk_EW_extracted_to_polys_V3.rds")
 
 #save map as shapefile 
 st_write(large_deer_risk_poly_vals_df_clean, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/large deer/NFI_LCM_2023_large_deer_impact_risk_EW_extraction_V3.shp",append=FALSE)
-#st_write(large_deer_risk_poly_vals_df_unique_ids, "C:/Users/aalg1m25/OneDrive - University of Southampton/Documents/GitHub/iDeer/output/NFI_2023_large_deer_impact_risk_test_new_forest.shp",append=FALSE)
+
 #save map as gpkg
 st_write(large_deer_risk_poly_vals_df_clean, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/large deer/NFI_LCM_2023_large_deer_impact_risk_EW_extraction_V3.gpkg",append=FALSE)
+
+#Save for EIDC deposit
+st_write(large_deer_risk_poly_vals_df_clean, "C:/Users/amygr/OneDrive/iDeer-Tool-Onedrive/iDeer_Tool/Risk_maps_eidc_deposit/large_deer_impact_risk.gpkg",append=FALSE)
+st_write(large_deer_risk_poly_vals_df_clean, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/EIDC_data_deposit/large_deer_impact_risk.gpkg",append=FALSE)
+
+
 ```
