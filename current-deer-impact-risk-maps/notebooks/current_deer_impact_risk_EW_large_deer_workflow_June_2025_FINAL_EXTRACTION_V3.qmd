@@ -1234,12 +1234,37 @@ write_rds(large_deer_risk_poly_vals_df_clean, "E:/Data_READ_WRITE/R_Scripts_Proj
 #save map as shapefile 
 st_write(large_deer_risk_poly_vals_df_clean, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/large deer/NFI_LCM_2023_large_deer_impact_risk_EW_extraction_V3.shp",append=FALSE)
 
-#save map as gpkg
-st_write(large_deer_risk_poly_vals_df_clean, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/large deer/NFI_LCM_2023_large_deer_impact_risk_EW_extraction_V3.gpkg",append=FALSE)
+# #save map as gpkg
+# st_write(large_deer_risk_poly_vals_df_clean, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/large deer/NFI_LCM_2023_large_deer_impact_risk_EW_extraction_V3.gpkg",append=FALSE)
+
+
+out_gpkg <- "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/large deer/NFI_LCM_2023_large_deer_impact_risk_EW_extraction_V3.gpkg"
+
+x <- large_deer_risk_poly_vals_df_clean %>%
+  st_make_valid() %>%                         # repair geometry
+  mutate(OBJECTID = as.integer(seq_len(n()))) %>%  # explicit FID
+  relocate(OBJECTID) %>%
+  dplyr::select(-c(patch_ID))
+
+
+all(st_is_valid(x))
+
+# Clean field names (ArcGIS-safe)
+names(x) <- substr(make.names(names(x), unique = TRUE), 1, 60)
+
+st_write(
+  x,
+  dsn = out_gpkg,
+  layer = "large_deer_risk",
+  driver = "GPKG",
+  delete_dsn = TRUE,                  # full rebuild
+  layer_options = c("FID=OBJECTID")
+)
+
 
 #Save for EIDC deposit
-st_write(large_deer_risk_poly_vals_df_clean, "C:/Users/amygr/OneDrive/iDeer-Tool-Onedrive/iDeer_Tool/Risk_maps_eidc_deposit/large_deer_impact_risk.gpkg",append=FALSE)
-st_write(large_deer_risk_poly_vals_df_clean, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/EIDC_data_deposit/large_deer_impact_risk.gpkg",append=FALSE)
+st_write(x, "C:/Users/amygr/OneDrive/iDeer-Tool-Onedrive/iDeer_Tool/Risk_maps_eidc_deposit/large_deer_impact_risk.gpkg",append=FALSE)
+st_write(x, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/EIDC_data_deposit/large_deer_impact_risk.gpkg",append=FALSE)
 
 
 ```

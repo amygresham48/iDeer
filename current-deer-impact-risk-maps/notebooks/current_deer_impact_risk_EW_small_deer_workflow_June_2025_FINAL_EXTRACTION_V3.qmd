@@ -1216,13 +1216,22 @@ small_deer_risk_poly_vals_df_clean <- small_deer_risk_poly_vals_df %>%
     )
 
 write_rds(small_deer_risk_poly_vals_df_clean, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/NFI_2023_small_deer_impact_risk_EW_extracted_to_polys_clean_V3.rds")
-#small_deer_risk_poly_vals_df_clean <- readRDS("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/NFI_2023_small_deer_impact_risk_EW_extracted_to_polys_V3.rds")
+#small_deer_risk_poly_vals_df_clean <- readRDS("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/NFI_2023_small_deer_impact_risk_EW_extracted_to_polys_clean_V3.rds")
 
 #save map as shapefile
 st_write(small_deer_risk_poly_vals_df_clean, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/small deer/NFI_2023_small_deer_impact_risk_EW_extraction_V3.shp",append=FALSE)
 
-#save as gpkg
-st_write(small_deer_risk_poly_vals_df_clean, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/small deer/NFI_2023_small_deer_impact_risk_EW_extraction_V3.gpkg",append=FALSE)
+# #save as gpkg
+# st_write(small_deer_risk_poly_vals_df_clean, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/small deer/NFI_2023_small_deer_impact_risk_EW_extraction_V3.gpkg",append=FALSE)
+
+out_gpkg <- "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/small deer/NFI_LCM_2023_small_deer_impact_risk_EW_extraction_V3.gpkg"
+
+x <- small_deer_risk_poly_vals_df_clean %>%
+  st_make_valid() %>%                         # repair geometry
+  mutate(OBJECTID = as.integer(seq_len(n()))) %>%  # explicit FID
+  relocate(OBJECTID) %>%
+  dplyr::select(-c(patch_ID))
+
 
 #Save for EIDC deposit
 st_write(small_deer_risk_poly_vals_df_clean, "C:/Users/amygr/OneDrive/iDeer-Tool-Onedrive/iDeer_Tool/Risk_maps_eidc_deposit/small_deer_impact_risk.gpkg",append=FALSE)
