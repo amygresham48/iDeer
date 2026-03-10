@@ -1232,7 +1232,9 @@ write_rds(large_deer_risk_poly_vals_df_clean, "E:/Data_READ_WRITE/R_Scripts_Proj
 #large_deer_risk_poly_vals_df_clean <- readRDS("E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/NFI_LCM_2023_large_deer_impact_risk_EW_extracted_to_polys_V3.rds")
 
 #save map as shapefile 
-st_write(large_deer_risk_poly_vals_df_clean, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/large deer/NFI_LCM_2023_large_deer_impact_risk_EW_extraction_V3.shp",append=FALSE)
+#st_write(large_deer_risk_poly_vals_df_clean, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/large deer/NFI_LCM_2023_large_deer_impact_risk_EW_extraction_V3.shp",append=FALSE)
+
+st_write(large_deer_risk_poly_vals_df_clean, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/EIDC_data_deposit/large_deer_impact_risk.shp",append=FALSE)
 
 # #save map as gpkg
 # st_write(large_deer_risk_poly_vals_df_clean, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/large deer/NFI_LCM_2023_large_deer_impact_risk_EW_extraction_V3.gpkg",append=FALSE)
