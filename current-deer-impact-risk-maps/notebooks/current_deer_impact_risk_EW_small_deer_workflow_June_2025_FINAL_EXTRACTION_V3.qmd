@@ -617,7 +617,6 @@ LFpix <- extract_raster(map = Focal400_LF_PERC_POLYS,
                          tiles = tiles) #ew10k
 
 saveRDS(LFpix, "E:/Data_READ_WRITE/R_Scripts_Projects/Amy_Data/Deer impact EW risk maps/output/NFI_LFpix_area_400m_df_EW.RDS")
-)
 
 #left_join the datasets together #---------------
 
