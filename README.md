@@ -46,7 +46,4 @@ The main repository contains all components needed to produce the iDeer Tool in 
 /extract_raster_pixels_to_wood_polys_func_site_level.R
 /update_wood_polys_function_NFI_split_new_polys.R
 
-#### Description: 
-For full description of functions, see update-risk-map-functions-README.txt
-
 
