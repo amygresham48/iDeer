@@ -1,1 +1,17 @@
 Info about functions required to produce current risk maps
+
+current-deer-impact-risk-maps/functions/extract_raster_pixels_to_wood_polys_func_site_level.R
+
+- For extracting raster pixel values to simple feature polygon(s). Output is a dataframe with a row for each raster pixel in the polygon(s), showing raster values "raster_values" and the patch ID "wood_site_IDs"
+
+current-deer-impact-risk-maps/functions/extract_raster_pixels_to_wood_polygons_func_10km_chunks_mean_poly_values_NFI_LCM_merged_pre_chunked_exact.R
+
+- For extracting raster pixel values to simple feature polygons, chunked into tiles for more efficient processing. Output is a dataframe with a row for each raster pixel in the polygon(s), showing raster values, tile_ID and patch_ID.
+
+current-deer-impact-risk-maps/functions/extract_raster_pixels_func_10km_chunks.R
+
+- Function for extracting raster values to simple feature tiles. Output is a dataframe with a row for each raster pixel in the tile(s), with raster values and x and y coordinates for each pixel.
+
+current-deer-impact-risk-maps/functions/split_wood_polys_by_tile.R
+
+- For assigning woodland polygons to tiles prior to raster extraction. Output is a dataframe with tile_ID, patch_ID and assigned column (TRUE/FALSE).
