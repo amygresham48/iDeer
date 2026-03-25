@@ -1,6 +1,6 @@
 # iDeer Central Repository
 
-This repository contains all code written for the iDeer project (grant number)
+This repository contains all code written for the iDeer project funded by Future of UK Treescapes (grant number: NE/X003973/1)
 
 ## Code for current deer impact risk maps
 
