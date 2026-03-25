@@ -1878,6 +1878,17 @@ ui <- dashboardPage(
                                     column(2),  # left spacing
                                     column(8,
                                            
+                                           p("UPDATE March 2026: Pre-print for the science behind the iDeer Tool is now available:",
+                                             style = "font-size: 18px;font-weight: bold"),
+                                           
+                                           tags$a(
+                                             href = "https://ecoevorxiv.org/repository/view/12101/",
+                                             target = "_blank",
+                                             class = "btn btn-success", # Uses Bootstrap's button styling
+                                             style = "color: white; background-color: #27ae60; border-color: #27ae60; text-decoration: none;",
+                                             "Open pre-print"
+                                           ),
+                                           
                                            p("We designed the iDeer Tool to support decision-making about deer management and potential new woodland planting. If you are currently managing a woodland or thinking about planting new trees, this tool is for you!
                                            When managing trees, it is important to consider the risk of deer impacts.
   There is evidence that where deer feed in woodlands frequently and intensively, they can damage the bark of established trees, stunt tree growth and,
