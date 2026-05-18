@@ -22,3 +22,4 @@
 # TIFF files and associated metadata/temporary files
 # This pattern will match .tif, .tiff, .tif.aux.xml, etc.
 *.tif*
+.positai
