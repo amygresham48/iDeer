@@ -42,6 +42,7 @@ library(deldir)
 library(viridisLite)
 library(shinyscreenshot)
 library(base64enc)
+library(exactextractr)
 
 
 #Load required data layers ####
@@ -1911,9 +1912,31 @@ ui <- dashboardPage(
                                              img(src = "bbn_structure_figure_v3_large_deer.png", style = "width: 70%;")
                                            ),
                                            
-                                           p("When considering the maps from this tool for use in deer and woodland management plans, we encourage you to use your knowledge of the current deer populations in your local area. These maps are not a substitute for field surveys of deer impact and activity, or seeking advice from professional deer managers.
-                                             We hope the iDeer tool will be a welcome additional resource for helping to make decisions about deer and woodland management.", style = "font-size: 16px;"),
+                                           p("Disclaimer", style = "font-size: 20px; font-weight: bold; font-style: italic; color: #2c3e50;"),
                                            
+                                           
+                                           p("The Deer Impact Risk maps produced by the iDeer Tool are designed to support local- and
+landscape-level management decisions by highlighting woodlands that are potentially at high risk of
+deer impacts. However, the maps use several underlying assumptions (see technical document under 'Further information'). As such,
+they complement rather than replace on-the-ground assessment of deer activity and impacts and
+professional advice on deer management. The maps are not a substitute for field surveys of deer impacts or seeking advice from professional deer managers.
+                                             The creators of the iDeer Tool are not responsible for outcomes of any actions or decisions informed by using the Tool. 
+In England, the Forestry Commission Deer Management Officer for your region can advise you on
+how to monitor and manage deer in your woodland. Additionally, NGOs such as the British Deer
+Society, the Game & Wildlife Conservation Trust and the Deer Initiative Partnership also offer deer
+management guidance for England and Wales.
+",style = "font-size: 16px;"),
+                                           
+                                        p("Terms and conditions", style = "font-size: 20px; font-weight: bold; font-style: italic; color: #2c3e50;"),
+                                           
+                                        p("The iDeer Tool and its contents, ideas and inception was funded as a Future of UK Treescapes project
+by the Natural Environment Research Council (‘iDeer: An Integrated Deer Management Platform’,
+grant no. NE/X003973/1). The information it provides is freely given to support decisions around
+deer management at the local and landscape scale, not for large businesses, companies or
+organisations to use to gain profit. It is not to be copied for financial gain. Its information is not to be
+corrupted in any way. Attribution must be made clearly to iDeer if any parts of the tool or
+information herein are to be copied or published in any way by anybody",style = "font-size: 16px;"),
+                                        
                                            p("Further information", style = "font-size: 20px; font-weight: bold; font-style: italic; color: #2c3e50;"),
                                            p(HTML('For full documentation of the methodology used to build this tool, please download this <a href="iDeer tool technical doc_V1.pdf" target="_blank">PDF</a>.'), 
                                              style = "font-size: 16px;"),
@@ -1924,13 +1947,11 @@ ui <- dashboardPage(
                                            actionButton(
                                              "back", "Feedback",
                                              style = "color: white; background-color: #27ae60; border-color: #27ae60;",
-                                             onclick = "window.open('https://docs.google.com/forms/d/e/1FAIpQLSdUm7KQvr3wYUmvFt315V0jr6gddMucdZj3M-oqe1eesa6pqQ/viewform', '_blank')"
-                                           )
-                                           
-                                    ),
-                                    p("Contact us", style = "font-size: 20px; font-weight: bold; font-style:  italic; color: #2c3e50;"),
-                                    p("If you'd like to contact us directly with any questions, comments or ideas for future work, please email us at ideer.enquiries@gmail.com", style = "font-size: 16px;"),
-                                    column(2)  # right spacing
+                                             onclick = "window.open('https://docs.google.com/forms/d/e/1FAIpQLScLBTh8ZUegzEBrxpTC5DD8SqtxhYg_udZQ2nxuW9B6DPlY7g/viewform?usp=sharing&ouid=108163412339693555853', '_blank')"
+                                           )),
+                                           p("Contact us", style = "font-size: 20px; font-weight: bold; font-style:  italic; color: #2c3e50;"),
+                                           p("If you'd like to contact us directly with any questions, comments or ideas for future work, please email us at ideer.enquiries@gmail.com", style = "font-size: 16px;"),
+                                           column(2)  # right spacing
                                   )
                          ),
                          
