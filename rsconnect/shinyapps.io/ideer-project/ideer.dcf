@@ -5,6 +5,6 @@ account: ideer-project
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 16723330
-bundleId: 11758166
+bundleId: 12083097
 url: https://ideer-project.shinyapps.io/ideer/
 version: 1
