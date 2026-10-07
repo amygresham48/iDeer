@@ -43,6 +43,7 @@ library(viridisLite)
 library(shinyscreenshot)
 library(base64enc)
 library(exactextractr)
+library(zip)
 
 
 #Load required data layers ####
@@ -720,9 +721,12 @@ server <- function(input, output, session) {
       if (risk_info$show_large_risk) {
         files_to_zip <- c(files_to_zip, write_shapefile_zip(large_risk_buf$dat, "predicted_current_large_deer_impact_risk_shp"))
       }
-      
+
       # Zip all selected shapefile components into one archive
-      zip(zipfile = file, files = files_to_zip, flags = "-j")
+      zip::zipr(
+        zipfile = file,
+        files = files_to_zip
+      )
     }
   )  
   
@@ -1672,8 +1676,10 @@ server <- function(input, output, session) {
       }
       
       # Zip all selected shapefile components into one archive
-      zip(zipfile = file, files = files_to_zip, flags = "-j")
-    }
+      zip::zipr(
+        zipfile = file,
+        files = files_to_zip
+      )    }
   )  
   
   plot_and_save_sf_future_risk <- function(sf_data, filename, risk_pal, title_text, fill_col) {
