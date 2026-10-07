@@ -572,7 +572,12 @@ server <- function(input, output, session) {
                      zoomDelta = 0.10   # Clicking '+' or '-' will move the zoom by 0.5 levels instead of 1
                    )
     ) %>%
-      addProviderTiles("CartoDB.Positron", group = "Grey street map") %>%
+      #addProviderTiles("CartoDB.PositronNoLabels", group = "Grey street map") %>%
+      addTiles(
+        urlTemplate =
+          "https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=cb1_4cvn_1_1f102408ba2810b0ee1a2569",
+        group = "Grey street map"
+      ) %>%
       addTiles(group = "Colour street map") %>%
       addProviderTiles("Esri.WorldImagery", group = "Satellite view") %>%
       addScaleBar(position = "bottomleft") %>%
@@ -920,7 +925,11 @@ server <- function(input, output, session) {
     
     #output$new_woodland_map <- renderLeaflet({ # Render Leaflet here!
     Leaf <- leaflet(options = leafletOptions(minZoom = 4)) %>%
-      addProviderTiles("CartoDB.Positron", group = "Grey street map") %>%
+      #addProviderTiles("CartoDB.Positron", group = "Grey street map") %>%
+      addTiles(
+        urlTemplate =
+          "https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=cb1_4cvn_1_1f102408ba2810b0ee1a2569",
+        group = "Grey street map") %>%
       addTiles(group = "Colour street map") %>%
       addProviderTiles("Esri.WorldImagery", group = "Satellite view") %>%
       addScaleBar(position = "bottomleft", options = scaleBarOptions(metric = TRUE, imperial = FALSE)) %>%
@@ -1481,7 +1490,11 @@ server <- function(input, output, session) {
                       zoomDelta = 0.10   # Clicking '+' or '-' will move the zoom by 0.5 levels instead of 1
                     )
                   ) %>%
-      addProviderTiles("CartoDB.Positron", group = "Grey street map") %>%
+      #addProviderTiles("CartoDB.Positron", group = "Grey street map") %>%
+      addTiles(
+        urlTemplate =
+          "https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=cb1_4cvn_1_1f102408ba2810b0ee1a2569",
+        group = "Grey street map") %>%
       addTiles(group = "Colour street map") %>%
       addProviderTiles("Esri.WorldImagery", group = "Satellite view") %>%
       addScaleBar(position = "bottomleft") %>%
